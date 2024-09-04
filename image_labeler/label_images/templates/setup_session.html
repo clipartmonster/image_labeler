@@ -1,0 +1,52 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+
+<div class = 'light container'>
+   
+    <form method = post id = radioForm action = '{% url "initialize_session"  %}'>
+        {% csrf_token %}
+   
+        <div class = 'option_container'>
+                <h1 id = 'title' class = 'listing_info label'> Select a source of images to label</h1>
+
+                <div class = 'field_container radio'>
+                    <input type = radio name = source value = initial_training_set ></input>
+                    <h1 class = 'title_font field_label'> Initial Training Set</h1>
+
+                </div>
+
+                <div class = 'field_container radio'>
+                    <input type = radio name = source value = content_asset></input>
+                    <h1 class = 'title_font field_label'> Content Assets</h1>
+                </div>
+        
+        </div>
+
+        <div class = 'option_container'>
+            <h1 id = 'title' class = 'listing_info label'> Select features to label</h1>
+
+            {% for feature in features %}
+
+            <div class = 'field_container radio'>
+                <input type = checkbox name = feature value = {{feature}} ></input>
+                <h1 class = 'title_font field_label'> {{feature}}</h1>
+            </div>   
+
+            {% endfor %}
+
+
+    
+        </div>
+
+        <button class = 'get_images'>
+            <h1 class = 'title_font field_label'> Start Labeling</h1>
+        </button>   
+
+    </form>
+
+</div>
+
+{% endblock %}
