@@ -1,0 +1,82 @@
+{% load static %}
+
+<div id = add_layer_button>
+    <h1 class = 'field add_color'>+</h1>
+</div>
+
+<div id = layer_control_unassigned class = 'layer_control container' onclick = 'select_layer(event)'  >
+    
+    <div class = 'color_swatch remove_layer' onclick = 'remove_layer(event)'>
+        <h1 class = 'listing_info label remove_layer'>X</h1>
+    </div>
+    <div id = 'highlight_color_indicator' class = 'color_swatch pixel_highlight'></div>
+    <div  id = 'rectangle_color_swatch' class = 'color_swatch rectangle empty'  >
+        <h1 class = 'listing_info label rectangle_swatch'>Background Color</h1>
+    </div>
+    
+</div>
+
+<div id = pixel_selection_palette class = 'pixel_selection container on'>
+
+    <div class = 'pixel_selection container'>
+
+        <div id = 'pixel_selection_tool_container' class = 'pixel_selection tool container'>
+
+            <div class = 'pixel_selection panel flood_fill'>
+
+                <div id = button_flood_fill class ="button flood_fill" '>
+                    <img class = 'pixel_selection icon' src = "{% static 'images/flood_fill_icon.png' %}">
+                </div>
+
+                <div id = flood_fill_threshold_container class = 'pixel_selection threshold container'>
+                    
+                    <div class = 'control_button positive' onclick = 'change_threshold(event,"addition")'>
+                        <h1 class = 'listing_info label'>+</h1>
+                    </div>
+
+                    <textarea id = 'flood_fill_threshold' class = 'pixel_selection field'>25 </textarea>
+                    
+                    <div class = 'control_button positive' onclick = 'change_threshold(event,"subtraction")'>
+                        <h1 class = 'listing_info label'>-</h1>
+                    </div>
+                </div>
+            
+            </div>
+            <div class = 'pixel_selection panel full_fill'>
+
+                
+                <div id = "button_full_fill" class ="button full_fill" >
+                    <img class = 'pixel_selection icon' src = "{% static 'images/full_fill_icon.png' %}">
+                </div>
+
+                <div id = full_fill_threshold_container class = 'pixel_selection threshold container'>
+                    
+                    <div class = 'control_button positive' onclick = 'change_threshold(event,"addition")'>
+                        <h1 class = 'listing_info label'>+</h1>
+                    </div>
+
+                    <textarea id = 'full_fill_threshold' class = 'pixel_selection field'>25 </textarea>
+                    
+                    <div class = 'control_button negative' onclick = 'change_threshold(event,"subtraction")'>
+                        <h1 class = 'listing_info label'>-</h1>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class = 'pixel_selection layers container'>
+
+            <div id = 'pixel_selection_layer_panel' class = 'pixel_selection layers panel'></div>
+
+            <div id = add_layer_button onclick = 'add_layer(event)'>
+                <h1 class = 'listing_info label'>+</h1>
+            </div>
+
+        </div>
+
+
+    </div>
+
+</div>

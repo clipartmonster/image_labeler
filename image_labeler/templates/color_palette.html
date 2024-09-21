@@ -1,0 +1,38 @@
+
+<div id = color_palette class = 'color_palette container off'>
+
+    <div class = 'color_labels container'>
+
+        {% for color_label in color_labels %}
+
+            <div class = 'color_swatch palette container' color = {{color_label.label}} style = 'display:grid; grid-template-rows: 20px 1fr;' onclick = 'select_color_label(this)'>
+                
+                <div style = 'display:flex; gap:5px;'>
+                    <div class = 'color_swatch palette' style = 'background-color: {{color_label.hex_code}}'></div>
+                    <h1 class = 'listing_info label'>{{color_label.label}}</h1>
+                </div>
+
+                <div class = 'reference_panel container'>
+
+                    {% for i in reference_panels %}
+
+                        {% if i == 4%}
+                            <div class = 'reference_panel selected panel_{{i}}'> </div>
+                        {% else %}
+                            <div class = 'reference_panel panel_{{i}}'> </div>
+                        {% endif %}
+
+                    {% endfor %}
+            
+                </div>
+            </div>
+
+            
+
+
+        {% endfor %}
+
+    </div>
+
+
+</div>

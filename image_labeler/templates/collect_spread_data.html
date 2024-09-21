@@ -1,0 +1,13 @@
+<div id = color_data class = 'data container off' >
+
+    <h1 class = 'listing_info label'> What percent does the color cover the main element?</h1>
+    <div class = 'color_labels container' style = 'display:flex'>
+        {% for spread in spread_values %}
+            <div class = 'color_swatch spread_values' spread_value = {{spread}} onclick = 'select_spread_value(this)'> 
+                <h1 class = 'field_label'>{{spread}}</h1>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+

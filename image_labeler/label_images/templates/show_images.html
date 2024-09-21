@@ -3,60 +3,9 @@
 
         {% block content %}
 
-
-
-        <div id = color_data class = 'data container off' >
-
-                <h1 class = 'listing_info label'> What percent does the color cover the main element?</h1>
-                <div class = 'color_labels container' style = 'display:flex'>
-                    {% for spread in spread_values %}
-                        <div class = 'color_swatch spread_values' spread_value = {{spread}} onclick = 'select_spread_value(this)'> 
-                            <h1 class = 'field_label'>{{spread}}</h1>
-                        </div>
-                    {% endfor %}
-                </div>
-            </div>
-
-
-        </div>
-
-        <div id = color_palette class = 'color_palette container off'>
-
-            <div class = 'color_labels container'>
-
-                {% for color_label in color_labels %}
-
-                    <div class = 'color_swatch palette container' color = {{color_label.label}} style = 'display:grid; grid-template-rows: 20px 1fr;' onclick = 'select_color_label(this)'>
-                        
-                        <div style = 'display:flex; gap:5px;'>
-                            <div class = 'color_swatch palette' style = 'background-color: {{color_label.hex_code}}'></div>
-                            <h1 class = 'listing_info label'>{{color_label.label}}</h1>
-                        </div>
-
-                        <div class = 'reference_panel container'>
-        
-                            {% for i in reference_panels %}
-
-                                {% if i == 4%}
-                                    <div class = 'reference_panel selected panel_{{i}}'> </div>
-                                {% else %}
-                                    <div class = 'reference_panel panel_{{i}}'> </div>
-                                {% endif %}
-
-                            {% endfor %}
-                    
-                        </div>
-                    </div>
-
-                    
-
-
-                {% endfor %}
-
-            </div>
-
-        
-        </div>
+        {% include 'pixel_selection_palette.html' %}
+        {% include 'collect_spread_data.html' %}
+        {% include 'color_palette.html'%}
 
         {% for asset in assets_to_label %}
         <div class = 'listing light container' asset_id = {{asset.asset_id}} style = 'display:grid; grid-template-columns: 1fr 1fr;'>
@@ -65,82 +14,60 @@
 
             <div class = 'design dark container' >
 
-                <canvas id="canvas_{{asset.asset_id}}" class="design" ></canvas>
+                <canvas id="canvas_{{asset.asset_id}}" class="design active" ></canvas>
+                <div class = 'layer_container'></div>
                 <img id = "image_{{asset.asset_id}}" class="design" src="{{ asset.image_link }}" crossOrigin="anonymous" style ='display:none'>
-                <!-- <img id = design_image class="design" src="{{ asset.image_link }}"> -->
-
+               
              </div>
             
             <div class = 'listing_info container'>
-                
-                <div class = 'label container'> 
-                    <h1 id = title class = 'listing_info label'>Title</h1>
-                    <div class = separator ></div>
-                    <textarea id = 'listing_title' class = 'listing_title field' rows = "2"> {{listing.title}} </textarea>
+
+                <div class = 'listing_info header'>
+                    <h1 class = 'listing_info label'>Session {{ forloop.counter }} / {{total_in_set_to_label}} </h1>
+                    <h1 class = 'listing_info label'>Left to label: {{total_in_full_set_to_label}} </h1>
+
                 </div>
-
-
-                <div class = 'label container'> 
-                    <h1 id = main_element class = 'listing_info label'>Main Element</h1>
-                    <div class = separator ></div>
-                    <textarea id = 'listing_main_element' class = 'listing_main_element field' rows = "1"> {{listing.main_element}} </textarea>
-                </div>
-
                 
+                <div class = 'feature_element container'>
+                                       
+                    <div class = 'label container primary_color'> 
+                        <h1 id = primary_colors class = 'listing_info label'>Primary Colors</h1>
 
-                <div class = 'label container'> 
-                    <h1 id = description class = 'listing_info label'>Description</h1>
-                    <div class = separator ></div>
-                    <textarea id = 'listing_description' class = 'listing_description field' rows = "4"> {{listing.description}} </textarea>
-                </div>
+                        <div class = 'color_option_container'>
+                            <div class = 'add_color container'>
 
-                
-                
-                <div class = 'label container'> 
-                    <h1 id = primary_colors class = 'listing_info label'>Primary Colors</h1>
+                                <div class ="color_swatch empty">
+                                    <h1 class = 'field add_color'>+</h1>
+                                </div>
+                        
+                            </div>                            
 
-                    <div class = 'color_option_container'>
-                        <div class = 'add_color container'>
+                            <div class = 'add_color container'>
 
-                            <div class ="color_swatch empty">
-                                <h1 class = 'field add_color'>+</h1>
-                            </div>
-                    
-                        </div>                            
+                                <div class ="color_swatch mixed" onclick ='add_color_label(event)'>
+                                    <img src = "{% static 'images/mixed_icon.png' %}">
+                                </div>
 
-                        <div class = 'add_color container'>
+                                <div class ="color_swatch no_fill" onclick ='add_color_label(event)'>
+                                    <img src = "{% static 'images/empty_icon.png' %}">
+                                </div>
 
-                            <div class ="color_swatch mixed" onclick ='add_color_label(this)'>
-                                <img src = "{% static 'images/mixed_icon.png' %}">
-                            </div>
+                                <div class ="color_swatch black_fill" onclick ='add_color_label(event)'>
+                                    <img src = "{% static 'images/black_fill_icon.png' %}">
+                                </div>
 
-                            <div class ="color_swatch no_fill" onclick ='add_color_label(this)'>
-                                <img src = "{% static 'images/empty_icon.png' %}">
+                                <div class ="color_swatch invalid" onclick ='add_color_label(event)'>
+                                    <img src = "{% static 'images/invalid_icon.png' %}">
+                                </div>
+
                             </div>
 
+                            
                         </div>
+                    
                     </div>
-
+   
                 </div>
-
-                <div class = 'label container'> 
-                    <h1 id = description class = 'listing_info label'>Clip Art Type</h1>
-                    <div class = separator ></div>
-
-                    <form id = radioForm>
-
-                        {% for clip_art_type in clip_art_types %}
-                            <div>
-                                <input type = radio name = clip_art_type value = {{clip_art_type}}>{{clip_art_type}}</input>
-                            </div>
-                        {% endfor %}
-
-                    </form>
-
-                </div>
-
-
-
 
 
             </div>

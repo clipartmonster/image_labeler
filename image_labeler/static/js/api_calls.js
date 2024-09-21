@@ -6,22 +6,13 @@ fetch('/get_config/')
     .then(response => response.json())
     .then(config => {
         API_ACCESS_KEY = config.API_ACCESS_KEY;
+        AWS_ACCESS_KEY_ID = config.AWS_ACCESS_KEY_ID;
+        AWS_SECRET_ACCESS_KEY = config.AWS_SECRET_ACCESS_KEY
        
 })
 
-function api_remove_color_label(swatch){
-  
-    console.log('here')
-    console.log(swatch)
 
-    asset_id = swatch
-    .closest('.listing.light.container')
-    .getAttribute('asset_id')
-  
-    color_index = swatch.getAttribute('color_index')
-
-    console.log(asset_id)
-    console.log(color_index)
+function api_remove_color_label(asset_id, layer_index){
 
     api_url = 'https://backend-python-nupj.onrender.com/remove_color_label/'
 
@@ -32,7 +23,7 @@ function api_remove_color_label(swatch){
 
     data = {
         asset_id:asset_id,
-        color_index:color_index       
+        color_index:layer_index       
         
     }
 
@@ -49,14 +40,6 @@ function api_remove_color_label(swatch){
 
 function api_update_color_labels(labels) {
 
-    let color_type = labels.color_type ?? null
-    let color_index = labels.color_index ?? null
-    let color_broad_color_labels = labels.broad_color_labels ?? null
-    let rgb_values = labels.rgb_values ?? null
-    let spread_value = labels.spread_value ?? null
-    let x_coord = labels.spread_value ?? null
-    let y_coord = labels.spread_value ?? null
-
     api_url = 'https://backend-python-nupj.onrender.com/update_color_labels/'
 
     headers = {
@@ -67,14 +50,14 @@ function api_update_color_labels(labels) {
     data = {
         asset_id:labels.asset_id,
         color_labels:[{
-            'asset_id' : labels.asset_id,
+            'asset_id':labels.asset_id,
             'color_type':labels.color_type,
-            'color_index': labels.color_index,
-            'color_label':labels.color_label,
-            'rgb_values':labels.rgb_values,
-            'spread':labels.spread_value,
-            'x_coord':labels.x_coord,
-            'y_coord':labels.y_coord
+            'layer_type':labels.layer_type,
+            'color_index':labels.color_index,
+            'color_rgb_values':labels.color_rgb_values,
+            'mask_rgb_values':labels.mask_rgb_values,
+            'layer_type':labels.layer_type,
+            'color_map_link':labels.color_map_link
         }]
     }
 
@@ -87,3 +70,136 @@ function api_update_color_labels(labels) {
     .then(data => { return console.log(data) })
 
 }
+    
+
+
+function save_color_layer_to_aws(layer, file_name) {
+    // Convert canvas to a Blob
+    layer.toBlob(function(blob) {
+        // AWS S3 configuration
+        AWS.config.update({
+            accessKeyId: AWS_ACCESS_KEY_ID,
+            secretAccessKey: AWS_SECRET_ACCESS_KEY,
+            region: 'us-east-2'
+        });
+
+        const s3 = new AWS.S3({maxRetries: 0,});
+
+        const params = {
+            Bucket: 'label-color-maps',
+            Key: file_name, // Your desired file path in the bucket
+            Body: blob,
+            ContentType: 'image/png'              
+        };
+
+        // Upload the Blob to S3
+        s3.putObject(params, (err, data) => {
+            if (err) {
+                console.error('Error uploading image:', err);
+            } else {
+                console.log('Image uploaded successfully:', data);
+            }
+        });
+    }, 'image/png');
+
+    console.log('here')
+    download_image_from_s3(file_name)
+
+}
+
+
+function remove_color_layer_from_aws(event) {
+
+    //becasue remove color layer can either mean remove one signle layer or all
+    //layers we have to check for which one to do
+
+    const listing_container = event.target.closest('.listing.light.container')
+    const control_layer = event.target.closest('.layer_control.container') || null
+
+
+    //if control layer is not null we have a request to delete one single layer
+    if (control_layer) {
+        control_layers = [control_layer]
+    } else {
+        control_layers = listing_container.querySelectorAll('.layer_control.container')
+    }
+
+    Array.from(control_layers).forEach(control_layer => {
+
+        const layer_index = parseInt(control_layer.id.split('_')[2])
+        const file_name =  asset_id + '_' + String(layer_index) + '.png' 
+
+         // AWS S3 configuration
+        AWS.config.update({
+            accessKeyId: AWS_ACCESS_KEY_ID,
+            secretAccessKey: AWS_SECRET_ACCESS_KEY
+        });
+
+        const s3 = new AWS.S3({region: 'us-east-2'});
+
+        let params = {
+            Bucket: 'label-color-maps',
+            Key: file_name // The file to delete from the bucket
+        };
+
+        // Create the request object
+        const request = s3.deleteObject(params);
+        
+        // Add a listener to the request to log the HTTP request details
+        request.on('build', function() {
+        console.log("Request:", request.httpRequest);
+        });
+
+        // Send the request and handle the promise
+        request.promise()
+        .then((data) => {
+            console.log("Delete Object Success", data);
+        })
+        .catch((err) => {
+            console.log("Error", err);
+        });
+
+
+    })
+
+  
+
+}
+
+
+function download_image_from_s3(file_name) {
+    console.log(file_mame)
+    // AWS S3 configuration
+    AWS.config.update({
+        accessKeyId: AWS_ACCESS_KEY_ID,
+        secretAccessKey: AWS_SECRET_ACCESS_KEY,
+        region: 'us-east-2'
+    });
+
+    const s3 = new AWS.S3({maxRetries: 0,});
+
+    const params = {
+        Bucket: 'label-color-maps',
+        Key: file_name // The file path in the bucket
+    };
+
+    // Retrieve the object from S3
+    s3.getObject(params, function(err, data) {
+        if (err) {
+            console.error('Error downloading image:', err);
+        } else {
+            // Convert binary data to Blob
+            const blob = new Blob([data.Body], { type: 'image/png' });
+
+            // Create a URL for the Blob and display the image
+            const url = URL.createObjectURL(blob);
+            
+            // Example: Set the image src to the blob URL in an img element
+            const img = document.createElement('img');
+            img.src = url;
+            document.body.appendChild(img); // Add the image to the page
+        }
+    });
+}
+
+

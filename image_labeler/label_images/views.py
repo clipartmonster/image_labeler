@@ -17,10 +17,12 @@ def show_images(request):
 
     print('----------------')
     print(request.session['selected_source'])
+    print(request.session['features'])
 
     api_url = 'https://backend-python-nupj.onrender.com/get_color_labels/'
 
-    data = {'source':request.session['selected_source']}
+    data = {'source':request.session['selected_source'],
+            'samples':50}
 
     header = {
         'Content-Type': 'application/json',
@@ -30,6 +32,10 @@ def show_images(request):
     response = requests.get(api_url, json = data, headers = header)
 
     assets_to_label = json.loads(response.content)['assets_to_label']
+    total_in_full_set_to_label = json.loads(response.content)['total_in_full_set_to_label']
+    total_in_set_to_label = json.loads(response.content)['total_in_set_to_label']
+
+
 
     color_labels = [{'label':'red','hex_code':'#ff0000'},
                     {'label':'orange','hex_code':'#ff7d00'},
@@ -38,6 +44,8 @@ def show_images(request):
                     {'label':'blue','hex_code':'#0000FF'},
                     {'label':'purple','hex_code':'#7D00FF'},
                     {'label':'brown', 'hex_code':'#9B4B19'},
+                    {'label':'tan', 'hex_code':'#ffc896'},
+                    {'label':'pink', 'hex_code':'#f5b4c3'},
                     {'label':'gray', 'hex_code':'#AFAFAF'},
                     {'label':'black','hex_code':'#000000'},
                     {'label':'white','hex_code':'#FFFFFF'},
@@ -46,6 +54,8 @@ def show_images(request):
     spread_values = ['25%', '50%', '75%', '100%']
 
     return render(request, 'show_images.html', {'assets_to_label' : assets_to_label,
+                                                'total_in_set_to_label':total_in_set_to_label,
+                                                'total_in_full_set_to_label':total_in_full_set_to_label,
                                                 'reference_panels':range(9),
                                                 'color_labels':color_labels,
                                                 'spread_values':spread_values
@@ -55,7 +65,8 @@ def show_images(request):
 
 def setup_session(request):
 
-    features = ['art_type', 'clip_art_type', 'count', 'primary_colors', 'line_width', 'color_depth']
+    features = ['title', 'main_element', 'description', 'art_type', 
+                'clip_art_type', 'count', 'primary_colors', 'line_width', 'color_depth']
 
    
     return render(request, 'setup_session.html', {'features':features})
