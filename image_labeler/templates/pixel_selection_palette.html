@@ -10,6 +10,7 @@
         <h1 class = 'listing_info label remove_layer'>X</h1>
     </div>
     <div id = 'highlight_color_indicator' class = 'color_swatch pixel_highlight'></div>
+    <h1 id = 'color_spread' class = 'listing_info label'>---</h1>
     <div  id = 'rectangle_color_swatch' class = 'color_swatch rectangle empty'  >
         <h1 class = 'listing_info label rectangle_swatch'>Background Color</h1>
     </div>
@@ -24,7 +25,8 @@
 
             <div class = 'pixel_selection panel flood_fill'>
 
-                <div id = button_flood_fill class ="button flood_fill" '>
+                <div id = button_flood_fill class ="pixel_selection button" onclick ='select_tool(event)'>
+                    <div id = 'selected_pixel_tool_indicator' class = 'pixel_selection tool indicator'></div>
                     <img class = 'pixel_selection icon' src = "{% static 'images/flood_fill_icon.png' %}">
                 </div>
 
@@ -42,10 +44,12 @@
                 </div>
             
             </div>
+
             <div class = 'pixel_selection panel full_fill'>
 
                 
-                <div id = "button_full_fill" class ="button full_fill" >
+                <div id = "button_full_fill" class ="pixel_selection button" onclick ='select_tool(event)' >
+                    <div id = 'selected_pixel_tool_indicator' class = 'pixel_selection tool indicator'></div>
                     <img class = 'pixel_selection icon' src = "{% static 'images/full_fill_icon.png' %}">
                 </div>
 
@@ -56,6 +60,28 @@
                     </div>
 
                     <textarea id = 'full_fill_threshold' class = 'pixel_selection field'>25 </textarea>
+                    
+                    <div class = 'control_button negative' onclick = 'change_threshold(event,"subtraction")'>
+                        <h1 class = 'listing_info label'>-</h1>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class = 'pixel_selection panel brush'>
+                
+                <div id = "button_brush"  class ="pixel_selection button" onclick ='select_tool(event)' >
+                    <div id = 'selected_pixel_tool_indicator' class = 'pixel_selection tool indicator'></div>
+                    <img class = 'pixel_selection icon' src = "{% static 'images/brush_icon.png' %}">
+                </div>
+
+                <div id = brush_threshold_container class = 'pixel_selection threshold container'>
+                    
+                    <div class = 'control_button positive' onclick = 'change_threshold(event,"addition")'>
+                        <h1 class = 'listing_info label'>+</h1>
+                    </div>
+
+                    <textarea id = 'brush_threshold' class = 'pixel_selection field'>25 </textarea>
                     
                     <div class = 'control_button negative' onclick = 'change_threshold(event,"subtraction")'>
                         <h1 class = 'listing_info label'>-</h1>

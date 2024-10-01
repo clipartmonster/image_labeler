@@ -168,7 +168,6 @@ function remove_color_layer_from_aws(event) {
 
 
 function download_image_from_s3(file_name) {
-    console.log(file_mame)
     // AWS S3 configuration
     AWS.config.update({
         accessKeyId: AWS_ACCESS_KEY_ID,
