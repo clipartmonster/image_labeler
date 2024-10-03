@@ -408,7 +408,7 @@ function collect_color_layer_data(event){
 
 
     // api_update_color_labels(labels)
-    // save_color_layer_to_aws(layer, file_name)
+    save_color_layer_to_aws(layer, file_name)
 
 }
 

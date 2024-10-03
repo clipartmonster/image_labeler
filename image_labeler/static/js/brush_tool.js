@@ -17,13 +17,13 @@ function brush_fill(event){
     brush_radius = parseInt(brush_radius/4)
 
     const rect = active_layer.getBoundingClientRect();
-    const x = event.clientX - rect.left; // Calculate mouse x position
-    const y = event.clientY - rect.top; // Calculate mouse y position
+    const x = Math.floor(event.clientX - rect.left); // Calculate mouse x position
+    const y = Math.floor(event.clientY - rect.top); // Calculate mouse y position
 
     // Allow continuous painting as the mouse moves
     function on_mouse_move(event) {
-        const xMove = event.clientX - rect.left;
-        const yMove = event.clientY - rect.top;
+        const xMove = Math.floor(event.clientX - rect.left);
+        const yMove = Math.floor(event.clientY - rect.top);
         paint(xMove, yMove,active_layer, brush_radius, highlight_color);
     }
 

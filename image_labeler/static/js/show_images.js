@@ -6,13 +6,15 @@ document.addEventListener('DOMContentLoaded', function () {
         const image_element = document.getElementById(`image_${asset_id}`);
         const canvas_context = canvas.getContext('2d');
 
+        canvas_context.globalAlpha = 1
+
         image_element.onload = function () {
             const originalWidth = image_element.width;
             const originalHeight = image_element.height - 100;  // Crop out the last 100 pixels
 
             // Set the canvas size to the cropped image size (1/4 of the width and height)
-            canvas.width = originalWidth / 4;
-            canvas.height = originalHeight / 4;
+            canvas.width = parseInt(originalWidth / 4);
+            canvas.height = parseInt(originalHeight / 4);
 
             // Draw the cropped image
             canvas_context.drawImage(
@@ -22,7 +24,7 @@ document.addEventListener('DOMContentLoaded', function () {
             );
 
             // Apply the blur filter and redraw the image
-            canvas_context.filter = "blur(1px)";
+            // canvas_context.filter = "blur(1px)";
             canvas_context.drawImage(canvas, 0, 0);
         };
     });
