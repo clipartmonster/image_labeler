@@ -341,6 +341,9 @@ function get_layer_index(arr) {
 function collect_color_layer_data(event){
     // this function fires off any time a color is selected on a canvas
 
+    //get labeler id
+    labeler_id = document.getElementById('labeler_id').getAttribute('labeler_id')
+
     ////////////////////////////
     //generate the file name for saving to aws
     const layer = event.target
@@ -404,10 +407,11 @@ function collect_color_layer_data(event){
               'mask_rgb_values':highlight_color_string,
               'layer_type':layer_type,
               'color_map_link':file_name,
+              'labeler_id':labeler_id
        }
 
 
-    // api_update_color_labels(labels)
+    api_update_color_labels(labels)
     save_color_layer_to_aws(layer, file_name)
 
 }
@@ -437,7 +441,9 @@ function count_matching_pixels(layer, highlight_color) {
 
 function add_color_label(event){
 
-    console.log(event.target)
+    //get labeler id
+    labeler_id = document.getElementById('labeler_id').getAttribute('labeler_id')
+
 
     //get the color type label based on the color_swatch class
     color_type = event.target.closest('.color_swatch')
@@ -450,7 +456,8 @@ function add_color_label(event){
     asset_id = listing_container.getAttribute('asset_id')
 
     labels = {'asset_id':asset_id,
-              'color_type':color_type
+              'color_type':color_type,
+              'labeler_id':labeler_id,
             }
 
     api_update_color_labels(labels)

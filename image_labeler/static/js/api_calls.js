@@ -57,7 +57,8 @@ function api_update_color_labels(labels) {
             'color_rgb_values':labels.color_rgb_values,
             'mask_rgb_values':labels.mask_rgb_values,
             'layer_type':labels.layer_type,
-            'color_map_link':labels.color_map_link
+            'color_map_link':labels.color_map_link,
+            'labeler_id':labels.labeler_id,
         }]
     }
 
@@ -103,7 +104,7 @@ function save_color_layer_to_aws(layer, file_name) {
     }, 'image/png');
 
     console.log('here')
-    download_image_from_s3(file_name)
+    // download_image_from_s3(file_name)
 
 }
 

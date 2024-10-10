@@ -18,6 +18,7 @@ def show_images(request):
     print('----------------')
     print(request.session['selected_source'])
     print(request.session['features'])
+    print(request.session['labeler_id'])
 
     api_url = 'https://backend-python-nupj.onrender.com/get_color_labels/'
 
@@ -58,7 +59,8 @@ def show_images(request):
                                                 'total_in_full_set_to_label':total_in_full_set_to_label,
                                                 'reference_panels':range(9),
                                                 'color_labels':color_labels,
-                                                'spread_values':spread_values
+                                                'spread_values':spread_values,
+                                                'labeler_id':request.session['labeler_id']
                                                 })
 
 
@@ -77,9 +79,11 @@ def initialize_session(request):
     if request.method == 'POST':
         selected_source = request.POST.get('source')
         selected_features = request.POST.get('features')
+        labeler_id = request.POST.get('labeler_id')
         # Save the selected source in the session
         request.session['selected_source'] = selected_source
         request.session['features'] = selected_features
+        request.session['labeler_id'] = labeler_id
         return redirect('show_images')
     return redirect('select_source')
 

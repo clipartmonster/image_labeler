@@ -8,6 +8,9 @@
         {% include 'color_palette.html'%}
 
         {% for asset in assets_to_label %}
+
+        <div id = 'labeler_id' labeler_id = "{{labeler_id}}"></div>
+
         <div class = 'listing light container' asset_id = {{asset.asset_id}} style = 'display:grid; grid-template-columns: 1fr 1fr;'>
 
  

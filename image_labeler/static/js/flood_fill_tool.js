@@ -30,6 +30,7 @@ function flood_fill(event) {
     const kernel_size = 1;
 
     // Selected pixel coordinates
+    console.log(active_layer)
     const rect = active_layer.getBoundingClientRect();
     const x = Math.floor(event.clientX - rect.left);
     const y = Math.floor(event.clientY - rect.top);
@@ -61,8 +62,7 @@ function flood_fill(event) {
 
         // Calculate the pixel position
         let pixel_position = (y_coord * active_layer.width + x_coord) * 4;
-        console.log(pixel_position % 4)
-
+        
         // Move upwards to find the first non-matching pixel
         while (y_coord >= 0 && get_color_distance(pixel_data, x_coord, y_coord, active_layer.width, selected_color, kernel_size) < threshold) {
             pixel_position -= active_layer.width * 4; // Move up in pixel data
@@ -109,7 +109,7 @@ function flood_fill(event) {
 
     // Apply all the filled pixels in one step
     layer_context.putImageData(imageData, 0, 0);
-
+    collect_color_layer_data(event)
 
     // Reset the filling flag and clear the timeout when the operation is complete
     clearTimeout(flood_fill_timeout);  // Clear timeout if operation finishes within the time limit

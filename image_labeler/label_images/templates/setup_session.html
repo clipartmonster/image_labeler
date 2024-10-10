@@ -9,6 +9,16 @@
     <form method = post id = radioForm action = '{% url "initialize_session"  %}'>
         {% csrf_token %}
    
+        <div class="option_container">
+            <h1 id = 'title' class = 'listing_info label'> Select you labeler id</h1>
+            <select id="labeler_id" class = 'title_font field_label' name="labeler_id">
+                <option  value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+            </select>
+        </div>
+
         <div class = 'option_container'>
                 <h1 id = 'title' class = 'listing_info label'> Select a source of images to label</h1>
 
