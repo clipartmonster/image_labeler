@@ -91,6 +91,12 @@ def initialize_session(request):
 def mturk_redirect(request):
 
     task_type = request.GET.get('task_type')
+    assignment_id = request.GET.get('assignmentId')
+    hit_id = request.GET.get('hitId')
+
+    print(assignment_id)
+    print(hit_id)
+
 
     api_url = 'https://backend-python-nupj.onrender.com/get_assets_to_label/'
 
@@ -111,6 +117,7 @@ def mturk_redirect(request):
 
 
     return render(request, 'label_content.html', {'task_type':task_type,
+                                                  'assignment_id':assignment_id,
                                                   'assets_to_label':assets_to_label,
                                                   'example_count':range(1,5),
                                                   'labels':labels})
