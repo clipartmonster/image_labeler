@@ -27,7 +27,7 @@ SECRET_KEY = "django-insecure-98h*%=hv@q-pb**g-(rt2u$=pdy@&-p=zj042!2isgnk$b3a)$
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['https://image-labeler-wqmc.onrender.com']
+ALLOWED_HOSTS = ['image-labeler-wqmc.onrender.com']
 
 
 # Application definition
