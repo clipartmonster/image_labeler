@@ -30,6 +30,7 @@ DEBUG = True
 ALLOWED_HOSTS = ['image-labeler-wqmc.onrender.com',
                  '127.0.0.1']
 
+X_FRAME_OPTIONS = 'ALLOWALL'
 
 CORS_ALLOWED_ORIGINS = [
     "https://workersandbox.mturk.com",
