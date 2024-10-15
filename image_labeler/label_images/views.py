@@ -94,7 +94,7 @@ def mturk_redirect(request):
 
     api_url = 'https://backend-python-nupj.onrender.com/get_assets_to_label/'
 
-    data = {'samples':50,
+    data = {'samples':2,
             'labeler_id':1,
             'task_type':'art_type'}
 

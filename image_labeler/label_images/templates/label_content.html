@@ -7,5 +7,19 @@
             {% include 'label_art_type.html'%}
         {% endif %}
 
+       <div class = 'listing light container'>
+        
+        <form id="turkSubmit" action="https://workersandbox.mturk.com/mturk/externalSubmit" method="post">
+
+          
+            
+            <input type="hidden" name="assignmentId" id="assignmentId" value="">
+            <input type="submit" value="Submit" name="submitButton" id="submitButton" >
+            
+
+        </form>
+
+
+       </div>
 
     {% endblock %}

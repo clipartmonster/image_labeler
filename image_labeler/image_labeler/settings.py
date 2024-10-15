@@ -27,8 +27,14 @@ SECRET_KEY = "django-insecure-98h*%=hv@q-pb**g-(rt2u$=pdy@&-p=zj042!2isgnk$b3a)$
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['image-labeler-wqmc.onrender.com']
+ALLOWED_HOSTS = ['image-labeler-wqmc.onrender.com',
+                 '127.0.0.1']
 
+
+CORS_ALLOWED_ORIGINS = [
+    "https://workersandbox.mturk.com",
+    "https://www.mturk.com"
+]
 
 # Application definition
 
@@ -39,6 +45,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "corsheaders",
     "label_images",
 ]
 
@@ -51,6 +58,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
 ]
 
 ROOT_URLCONF = "image_labeler.urls"
