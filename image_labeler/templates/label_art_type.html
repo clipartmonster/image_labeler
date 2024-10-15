@@ -1,0 +1,113 @@
+{% load static %}
+
+
+
+{% for asset in assets_to_label %}
+
+
+<div id = 'labeler_id' labeler_id = "{{labeler_id}}"></div>
+
+<div class = 'listing light container' asset_id = {{asset.asset_id}} style = 'display:grid; grid-template-columns: 1fr 1fr;'>
+
+
+
+    <div class = 'design dark container' >
+
+        <img id = "image_{{asset.asset_id}}" class="design" src="{{ asset.image_link }}" crossOrigin="anonymous" >
+       
+     </div>
+    
+    <div class = 'listing_info container'>
+
+        <div class = 'listing_info header'>
+            <h1 class = 'listing_info label'>Session {{ forloop.counter }} / {{total_in_set_to_label}} </h1>
+            <h1 class = 'listing_info label'>Left to label: {{total_in_full_set_to_label}} </h1>
+
+        </div>
+        
+        <div class = 'feature_element container'>
+                               
+
+
+       
+
+            <div class = 'label container primary_color'> 
+                <h1 class = 'listing_info label'>Art Type Labels</h1>
+
+                <div class = 'label_options container'>
+
+                    {% for label in labels %}
+
+                        <div class = 'label_option panel'>
+
+                            <div class = 'label_option button container'>
+                                <div class ="color_swatch mixed" >
+                                    <img src="{% static 'images/' %}{{ label }}_icon.png">
+                                </div>
+
+                                <h1 class = 'listing_info label'>{{label}}</h1>
+
+                            </div>
+
+                            <div class = 'label_option example panel'>
+
+                                {% for example_index in example_count %}
+
+                                    <div class = 'label_option thumbnail frame'>
+                                        <img class="label_option thumbnail correct" src="{% static 'images/examples/art_type/' %}{{ label }}/correct_{{example_index}}.jpg">
+                                    </div>
+
+                                {% endfor %}
+                        
+
+                            </div>
+
+                        </div>
+
+                    {% endfor %}
+
+                </div>
+
+
+
+                <!-- <div class = 'color_option_container'>
+                    <div class = 'add_color container'>
+
+                        <div class ="color_swatch empty">
+                            <h1 class = 'field add_color'>+</h1>
+                        </div>
+                
+                    </div>                            
+
+                    <div class = 'add_color container'>
+
+                        <div class ="color_swatch mixed" onclick ='add_color_label(event)'>
+                            <img src = "{% static 'images/mixed_icon.png' %}">
+                        </div>
+
+                        <div class ="color_swatch no_fill" onclick ='add_color_label(event)'>
+                            <img src = "{% static 'images/empty_icon.png' %}">
+                        </div>
+
+                        <div class ="color_swatch black_fill" onclick ='add_color_label(event)'>
+                            <img src = "{% static 'images/black_fill_icon.png' %}">
+                        </div>
+
+                        <div class ="color_swatch invalid" onclick ='add_color_label(event)'>
+                            <img src = "{% static 'images/invalid_icon.png' %}">
+                        </div>
+
+                    </div>
+
+                    
+                </div> -->
+            
+            </div>
+
+        </div>
+
+
+    </div>
+
+</div>
+{% endfor %} 

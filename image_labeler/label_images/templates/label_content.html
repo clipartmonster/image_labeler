@@ -1,0 +1,11 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+    {% block content %}
+    
+        {% if task_type == 'art_type' %}
+            {% include 'label_art_type.html'%}
+        {% endif %}
+
+
+    {% endblock %}

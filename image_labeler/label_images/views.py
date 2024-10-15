@@ -88,3 +88,29 @@ def initialize_session(request):
     return redirect('select_source')
 
 
+def mturk_redirect(request):
+
+    task_type = request.GET.get('task_type')
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_assets_to_label/'
+
+    data = {'samples':50,
+            'labeler_id':1,
+            'task_type':'art_type'}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+
+    response = requests.get(api_url, json = data, headers = header)
+
+    assets_to_label = json.loads(response.content)['assets_to_label']
+
+    labels = ['invalid','pattern','clipart']
+
+
+    return render(request, 'label_content.html', {'task_type':task_type,
+                                                  'assets_to_label':assets_to_label,
+                                                  'example_count':range(1,5),
+                                                  'labels':labels})
