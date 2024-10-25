@@ -57,8 +57,9 @@ div.listing.container {
 
 div.listing_info.container{
     display:grid;
-    grid-template-rows:50px 1fr;
+    grid-template-rows:275px 100px 1fr;
     padding:10px;
+    min-height:350px;
 }
 
 div.label.container{
@@ -443,27 +444,84 @@ canvas.design.active{
     display:block;
 }
 
-img.label_option.thumbnail.correct {
-    height:50px;
+img.label_option.thumbnail {
+    height:75px;
     border-radius: 10px;
-    border:3px solid #3daf3f;
+    border:1px solid #3c5050;
+    cursor:pointer;
 }
 
+img.label_option.thumbnail.expanded {
+    width:400px;
+    height:auto;
+    border-radius: 10px;
+    border:1px solid #3c5050;
+ 
+}
 
+button.label_option.button {
+    width:125px;
+    height:35px;
+    background-color: #a9b9b9;
+    border: 2px solid #8a9c9c; 
+    border-radius: 10px;
+    pointer-events:none;
+    
+}
 
-div.label_options.container{
+button.label_option.button.yes {
+    background-color: #8eb284;
+}
+
+button.label_option.button.no {
+    background-color: #bd4444;
+}
+
+button.label_option.button:active {
+    width:125px;
+    height:35px;
+    background-color: #8ba7a7;
+    border: 2px solid #8a9c9c; 
+    border-radius: 10px;
+    cursor:pointer;
+    
+}
+
+div.label_option.thumbnail.container {
     display:flex;
     flex-direction:column;
-    margin-top:10px;
+    padding:4px;
+    border:2px solid #d3e3df;
+
+}
+
+div.label_option.thumbnail.container.correct {
+    background-color: #8eb284;
+    
+}
+
+div.label_option.thumbnail.container.incorrect {
+    background-color: #bd4444;
+    
+}
+
+div.label_option.thumbnail.panel{
+    display:flex;
     gap:5px;
 }
 
-
-div.label_option.panel{
-    display:flex;
-    gap:20px;
-    align-items:center;
+div.label_option.label.container{
+    display:grid;
+    justify-items: center;
 }
+
+div.label_options.container.horizontal{
+    display:flex;
+    flex-wrap:wrap;
+    gap:15px;
+
+}
+
 
 div.label_option.example.panel {
     display:flex;
@@ -474,3 +532,197 @@ div.label_option.example.panel {
     border:2px solid #d2e2e2
 }
 
+h1.label_option{
+    font-family:"Roboto";
+    color:#282b2b;
+}
+
+h2.label_option{
+    font-family:"Roboto";
+    color:#ffffff;
+    font-size:16px;
+    font-weight:400;
+    text-align: center;
+    line-height:0px;
+}
+
+h3.label_option.example.copy{
+    font-family: "Roboto";
+    font-weight:400;
+    color:#c1d2d2;
+    text-align:center;
+
+}
+
+h1.label_option.example{
+    font-size:24px;
+    border-radius: 15px;
+    background-color: #c1d2d2;
+    padding:3px;
+    width:25px;
+    margin:auto;
+    text-align:center
+}
+
+h1.label_option.intro{
+    font-size:18px;
+    font-weight:500;
+}
+
+h1.label_option.rule{
+    margin-left:5px;
+    font-size:16px;
+    font-weight:400;
+
+}
+
+h1.label_option.label{
+    font-size:22px;
+    line-height:0px
+}
+
+
+div.label_option.rule_container{
+    display:grid;
+    grid-template-columns:50px 925px;
+    background-color: #c7d5d5;
+    padding:5px;
+    margin:5px;
+    border-radius: 15px;
+}
+
+img.label_option.example{    
+    width:100%;
+    border-radius: 15px;
+    border:2px solid #d2e2e2
+}
+
+div.label_option.example.container{
+    display:none;
+    width:800px;
+    height:400px;
+    gap:25px;
+    background-color:#5d6565;
+    border-radius:15px;
+    border:2px solid  #d2e2e2;
+    padding:10px;
+}
+
+div.label_option.example.container.active{
+    display:flex;
+}
+
+
+div.label_option.expanded.example{
+    display:none;
+    background-color: #bdc7c7;
+    padding:20px;
+    border-radius: 15px;
+    border: 1px solid black;
+    z-index:3;
+
+
+}
+
+div.label_option.rule_validator {
+    display:flex; 
+    align-items:center; 
+    gap:5px;
+    padding:5px;
+    margin:10px
+}
+
+div.label_option.rule_validator.active {
+    background-color:#bad7d7;
+    border-radius:15px;    
+    border:2px solid #409393
+}
+
+div.label_option.button.panel{
+    margin-top:25px;
+    display:flex;
+    flex-direction: row;
+    gap:15px;
+    
+}
+
+div.label_option.button.container{
+    padding:10px;
+}
+
+div.label_option.button.container.open{
+    opacity:.25;
+}
+
+div.label_option.button.container.closed{
+    opacity:1;
+}
+
+div.label_option.button.container.active{
+    background-color:#bad7d7;
+    border-radius:15px;    
+    border:2px solid #409393;
+    opacity:1;
+}
+
+input.label_option.submit.button {
+    background-image: url("/static/images/yes_icon.png");
+    background-size: contain;      
+    background-position: center;   
+    background-repeat: no-repeat;  
+    background-size:30%;
+    font-family: "Roboto";
+    font-weight:400;
+    font-size:16px;
+    height:35px;
+    color:white;
+    background-color: #a9b9b9;
+    border: 2px solid #8a9c9c; 
+    border-radius: 10px;
+    cursor:pointer;
+    padding:20px;
+    line-height:0px;
+    margin:10px;
+   
+    
+}
+
+div.submit.button.container{
+    background-color:#bad7d7;
+    border-radius:10px;    
+    border:2px solid #409393;
+    opacity:1;
+    display:none;
+    margin:auto;
+    margin-top:25px;
+    margin-bottom:25px;
+    width:250px;
+    padding:15px;
+}
+
+div.label_option.reset.button{
+    text-align: center;
+    margin-top:20px;
+    justify-self: right;
+    align-self:end;
+    cursor: pointer;
+}
+
+img.key.icon{
+    height:25px;
+}
+
+img.key.light.icon{
+    filter:brightness(300%)
+}
+
+
+div.separator{
+    width:5px;    
+    height:55px;
+    background-color:#536565
+}
+
+.radio_button{
+    pointer-events: none;
+}

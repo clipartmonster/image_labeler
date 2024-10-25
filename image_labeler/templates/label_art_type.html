@@ -1,81 +1,181 @@
 {% load static %}
 
+</div>
 
-
-{% for asset in assets_to_label %}
-
-
-<div id = 'labeler_id' labeler_id = "{{labeler_id}}"></div>
-
-<div class = 'listing light container' asset_id = {{asset.asset_id}} style = 'display:grid; grid-template-columns: 1fr 1fr;'>
-
-
-
-    <div class = 'design dark container' >
-
-        <img id = "image_{{asset.asset_id}}" class="design" src="{{ asset.image_link }}" crossOrigin="anonymous" >
-       
-     </div>
+<div class = 'listing light container rules'>
     
-    <div class = 'listing_info container'>
-
-        <div class = 'listing_info header'>
-            <h1 class = 'listing_info label'>Session {{ forloop.counter }} / {{total_in_set_to_label}} </h1>
-            <h1 class = 'listing_info label'>Left to label: {{total_in_full_set_to_label}} </h1>
-
+    <div style = 'display:flex; flex-direction:column; align-items:center'>
+        <div class ="color_swatch mixed" >
+            <img src="{% static 'images/' %}{{ label }}_icon.png">
         </div>
-        
-        <div class = 'feature_element container'>
-                               
 
+        <h1 class = 'label_option label'>{{label}}</h1>
+    </div>
 
-       
+    <div class = 'design dark container'>
+        <h1 class = 'label_option intro'>
+            {% for rule in labelling_rules %}
+                {% if rule.rule_index == 0 %}
+                    {{rule.description|safe}}
+                {% endif %}
+            {% endfor %}
+        </h1>
+    </div>
 
-            <div class = 'label container primary_color'> 
-                <h1 class = 'listing_info label'>Art Type Labels</h1>
+    <div class = 'label_options container horizontal'>
 
-                <div class = 'label_options container'>
+            <div class = 'label_option panel' label = {{label}}>
+                <div class = 'label_option label container'>
+                                       
+                    {% for rule in labelling_rules %}
+                        {% if rule.rule_index != 0 %}
 
-                    {% for label in labels %}
+                            <div class = 'label_option rule_container'>
+                                <h1 class = 'label_option example'>{{rule.rule_index}}</h1>
+                                <h1 class = 'label_option rule'>
+                                    {{rule.description}} 
+                                </h1>    
 
-                        <div class = 'label_option panel'>
+                                <div style = 'display:flex; gap:10px; flex-wrap:wrap; width:925px;'>
+                                    
+                                    <div class='label_option thumbnail container correct'>
+                                        <h2 class = "label_option label">
+                                            clip art
+                                        </h2>
+                                    <div class = 'label_option thumbnail panel' >
+                                            
+                                            {% for example in rule.examples %}
+                                                {% if example.example_type == 'correct' %}
+                                                <img class="label_option thumbnail correct" src="{{ example.image_path }}" onclick = "expand_image(event)">
+                                                <div class = 'label_option expanded example'>
+                                                    <img class="label_option thumbnail expanded" src="{{ example.image_path }}"> 
+                                                    <h1 class = 'label_option rule'>{{example.caption}}</h1> 
+                                                </div> 
+                                                {% endif %}
+                                            {% endfor %}
 
-                            <div class = 'label_option button container'>
-                                <div class ="color_swatch mixed" >
-                                    <img src="{% static 'images/' %}{{ label }}_icon.png">
-                                </div>
+                                        </div>
 
-                                <h1 class = 'listing_info label'>{{label}}</h1>
-
-                            </div>
-
-                            <div class = 'label_option example panel'>
-
-                                {% for example_index in example_count %}
-
-                                    <div class = 'label_option thumbnail frame'>
-                                        <img class="label_option thumbnail correct" src="{% static 'images/examples/art_type/' %}{{ label }}/correct_{{example_index}}.jpg">
                                     </div>
 
-                                {% endfor %}
+                                    <div class='label_option thumbnail container incorrect'>
+                                        <h2 class = "label_option label">
+                                            not clip art
+                                        </h2>
+                                        
+                                        <div class = 'label_option thumbnail panel' >
+                                            {% for example in rule.examples %}
+                                                {% if example.example_type == 'incorrect' %}
+                                                <img class="label_option thumbnail incorrect" src="{{ example.image_path }}" onclick = "expand_image(event)">
+                                                <div class = 'label_option expanded example'>
+                                                    <img class="label_option thumbnail expanded" src="{{ example.image_path }}"> 
+                                                    <h1 class = 'label_option rule'>{{example.caption}}</h1> 
+                                                </div> 
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                </div>
+
                         
-
                             </div>
-
-                        </div>
-
+                        {% endif %}
                     {% endfor %}
 
-
+        
                 </div>
-
 
             </div>
 
-        </div>
 
+
+    
 
     </div>
 
 </div>
+
+{% for asset in assets_to_label %}
+
+    <div id = 'listing_container_{{forloop.counter0}}' class = 'listing light container open' style = 'display:grid; grid-template-columns: 1fr 1fr;'>
+
+        <div class = 'collection_data' style = 'display:none' 
+            asset_id = {{asset.asset_id}}
+            task_type = {{collection_data.task_type}}
+            labeler_source = {{collection_data.labeler_source}}
+            labeler_id = {{collection_data.labeler_id}}
+            label_type = {{collection_data.label_type}}
+            hit_id = {{collection_data.hit_id}}>
+        </div>
+
+        <div class = 'design dark container' >
+
+            <img id = "image_{{asset.asset_id}}" class="design" src="{{ asset.image_link }}" crossOrigin="anonymous" >
+        
+        </div>
+        
+    <div class = 'listing_info container'>
+           
+            
+
+                <div class = 'label_option prompt container open' >
+
+                    {% for rule in labelling_rules %}
+                    {% if rule.rule_index != 0 %}
+
+                        <div id = 'rule_valdiator_{{asset.asset_id}}_{{rule.rule_index}}' class = 'label_option rule_validator open' rule_index = {{rule.rule_index}}>
+
+                            <img class = 'key icon' src="{% static 'images/yes_icon.png'%}">
+                            <div class="switch3-container">
+                                <div class="switch3">
+                                <input type="radio" id="switch3-radio1"  prompt_response = 'yes' class = 'radio_button' data-hotkey="1" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
+                                <label for="switch3-radio1"></label>
+                        
+                                <input type="radio" id="switch3-radio2"  prompt_response = 'none' class = 'radio_button' data-hotkey="3" name="radio_{{forloop.counter}}_{{asset.asset_id}}" checked/>
+                                <label for="switch3-radio2"></label>
+                        
+                                <input type="radio" id="switch3-radio3"  prompt_response = 'no' class = 'radio_button' data-hotkey="2" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
+                                <label for="switch3-radio3"></label>          
+                                </div>
+                            </div>
+                            <img class = 'key icon' src="{% static 'images/no_icon.png'%}">
+                            <div class = 'separator'>||</div>
+                            <h1 class = 'label_option rule'>
+                                {{rule.prompt}}
+                            </h1>
+                        </div>
+
+                    {% endif %}  
+                    {% endfor %}
+                
+                </div>    
+
+                
+                <div class = 'label_option button container open'>
+
+                    <h1 class = 'listing_info label'> Is this image clip art? </h1>
+
+                    <div class = 'label_option button panel'>
+                        <button class="label_option button" type="button" onclick='collect_label(event.target,"yes")'>
+                            <img class = 'key light icon' src="{% static 'images/yes_icon.png'%}"> 
+                        </button>
+
+                        <button class="label_option button" type="button" onclick='collect_label(event.target, "no")'>
+                            <img class = 'key light icon' src="{% static 'images/no_icon.png'%}"> 
+                        </button>
+                    </div>      
+                          
+                </div>
+
+                <div class = 'label_option reset button' onclick = 'reset_responses(event)'>
+                    <img src="{% static 'images/reset.png'%}">
+                    <h1 class = 'listing_info label'>Clear Responses</h1>
+                </div>
+
+          
+
+
+        </div>
+
+    </div>
 {% endfor %} 

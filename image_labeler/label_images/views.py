@@ -91,12 +91,10 @@ def initialize_session(request):
 def mturk_redirect(request):
 
     task_type = request.GET.get('task_type')
+    labeler_source = request.GET.get('label_source')
     assignment_id = request.GET.get('assignmentId')
+    label_type = request.GET.get('label_type')
     hit_id = request.GET.get('hitId')
-
-    print(assignment_id)
-    print(hit_id)
-
 
     api_url = 'https://backend-python-nupj.onrender.com/get_assets_to_label/'
 
@@ -110,14 +108,37 @@ def mturk_redirect(request):
         }
 
     response = requests.get(api_url, json = data, headers = header)
-
     assets_to_label = json.loads(response.content)['assets_to_label']
 
-    labels = ['invalid','pattern','clipart']
 
+    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
 
+    data = {'task_type':task_type}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+
+    response = requests.get(api_url, json = data, headers = header)
+    labelling_rules = dict(json.loads(response.content))['labeling_rules']
+
+    labelling_rules = labelling_rules[label_type]
+    labelling_rules = sorted(labelling_rules, key=lambda x: x['rule_index'])
+    
+
+    collection_data = {
+        "task_type":task_type,
+        "labeler_source":labeler_source,
+        "labeler_id":assignment_id,
+        "label_type":label_type,        
+        "hit_id": hit_id        
+    }
+    
     return render(request, 'label_content.html', {'task_type':task_type,
-                                                  'assignment_id':assignment_id,
+                                                  'label':label_type,                                                  
                                                   'assets_to_label':assets_to_label,
-                                                  'example_count':range(1,5),
-                                                  'labels':labels})
+                                                  'labelling_rules':labelling_rules,
+                                                  'collection_data':collection_data,
+                                                  'labeler_source':labeler_source
+                                                  })

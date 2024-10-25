@@ -7,20 +7,20 @@
             {% include 'label_art_type.html'%}
         {% endif %}
 
-       <div class = 'listing light container'>
-        
-        <form id="turkSubmit" action="https://workersandbox.mturk.com/mturk/externalSubmit" method="post">
 
-          
-            
-            <input type="hidden" name="assignmentId" value="{{assignment_id}}">
+        {% if labeler_source == 'MTurk' %}
+            <form id="turkSubmit" action="https://workersandbox.mturk.com/mturk/externalSubmit" method="post">
+                <div class = 'listing light container'>
+                    <div class = 'submit button container' >
+                    
+                        <h1 class = 'listing_info label'>Return to Mechanical Turk?</h1>
 
-            <input type="submit" value="Submit" name="submitButton" id="submitButton" >
-            
+                        <input type="hidden" name="assignmentId" value="{{assignment_id}}">
+                        <input type="submit" id="submitButton" class = 'label_option submit button' value="" name="submitButton">            
 
-        </form>
-
-
-       </div>
+                    </div>
+                </div>
+            </form>
+        {% endif %}
 
     {% endblock %}

@@ -12,6 +12,31 @@ fetch('/get_config/')
 })
 
 
+function api_get_labelling_rules(art_type, label){
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    data = {
+        task_type:art_type,
+        label:label              
+    }
+
+    return fetch(api_url, {
+    method:'POST',
+    headers : headers,
+    mode:'cors',
+    body: JSON.stringify(data)})
+    .then(response => { return response.json() })
+    .then(data => { return console.log(data) })
+
+}
+
+
 function api_remove_color_label(asset_id, layer_index){
 
     api_url = 'https://backend-python-nupj.onrender.com/remove_color_label/'
@@ -202,4 +227,45 @@ function download_image_from_s3(file_name) {
     });
 }
 
+
+
+
+function api_collect_label(data) {
+
+    api_url = 'https://backend-python-nupj.onrender.com/collect_label/'
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    return fetch(api_url, {
+    method:'POST',
+    headers : headers,
+    mode:'cors',
+    body: JSON.stringify(data)})
+    .then(response => { return response.json() })
+    .then(data => { return console.log(data) })
+
+}1
+
+
+function api_collect_prompt(data) {
+
+    api_url = 'https://backend-python-nupj.onrender.com/collect_prompt/'
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    return fetch(api_url, {
+    method:'POST',
+    headers : headers,
+    mode:'cors',
+    body: JSON.stringify(data)})
+    .then(response => { return response.json() })
+    .then(data => { return console.log(data) })
+
+}
 
