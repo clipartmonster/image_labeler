@@ -117,8 +117,13 @@ function direct_hotkey_action(hotkey) {
 
         } else {
 
-            const form = document.getElementById('turkSubmit')
-            if(form){form.submit()}
+            const form = document.getElementById('submit_labels')
+            
+            if (form.getAttribute('labeler_source') === 'MTurk')
+                form.submit()
+            else{
+                window.location.href = window.location.href;
+            }
 
         }
 
@@ -185,6 +190,8 @@ function activate_listing_container(listing_container) {
 
     listing_container.querySelectorAll('.label_option.rule_validator')[0]
     .className = 'label_option rule_validator active'
+
+    listing_container.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
 }
 

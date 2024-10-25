@@ -9,7 +9,7 @@
 
 
         {% if labeler_source == 'MTurk' %}
-            <form id="turkSubmit" action="https://workersandbox.mturk.com/mturk/externalSubmit" method="post">
+            <form id="submit_labels" action="https://workersandbox.mturk.com/mturk/externalSubmit" method="post" labeler_source = {{labeler_source}}>
                 <div class = 'listing light container'>
                     <div class = 'submit button container' >
                     
@@ -21,6 +21,16 @@
                     </div>
                 </div>
             </form>
+        {% else %}
+            <form id="submit_labels" labeler_source = {{labeler_source}} > <!-- Action is empty to reload the page -->
+                <div class='listing light container'>
+                    <div class='submit button container'>
+                        <h1 class='listing_info label'>Load more images to label?</h1>
+                        <input type="submit" id="localSubmitButton" class='label_option submit button' value="">
+                    </div>
+                </div>
+            </form>
+
         {% endif %}
 
     {% endblock %}
