@@ -34,7 +34,8 @@ X_FRAME_OPTIONS = 'ALLOWALL'
 
 CORS_ALLOWED_ORIGINS = [
     "https://workersandbox.mturk.com",
-    "https://www.mturk.com"
+    "https://www.mturk.com",
+    "https://image-labeler-wqmc.onrender.com/"
 ]
 
 # Application definition
