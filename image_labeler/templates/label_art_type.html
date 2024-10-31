@@ -14,36 +14,46 @@
 
     <div class = 'design dark container'>
         <h1 class = 'label_option intro'>
-            {% for rule in labelling_rules %}
-                {% if rule.rule_index == 0 %}
-                    {{rule.description|safe}}
-                {% endif %}
-            {% endfor %}
+            <p>In this HITT, you will answer a series of yes no questions for a number of images. </p>
+            <p></p>Please review the information below to understand the criteria needed to determine if an image should receive a yes or no for each question. These sections include numerous examples to make it easier for you to determine the right response for each question. Make sure to click on them to see the reason why they receive a yes or a no.</p> 
+            <p></p>Underneath the information you will see several images with each one accompanied by five questions. For many of the images you will not have to answer all questions the questions. In this HITT you will only to use the ‘1’ and ‘2’ keys on the keyboard. </p>
+            
+            
         </h1>
     </div>
 
     <div class = 'label_options container horizontal'>
 
             <div class = 'label_option panel' label = {{label}}>
-                <div class = 'label_option label container'>
+                <!-- <div class = 'label_option label container'> -->
                                        
                     {% for rule in labelling_rules %}
                         {% if rule.rule_index != 0 %}
 
                             <div class = 'label_option rule_container'>
-                                <h1 class = 'label_option example'>{{rule.rule_index}}</h1>
-                                <h1 class = 'label_option rule'>
-                                    {{rule.description}} 
-                                </h1>    
+                                
+                                <div style = 'display:grid; grid-template-columns: 25px 1fr;' >
+                                    <h1 class = 'label_option example'>{{rule.rule_index}}</h1>
+                                    <div >
+                                        <h1 class = 'label_option example'>{{rule.title}}</h1>
+                                        <h1 class = 'label_option rule'>{{rule.description}}</h1>
+  
+                                        <ul>
+                                            {% for directive in rule.directives %}
+                                                <li><h1 class = 'label_option rule'>{{directive}}</h1></li>
+                                            {% endfor %}
+                                        </ul>
+    
+                                    </div>
+                                </div>
 
                                 <div style = 'display:flex; gap:10px; flex-wrap:wrap; width:925px;'>
                                     
                                     <div class='label_option thumbnail container correct'>
-                                        <h2 class = "label_option label">
-                                            clip art
-                                        </h2>
-                                    <div class = 'label_option thumbnail panel' >
-                                            
+                                        <h2 class = "label_option label">yes</h2>
+
+                                        <div class = 'label_option thumbnail panel' >
+
                                             {% for example in rule.examples %}
                                                 {% if example.example_type == 'correct' %}
                                                 <img class="label_option thumbnail correct" src="{{ example.image_path }}" onclick = "expand_image(event)">
@@ -57,11 +67,10 @@
                                         </div>
 
                                     </div>
+                                
 
                                     <div class='label_option thumbnail container incorrect'>
-                                        <h2 class = "label_option label">
-                                            not clip art
-                                        </h2>
+                                        <h2 class = "label_option label">no</h2>
                                         
                                         <div class = 'label_option thumbnail panel' >
                                             {% for example in rule.examples %}
@@ -75,21 +84,17 @@
                                             {% endfor %}
                                         </div>
                                     </div>
+                                
                                 </div>
-
                         
                             </div>
                         {% endif %}
                     {% endfor %}
 
         
-                </div>
+                <!-- </div> -->
 
             </div>
-
-
-
-    
 
     </div>
 
@@ -151,7 +156,7 @@
                 </div>    
 
                 
-                <div class = 'label_option button container open'>
+                <!-- <div class = 'label_option button container open'>
 
                     <h1 class = 'listing_info label'> Is this image clip art? </h1>
 
@@ -165,7 +170,7 @@
                         </button>
                     </div>      
                           
-                </div>
+                </div> -->
 
                 <div class = 'label_option reset button' onclick = 'reset_responses(event)'>
                     <img src="{% static 'images/reset.png'%}">

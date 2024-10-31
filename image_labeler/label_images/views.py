@@ -97,6 +97,8 @@ def mturk_redirect(request):
     hit_id = request.GET.get('hitId')
     samples = request.GET.get('samples',50)
 
+    # samples = 2
+
     print(label_type)
 
     api_url = 'https://backend-python-nupj.onrender.com/get_assets_to_label/'
@@ -128,7 +130,9 @@ def mturk_redirect(request):
 
     labelling_rules = labelling_rules[label_type]
     labelling_rules = sorted(labelling_rules, key=lambda x: x['rule_index'])
-    
+
+    print('0000000000')
+    print(labelling_rules)
 
     collection_data = {
         "task_type":task_type,
@@ -138,15 +142,11 @@ def mturk_redirect(request):
         "hit_id": hit_id        
     }
     
-    full_url = request.build_absolute_uri()
-    print('---------')
-    print(str(full_url))
 
     return render(request, 'label_content.html', {'task_type':task_type,
                                                   'label':label_type,                                                  
                                                   'assets_to_label':assets_to_label,
                                                   'labelling_rules':labelling_rules,
                                                   'collection_data':collection_data,
-                                                  'labeler_source':labeler_source,
-                                                  'full_url':full_url
+                                                  'labeler_source':labeler_source
                                                   })

@@ -57,7 +57,7 @@ div.listing.container {
 
 div.listing_info.container{
     display:grid;
-    grid-template-rows:275px 100px 1fr;
+    grid-template-rows:1fr 100px;
     padding:10px;
     min-height:350px;
 }
@@ -559,9 +559,7 @@ h1.label_option.example{
     border-radius: 15px;
     background-color: #c1d2d2;
     padding:3px;
-    width:25px;
-    margin:auto;
-    text-align:center
+
 }
 
 h1.label_option.intro{
@@ -584,7 +582,7 @@ h1.label_option.label{
 
 div.label_option.rule_container{
     display:grid;
-    grid-template-columns:50px 925px;
+    grid-template-rows: auto auto;
     background-color: #c7d5d5;
     padding:5px;
     margin:5px;

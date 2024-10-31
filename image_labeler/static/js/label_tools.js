@@ -101,7 +101,7 @@ function direct_hotkey_action(hotkey) {
 
         priority_element = select_element(Array.from(active_elements))
 
-        console.log(priority_element)
+        console.log(priority_element.type)
 
         response = hotkey === '1' ? 'yes' : 'no'
 
@@ -166,10 +166,10 @@ function select_element(elements) {
     }
 
     // If prompt is not found, select label element
-    if (!selectedElement) {
-        selectedElement = elements.find(el => el.classList.contains('button'));
-        type = 'button_container'
-    }
+    // if (!selectedElement) {
+    //     selectedElement = elements.find(el => el.classList.contains('button'));
+    //     type = 'button_container'
+    // }
     
     // If neither prompt nor label is found, select listing container
     if (!selectedElement) {
@@ -205,10 +205,12 @@ function update_prompt(hotkey, element) {
 
     element.className = 'label_option rule_validator closed'
 
-    open_prompt_count = element
+    const open_prompt_count = element
     .closest('.label_option.prompt.container.active')
-    .querySelectorAll('[class*="open"]')
-    .length
+    .querySelectorAll('[class*="open"], [class*="active"]')
+    .length;
+
+    console.log(open_prompt_count)
 
     if (open_prompt_count > 0) {
     
@@ -218,44 +220,39 @@ function update_prompt(hotkey, element) {
 
     } else {
 
-        element
-        .closest('.label_option.prompt.container.active')
-        .nextElementSibling
-        .className = 'label_option button container active'
-
-        element
-        .closest('.label_option.prompt.container.active')
-        .className = 'label_option prompt container closed'
+        close_listing_container(element)
 
     }
 
 }
 
-function update_button(hotkey, element){ 
 
-    if (hotkey === '1') {
-        const yesButton = element.querySelector('button[onclick*="yes"]');
-        // collect_label({ target: yesButton }, "yes");
-        yesButton.className = 'button label_option button yes'
+function close_listing_container(element){
 
-    } else if (hotkey === '2') {
-        const noButton = element.querySelector('button[onclick*="no"]');
-        // collect_label({ target: noButton }, "no");
-        noButton.className = 'button label_option button no'
-    }
+    // element
+    // .closest('.label_option.prompt.container.active')
+    // .nextElementSibling
+    // .className = 'label_option button container active'
 
+    prompt_container = element
+    .closest('.label_option.prompt.container.active')
+    prompt_container.className = 'label_option prompt container closed'
+    prompt_container.style.opacity = .35        
+
+    // element
+    // .closest('.label_option.prompt.container.active')
+    // .style.opacity = .25
 
     element
     .closest('.listing.light.container.active')
     .className = 'listing light container closed'
 
-    element
-    .className = 'label_option button container'
+    // element
+    // .className = 'label_option button container'
 
     open_listing_containers = document
     .querySelectorAll('.listing.light.container.open')
 
-    console.log(open_listing_containers.length)
 
     if (open_listing_containers.length > 0) {
 
@@ -269,8 +266,48 @@ function update_button(hotkey, element){
         document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
     }
-
 }
+
+// function update_button(hotkey, element){ 
+
+//     if (hotkey === '1') {
+//         const yesButton = element.querySelector('button[onclick*="yes"]');
+//         // collect_label({ target: yesButton }, "yes");
+//         yesButton.className = 'button label_option button yes'
+
+//     } else if (hotkey === '2') {
+//         const noButton = element.querySelector('button[onclick*="no"]');
+//         // collect_label({ target: noButton }, "no");
+//         noButton.className = 'button label_option button no'
+//     }
+
+
+//     element
+//     .closest('.listing.light.container.active')
+//     .className = 'listing light container closed'
+
+//     element
+//     .className = 'label_option button container'
+
+//     open_listing_containers = document
+//     .querySelectorAll('.listing.light.container.open')
+
+//     console.log(open_listing_containers.length)
+
+//     if (open_listing_containers.length > 0) {
+
+//         open_listing_container = open_listing_containers[0]
+//         activate_listing_container(open_listing_container)
+
+//     } else {
+
+//         //wiht no more open listing containers show the sumbit button for leaving page
+//         document.querySelector('.submit.button.container').style.display = 'grid'
+//         document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+//     }
+
+// }
 
 function reset_responses(event){
 
@@ -286,6 +323,7 @@ function reset_responses(event){
     prompt_container = listing_container.querySelector('.label_option.prompt.container')
 
     prompt_container.className = 'label_option prompt container open'
+    prompt_container.style.opacity = 1
 
     prompts = prompt_container.querySelectorAll('.label_option.rule_validator')
 
@@ -304,12 +342,12 @@ function reset_responses(event){
     })
 
 
-    button_container = listing_container.querySelector('.label_option.button.container')
+    // button_container = listing_container.querySelector('.label_option.button.container')
 
-    button_container.className ='label_option button container open'
+    // button_container.className ='label_option button container open'
 
-    button_container.querySelectorAll('button.label_option.button')
-    .forEach(button =>{button.className = 'button label_option button'})
+    // button_container.querySelectorAll('button.label_option.button')
+    // .forEach(button =>{button.className = 'button label_option button'})
 
     activate_listing_container(listing_container)
 
@@ -318,22 +356,56 @@ function reset_responses(event){
 }
 
 
-// document.addEventListener('DOMContentLoaded', function(){
+document.addEventListener('DOMContentLoaded', function(){
 
-//     // Select all radio buttons within the switch3-container
-//     const radioButtons = document.querySelectorAll('.switch3-container .radio_button');
+    // Select all radio buttons within the switch3-container
+    const radio_buttons = document.querySelectorAll('.switch3');
 
-//     // Add an event listener to each radio button
-//     radioButtons.forEach((radio) => {
+    radio_buttons.forEach(radio_button => {
 
-//         radio.addEventListener('change', (event) => {
-//             const selectedRadio = event.target;
-           
-//             response = selectedRadio.getAttribute('prompt_response') === 'yes' ? '1' : '2'
+        rule_index = radio_button
+        .closest('.label_option.rule_validator')
+        .getAttribute('rule_index')
 
-//             direct_hotkey_action(response)
+        if (rule_index === '1') {
 
-//         });
-//     });
+            radio_button.addEventListener('change', function() {
+                if (radio_button.querySelector('#switch3-radio1').checked) {
+                    close_listing_container(radio_button)
+                }
+            });
 
-// })
+        } else if (rule_index == '2') {
+
+            radio_button.addEventListener('change', function() {
+                if (radio_button.querySelector('#switch3-radio1').checked) {
+                    close_listing_container(radio_button)
+                }
+            });
+
+        } else if (rule_index === '3') {
+
+            radio_button.addEventListener('change', function() {
+                if (radio_button.querySelector('#switch3-radio1').checked) {
+                    close_listing_container(radio_button)
+                }
+            });
+            
+        } else if (rule_index === '4') {
+
+            radio_button.addEventListener('change', function() {
+                if (radio_button.querySelector('#switch3-radio3').checked) {
+                    close_listing_container(radio_button)
+                }
+            });
+            
+        }
+
+
+
+        
+
+    })
+
+})
+
