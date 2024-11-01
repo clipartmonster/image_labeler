@@ -97,7 +97,7 @@ def mturk_redirect(request):
     hit_id = request.GET.get('hitId')
     samples = request.GET.get('samples',50)
 
-    # samples = 2
+    samples = 2
 
     print(label_type)
 
