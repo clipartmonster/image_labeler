@@ -191,7 +191,11 @@ function activate_listing_container(listing_container) {
     listing_container.querySelectorAll('.label_option.rule_validator')[0]
     .className = 'label_option rule_validator active'
 
-    listing_container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // scroll to new listing; dont scroll if page has just loaded
+    if (document.querySelectorAll('[class*="closed"]').length > 0){
+        listing_container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
 
 }
 
