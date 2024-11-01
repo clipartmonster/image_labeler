@@ -371,8 +371,8 @@ document.addEventListener('DOMContentLoaded', function(){
 
             radio_button.addEventListener('change', function() {
                 if (radio_button.querySelector('#switch3-radio1').checked) {
-                    close_listing_container(radio_button)
-                }
+                    close_listing_container(radio_button)    
+                 }
             });
 
         } else if (rule_index == '2') {
