@@ -148,5 +148,6 @@ def mturk_redirect(request):
                                                   'assets_to_label':assets_to_label,
                                                   'labelling_rules':labelling_rules,
                                                   'collection_data':collection_data,
-                                                  'labeler_source':labeler_source
+                                                  'labeler_source':labeler_source, 
+                                                  'assignment_id':assignment_id
                                                   })
