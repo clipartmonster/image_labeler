@@ -131,9 +131,6 @@ def mturk_redirect(request):
     labelling_rules = labelling_rules[label_type]
     labelling_rules = sorted(labelling_rules, key=lambda x: x['rule_index'])
 
-    print('0000000000')
-    print(labelling_rules)
-
     collection_data = {
         "task_type":task_type,
         "labeler_source":labeler_source,
@@ -149,5 +146,6 @@ def mturk_redirect(request):
                                                   'labelling_rules':labelling_rules,
                                                   'collection_data':collection_data,
                                                   'labeler_source':labeler_source, 
-                                                  'assignment_id':assignment_id
+                                                  'assignment_id':assignment_id,
+                                                  'hit_id':hit_id
                                                   })

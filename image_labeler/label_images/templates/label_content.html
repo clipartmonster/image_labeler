@@ -13,6 +13,9 @@
                 <div class = 'listing light container'>
                     <div class = 'submit button container' >
                     
+                        assignment_id:{{assignment_id}}
+                        hit_id:{{hit_id}}
+
                         <h1 class = 'listing_info label'>Return to Mechanical Turk?</h1>
 
                         <input type="hidden" name="assignmentId" value="{{assignment_id}}">
@@ -23,6 +26,9 @@
             </form>
         {% else %}
             <form id="submit_labels" labeler_source = {{labeler_source}} > <!-- Action is empty to reload the page -->
+                
+
+
                 <div class='listing light container'>
                     <div class='submit button container'>
                         <h1 class='listing_info label'>Load more images to label?</h1>
