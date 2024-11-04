@@ -96,16 +96,17 @@ def mturk_redirect(request):
     label_type = request.GET.get('label_type')
     hit_id = request.GET.get('hitId')
     samples = request.GET.get('samples',50)
-
-    samples = 2
-
-    print(label_type)
+    asset_id = request.GET.get('asset_id',None)
 
     api_url = 'https://backend-python-nupj.onrender.com/get_assets_to_label/'
 
-    data = {'samples':samples,
-            'labeler_id':1,
-            'task_type':'art_type'}
+    if asset_id is None: 
+        data = {'samples':samples,
+                'labeler_id':1,
+                'task_type':'art_type'}
+
+    else:
+        data = {'asset_id':asset_id}
 
     header = {
         'Content-Type': 'application/json',
@@ -114,7 +115,6 @@ def mturk_redirect(request):
 
     response = requests.get(api_url, json = data, headers = header)
     assets_to_label = json.loads(response.content)['assets_to_label']
-
 
     api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
 
