@@ -9,14 +9,14 @@
 
 
         {% if labeler_source == 'MTurk' %}
-            <form id="submit_labels" action="https://workersandbox.mturk.com/mturk/externalSubmit" method="post" labeler_source = {{labeler_source}}>
+            <form id="submit_labels" action="https://www.mturk.com/mturk/externalSubmit" method="post" labeler_source = {{labeler_source}}>
                 <div class = 'listing light container'>
                     <div class = 'submit button container' >
 
                         <h1 class = 'listing_info label'>Return to Mechanical Turk?</h1>
 
                         <input type="hidden" name="assignmentId" value="{{assignment_id}}">
-                        <input type="hidden" name="hitId" value="hit_id">
+                        <input type="hidden" name="hitId" value="{{hit_id}}">
                         <input type="hidden" name="response" value= "completed">
                         <input type="submit" id="submitButton" class = 'label_option submit button' value="" name="submitButton">            
 
