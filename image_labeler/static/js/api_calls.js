@@ -48,8 +48,7 @@ function api_remove_color_label(asset_id, layer_index){
 
     data = {
         asset_id:asset_id,
-        color_index:layer_index       
-        
+        color_index:layer_index               
     }
 
     return fetch(api_url, {
@@ -269,3 +268,27 @@ function api_collect_prompt(data) {
 
 }
 
+
+function api_remove_prompt_responses(asset_id, labeler_id) {
+
+    api_url = 'https://backend-python-nupj.onrender.com/remove_prompt_responses/'
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    data = {
+        asset_id:asset_id,
+        labeler_id:labeler_id
+    }
+
+    return fetch(api_url, {
+    method:'POST',
+    headers : headers,
+    mode:'cors',
+    body: JSON.stringify(data)})
+    .then(response => { return response.json() })
+    .then(data => { return console.log(data) })
+
+}

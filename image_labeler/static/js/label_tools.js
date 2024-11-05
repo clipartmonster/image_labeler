@@ -365,6 +365,13 @@ function reset_responses(event){
 
     document.querySelector('.submit.button.container').style.display = 'none'
 
+    //hit api to remove entries in database
+    listing_data = listing_container.querySelector('.collection_data')
+
+    api_remove_prompt_responses(listing_data.getAttribute('asset_id'),
+                                listing_data.getAttribute('labeler_id'))
+
+
 }
 
 //Seetup conditinals to skip question based on response on current question 
