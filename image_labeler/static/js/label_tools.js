@@ -86,7 +86,11 @@ function collect_prompt(element, reponse){
             labeler_id:collection_data.getAttribute('labeler_id'),
             label_type:collection_data.getAttribute('label_type'),
             rule_index:parseInt(element.getAttribute('rule_index')),
-            prompt_response:reponse
+            prompt_response:reponse,
+            assignment_id:collection_data.getAttribute('assignment_id'),
+            hit_id:collection_data.getAttribute('hit_id')
+
+
     }
 
     api_collect_prompt(data)
@@ -107,8 +111,9 @@ function direct_hotkey_action(hotkey) {
 
         if (priority_element.type === 'prompt') {
 
-            update_prompt(hotkey,priority_element.element)
             collect_prompt(priority_element.element, response)
+            update_prompt(hotkey,priority_element.element)
+
 
         } else if (priority_element.type === 'button_container'){
 
@@ -201,6 +206,9 @@ function activate_listing_container(listing_container) {
 
 function update_prompt(hotkey, element) {
 
+    console.log(hotkey)
+    console.log(element)
+
     const radioButton = element.querySelector(`input.radio_button[data-hotkey="${hotkey}"]`);
             
     if (radioButton) {
@@ -214,7 +222,7 @@ function update_prompt(hotkey, element) {
     .querySelectorAll('[class*="open"], [class*="active"]')
     .length;
 
-    console.log(open_prompt_count)
+    // console.log(open_prompt_count)
 
     if (open_prompt_count > 0) {
     
@@ -359,7 +367,8 @@ function reset_responses(event){
 
 }
 
-
+//Seetup conditinals to skip question based on response on current question 
+//Example if the labler says the iamge is a picture dont't ask any more questions about the image. 
 document.addEventListener('DOMContentLoaded', function(){
 
     // Select all radio buttons within the switch3-container

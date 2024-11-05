@@ -92,11 +92,18 @@ def mturk_redirect(request):
 
     task_type = request.GET.get('task_type')
     labeler_source = request.GET.get('label_source')
-    assignment_id = request.GET.get('assignmentId')
     label_type = request.GET.get('label_type')
-    hit_id = request.GET.get('hitId')
+    labeler_id = request.GET.get('labeler_id')
     samples = request.GET.get('samples',50)
     asset_id = request.GET.get('asset_id',None)
+
+    assignment_id = request.GET.get('assignmentId')
+    hit_id = request.GET.get('hitId')
+    worker_id = request.GET.get('workerId')
+
+    if labeler_source == 'MTurk':
+        labeler_id = worker_id 
+
 
     api_url = 'https://backend-python-nupj.onrender.com/get_assets_to_label/'
 
@@ -134,9 +141,10 @@ def mturk_redirect(request):
     collection_data = {
         "task_type":task_type,
         "labeler_source":labeler_source,
-        "labeler_id":assignment_id,
-        "label_type":label_type,        
-        "hit_id": hit_id        
+        "label_type":label_type,
+        "labeler_id":labeler_id,  
+        "assignment_id":assignment_id,
+        "hit_id":hit_id,             
     }
     
 
