@@ -105,8 +105,6 @@ function direct_hotkey_action(hotkey) {
 
         priority_element = select_element(Array.from(active_elements))
 
-        console.log(priority_element.type)
-
         response = hotkey === '1' ? 'yes' : 'no'
 
         if (priority_element.type === 'prompt') {
@@ -139,6 +137,7 @@ document.addEventListener('keydown', function(event) {
 
     if (hotkey === '1' || hotkey === '2') {
 
+        console.log(hotkey)
         direct_hotkey_action(hotkey)
        
     }
@@ -280,46 +279,6 @@ function close_listing_container(element){
     }
 }
 
-// function update_button(hotkey, element){ 
-
-//     if (hotkey === '1') {
-//         const yesButton = element.querySelector('button[onclick*="yes"]');
-//         // collect_label({ target: yesButton }, "yes");
-//         yesButton.className = 'button label_option button yes'
-
-//     } else if (hotkey === '2') {
-//         const noButton = element.querySelector('button[onclick*="no"]');
-//         // collect_label({ target: noButton }, "no");
-//         noButton.className = 'button label_option button no'
-//     }
-
-
-//     element
-//     .closest('.listing.light.container.active')
-//     .className = 'listing light container closed'
-
-//     element
-//     .className = 'label_option button container'
-
-//     open_listing_containers = document
-//     .querySelectorAll('.listing.light.container.open')
-
-//     console.log(open_listing_containers.length)
-
-//     if (open_listing_containers.length > 0) {
-
-//         open_listing_container = open_listing_containers[0]
-//         activate_listing_container(open_listing_container)
-
-//     } else {
-
-//         //wiht no more open listing containers show the sumbit button for leaving page
-//         document.querySelector('.submit.button.container').style.display = 'grid'
-//         document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-//     }
-
-// }
 
 function reset_responses(event){
 
@@ -430,34 +389,49 @@ document.addEventListener('DOMContentLoaded', function(){
 })
 
 
-
-document.addEventListener('touchstart', function(event) {
-    // Handle the touch event, similar to how you handle key presses
-    console.log("Screen touched");
-    console.log(event.target)
-
-    console.log(event.target.id)
-
-    if (event.target.id == 'yes_icon') {
-
-        const closest_rule_validator = event.target.closest('.label_option.rule_validator');
-        if (closest_rule_validator && closest_rule_validator.classList.contains('active')) {
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true }));
-        }
-
-    } else if (event.target.id == 'no_icon') {
-
-        const closest_rule_validator = event.target.closest('.label_option.rule_validator');
-        if (closest_rule_validator && closest_rule_validator.classList.contains('active')) {
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: '2', code: 'Digit1', bubbles: true }));
-        }
+// //prevent deafault from working on the submit button. A user must use hotkeys to inteact with app
+// document.addEventListener('DOMContentLoaded', function() {
+//     const submitButton = document.getElementById('localSubmitButton');
+//     if (submitButton) {
+//         submitButton.addEventListener('click', function(event) {
+//             event.preventDefault();
+//             // Custom logic here
+//         });
+//     }
+// });
 
 
-    } else {
+// document.addEventListener('touchstart', function(event) {
+//     // Handle the touch event, similar to how you handle key presses
+//     console.log("Screen touched");
+//     console.log(event.target)
 
-        console.log('invalid')
+//     console.log(event.target.id)
 
-    }
+//     if (event.target.id == 'yes_icon') {
+
+//         const closest_rule_validator = event.target.closest('.label_option.rule_validator');
+//         if (closest_rule_validator && closest_rule_validator.classList.contains('active')) {
+//             document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true }));
+//         }
+
+//     } else if (event.target.id == 'no_icon') {
+
+//         const closest_rule_validator = event.target.closest('.label_option.rule_validator');
+//         if (closest_rule_validator && closest_rule_validator.classList.contains('active')) {
+//             document.dispatchEvent(new KeyboardEvent('keydown', { key: '2', code: 'Digit1', bubbles: true }));
+//         }
 
 
-});
+//     } else {
+
+//         console.log(event.target.id)
+
+//         if (event.target.id == 'localSubmitButton'){
+//             document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true }));               
+//         }
+
+//     }
+
+
+// });
