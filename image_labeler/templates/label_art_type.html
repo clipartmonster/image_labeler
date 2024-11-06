@@ -131,7 +131,7 @@
 
                         <div id = 'rule_valdiator_{{asset.asset_id}}_{{rule.rule_index}}' class = 'label_option rule_validator open' rule_index = {{rule.rule_index}}>
 
-                            <img class = 'key icon' src="{% static 'images/yes_icon.png'%}">
+                            <img id = yes_icon class = 'key icon' src="{% static 'images/yes_icon.png'%}">
                             <div class="switch3-container">
                                 <div class="switch3">
                                 <input type="radio" id="switch3-radio1"  prompt_response = 'yes' class = 'radio_button' data-hotkey="1" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
@@ -144,7 +144,7 @@
                                 <label for="switch3-radio3"></label>          
                                 </div>
                             </div>
-                            <img class = 'key icon' src="{% static 'images/no_icon.png'%}">
+                            <img id = no_icon class = 'key icon' src="{% static 'images/no_icon.png'%}">
                             <div class = 'separator'>||</div>
                             <h1 class = 'label_option rule'>
                                 {{rule.prompt}}

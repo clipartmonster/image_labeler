@@ -429,3 +429,35 @@ document.addEventListener('DOMContentLoaded', function(){
 
 })
 
+
+
+document.addEventListener('touchstart', function(event) {
+    // Handle the touch event, similar to how you handle key presses
+    console.log("Screen touched");
+    console.log(event.target)
+
+    console.log(event.target.id)
+
+    if (event.target.id == 'yes_icon') {
+
+        const closest_rule_validator = event.target.closest('.label_option.rule_validator');
+        if (closest_rule_validator && closest_rule_validator.classList.contains('active')) {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true }));
+        }
+
+    } else if (event.target.id == 'no_icon') {
+
+        const closest_rule_validator = event.target.closest('.label_option.rule_validator');
+        if (closest_rule_validator && closest_rule_validator.classList.contains('active')) {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: '2', code: 'Digit1', bubbles: true }));
+        }
+
+
+    } else {
+
+        console.log('invalid')
+
+    }
+
+
+});
