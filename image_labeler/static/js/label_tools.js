@@ -335,58 +335,58 @@ function reset_responses(event){
 
 //Seetup conditinals to skip question based on response on current question 
 //Example if the labler says the iamge is a picture dont't ask any more questions about the image. 
-document.addEventListener('DOMContentLoaded', function(){
+// document.addEventListener('DOMContentLoaded', function(){
 
-    // Select all radio buttons within the switch3-container
-    const radio_buttons = document.querySelectorAll('.switch3');
+//     // Select all radio buttons within the switch3-container
+//     const radio_buttons = document.querySelectorAll('.switch3');
 
-    radio_buttons.forEach(radio_button => {
+//     radio_buttons.forEach(radio_button => {
 
-        rule_index = radio_button
-        .closest('.label_option.rule_validator')
-        .getAttribute('rule_index')
+//         rule_index = radio_button
+//         .closest('.label_option.rule_validator')
+//         .getAttribute('rule_index')
 
-        if (rule_index === '1') {
+//         if (rule_index === '1') {
 
-            radio_button.addEventListener('change', function() {
-                if (radio_button.querySelector('#switch3-radio1').checked) {
-                    close_listing_container(radio_button)    
-                 }
-            });
+//             radio_button.addEventListener('change', function() {
+//                 if (radio_button.querySelector('#switch3-radio1').checked) {
+//                     close_listing_container(radio_button)    
+//                  }
+//             });
 
-        } else if (rule_index == '2') {
+//         } else if (rule_index == '2') {
 
-            radio_button.addEventListener('change', function() {
-                if (radio_button.querySelector('#switch3-radio1').checked) {
-                    close_listing_container(radio_button)
-                }
-            });
+//             radio_button.addEventListener('change', function() {
+//                 if (radio_button.querySelector('#switch3-radio1').checked) {
+//                     close_listing_container(radio_button)
+//                 }
+//             });
 
-        } else if (rule_index === '3') {
+//         } else if (rule_index === '3') {
 
-            radio_button.addEventListener('change', function() {
-                if (radio_button.querySelector('#switch3-radio1').checked) {
-                    close_listing_container(radio_button)
-                }
-            });
+//             radio_button.addEventListener('change', function() {
+//                 if (radio_button.querySelector('#switch3-radio1').checked) {
+//                     close_listing_container(radio_button)
+//                 }
+//             });
             
-        } else if (rule_index === '4') {
+//         } else if (rule_index === '4') {
 
-            radio_button.addEventListener('change', function() {
-                if (radio_button.querySelector('#switch3-radio3').checked) {
-                    close_listing_container(radio_button)
-                }
-            });
+//             radio_button.addEventListener('change', function() {
+//                 if (radio_button.querySelector('#switch3-radio3').checked) {
+//                     close_listing_container(radio_button)
+//                 }
+//             });
             
-        }
+//         }
 
 
 
         
 
-    })
+//     })
 
-})
+// })
 
 
 // //prevent deafault from working on the submit button. A user must use hotkeys to inteact with app
