@@ -292,3 +292,30 @@ function api_remove_prompt_responses(asset_id, labeler_id) {
     .then(data => { return console.log(data) })
 
 }
+
+
+
+function api_collect_validation_response(assignment_id, response, feedback) {
+
+    api_url = 'https://backend-python-nupj.onrender.com/collect_validation_response/'
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    data = {
+        assignment_id:assignment_id,
+        response:response,
+        feedback:feedback
+    }
+
+    return fetch(api_url, {
+    method:'POST',
+    headers : headers,
+    mode:'cors',
+    body: JSON.stringify(data)})
+    .then(response => { return response.json() })
+    .then(data => { return console.log(data) })
+
+}

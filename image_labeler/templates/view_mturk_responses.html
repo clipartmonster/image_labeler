@@ -42,10 +42,10 @@
 
                     {% for index in "12345"|make_list %}
                         {% for prompt in prompts %}
-                            <div style = 'display:grid; grid-template-columns: 200px 1fr; gap:10px'>
+                            <div style = 'display:grid; grid-template-columns: 200px 1fr; gap:10px;'>
                                 {% if prompt.rule_index|stringformat:"s" == index|stringformat:"s" %}
                                     <h1 class='label_option rule'>{{ prompt.prompt }}</h1>
-                                    <div style = 'display:flex; gap:5px; align-items:center'>
+                                    <div style = 'display:flex; gap:5px; align-items:center; '>
                                         {% for labeler_id, labeler_data in asset_data.labelers.items %}
                                         
                                             {% for rule_index, rule in labeler_data.rules.items %}
@@ -66,7 +66,7 @@
 
                     <div style = 'display:grid; grid-template-columns: 200px 1fr; gap:10px'>
                         <h1 class='label_option rule'>Accept Response?</h1>
-                        <div style = 'display:flex; gap:5px; align-items:center'>
+                        <div style = 'display:flex; gap:5px; align-items:center;'>
                             {% for labeler_id, labeler_data in asset_data.labelers.items %}                            
                                 <div class="switch3" labeler_id = labeler_id>
                                     

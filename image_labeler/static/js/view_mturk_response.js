@@ -9,8 +9,12 @@ document.addEventListener('DOMContentLoaded', function(){
         radio_button.addEventListener('change', function() {
             console.log(radio_button.value)
             console.log(radio_button.getAttribute('assignment_id'))
-            collect_validation_response(radio_button.value)
 
+            response = radio_button.value
+            assignment_id = radio_button.getAttribute('assignment_id')
+            feedback = 'no comment'
+            
+            api_collect_validation_response(assignment_id, response, feedback)
 
         })
             

@@ -166,12 +166,12 @@ def view_mturk_responses(request):
         }
 
     response = requests.get(api_url, json = data, headers = header)
+    print(response)
     labelling_rules = dict(json.loads(response.content))['labeling_rules']
 
     prompts = {(item['prompt'], item['rule_index']) for item in labelling_rules['clip_art']}
     prompts = [{'prompt': prompt, 'rule_index': rule_index} for prompt, rule_index in prompts]    
 
-    print(prompts)
 
     api_url = 'https://backend-python-nupj.onrender.com/get_prompt_responses/'
 
