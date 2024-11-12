@@ -724,3 +724,39 @@ div.separator{
 .radio_button{
     pointer-events: none;
 }
+
+.radio_button.view{
+    pointer-events:auto;
+}
+
+div.label_option.response.container{
+    display:flex;
+    flex-direction: column;
+    gap:10px; 
+    justify-content:left;
+
+
+}
+
+div.label_option.labeler_response{
+    width:75px;
+    background-color:#338484;
+    text-align: center;
+    border-radius:5px;
+    line-height: 0px;
+    padding:2px;
+}
+
+div.label_option.labeler_response.yes{
+    background-color:#8eb284;
+}
+
+div.label_option.labeler_response.no{
+    background-color:#bd4444;
+}
+
+h1.label_option.text.response{
+    font-family: "Roboto";
+    font-size:18px;
+    color:white   
+}

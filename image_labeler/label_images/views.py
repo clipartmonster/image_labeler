@@ -15,11 +15,6 @@ import pandas as pd
 
 def show_images(request):
 
-    print('----------------')
-    print(request.session['selected_source'])
-    print(request.session['features'])
-    print(request.session['labeler_id'])
-
     api_url = 'https://backend-python-nupj.onrender.com/get_color_labels/'
 
     data = {'source':request.session['selected_source'],
@@ -157,3 +152,38 @@ def mturk_redirect(request):
                                                   'assignment_id':assignment_id,
                                                   'hit_id':hit_id
                                                   })
+
+
+def view_mturk_responses(request):
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
+
+    data = {'task_type':'art_type'}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+
+    response = requests.get(api_url, json = data, headers = header)
+    labelling_rules = dict(json.loads(response.content))['labeling_rules']
+
+    prompts = {(item['prompt'], item['rule_index']) for item in labelling_rules['clip_art']}
+    prompts = [{'prompt': prompt, 'rule_index': rule_index} for prompt, rule_index in prompts]    
+
+    print(prompts)
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_prompt_responses/'
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+    
+    response = requests.get(api_url, headers = header)
+    assets_w_responses = json.loads(response.content)
+   
+
+
+    return render(request, 'view_mturk_responses.html', {'assets_w_responses':assets_w_responses,
+                                                         'prompts':prompts})

@@ -205,9 +205,6 @@ function activate_listing_container(listing_container) {
 
 function update_prompt(hotkey, element) {
 
-    console.log(hotkey)
-    console.log(element)
-
     const radioButton = element.querySelector(`input.radio_button[data-hotkey="${hotkey}"]`);
             
     if (radioButton) {
@@ -380,58 +377,6 @@ document.addEventListener('DOMContentLoaded', function(){
             
         }
 
-
-
-        
-
     })
 
 })
-
-
-// //prevent deafault from working on the submit button. A user must use hotkeys to inteact with app
-// document.addEventListener('DOMContentLoaded', function() {
-//     const submitButton = document.getElementById('localSubmitButton');
-//     if (submitButton) {
-//         submitButton.addEventListener('click', function(event) {
-//             event.preventDefault();
-//             // Custom logic here
-//         });
-//     }
-// });
-
-
-// document.addEventListener('touchstart', function(event) {
-//     // Handle the touch event, similar to how you handle key presses
-//     console.log("Screen touched");
-//     console.log(event.target)
-
-//     console.log(event.target.id)
-
-//     if (event.target.id == 'yes_icon') {
-
-//         const closest_rule_validator = event.target.closest('.label_option.rule_validator');
-//         if (closest_rule_validator && closest_rule_validator.classList.contains('active')) {
-//             document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true }));
-//         }
-
-//     } else if (event.target.id == 'no_icon') {
-
-//         const closest_rule_validator = event.target.closest('.label_option.rule_validator');
-//         if (closest_rule_validator && closest_rule_validator.classList.contains('active')) {
-//             document.dispatchEvent(new KeyboardEvent('keydown', { key: '2', code: 'Digit1', bubbles: true }));
-//         }
-
-
-//     } else {
-
-//         console.log(event.target.id)
-
-//         if (event.target.id == 'localSubmitButton'){
-//             document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true }));               
-//         }
-
-//     }
-
-
-// });

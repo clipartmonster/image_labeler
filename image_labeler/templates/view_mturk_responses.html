@@ -1,0 +1,100 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+
+{% for asset_id, asset_data in assets_w_responses.items %}
+
+    <div id = 'listing_container_{{forloop.counter0}}' class = 'listing light container' style = 'display:grid; grid-template-columns: 1fr 1fr;'>
+
+        <div class = 'design dark container' >
+
+            <img id = "image_{{asset_data.asset_id}}" class="design" src="{{ asset_data.image_link }}" crossOrigin="anonymous" >
+
+
+        
+        </div>
+        
+        <div class = 'listing_info container'>
+            
+            <div>
+                <div>
+                    <h1 class = 'label_option intro' style = 'line-height: 0px'>Labeler Id(s)</h1>
+                    {% for labeler_id, labeler_data in asset_data.labelers.items %}
+                        <div>                   
+                            <h1 class = 'label_option intro' style = 'line-height: 10px'>{{labeler_id}}</h1>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <div>
+                    <h1 class = 'label_option intro' style = 'line-height: 0px'>Assigment Id</h1>
+                    {% for labeler_id, labeler_data in asset_data.labelers.items %}
+                        <div>                   
+                            <h1 class = 'label_option intro' style = 'line-height: 10px'>{{labeler_data.assignment_id}}</h1>
+                        </div>
+                    {% endfor %}
+                </div>
+           
+                <div style = 'display:display; grid-template-rows: 50px 50px; '>
+
+
+                    {% for index in "12345"|make_list %}
+                        {% for prompt in prompts %}
+                            <div style = 'display:grid; grid-template-columns: 200px 1fr; gap:10px'>
+                                {% if prompt.rule_index|stringformat:"s" == index|stringformat:"s" %}
+                                    <h1 class='label_option rule'>{{ prompt.prompt }}</h1>
+                                    <div style = 'display:flex; gap:5px; align-items:center'>
+                                        {% for labeler_id, labeler_data in asset_data.labelers.items %}
+                                        
+                                            {% for rule_index, rule in labeler_data.rules.items %}
+                                                {% if prompt.rule_index|stringformat:"s" == rule_index|stringformat:"s" %}
+                                                    <div class = 'label_option labeler_response {{rule.prompt_response}}'>
+                                                        <h1 class = 'label_option text response'> {{rule.prompt_response}} </h1>
+                                                    </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                    
+                                        {% endfor %} 
+                                                                        
+                                    </div>
+                                {% endif %}
+                            </div>            
+                        {% endfor %}
+                    {% endfor %}
+
+                    <div style = 'display:grid; grid-template-columns: 200px 1fr; gap:10px'>
+                        <h1 class='label_option rule'>Accept Response?</h1>
+                        <div style = 'display:flex; gap:5px; align-items:center'>
+                            {% for labeler_id, labeler_data in asset_data.labelers.items %}                            
+                                <div class="switch3" labeler_id = labeler_id>
+                                    
+                                    <input type="radio" id="switch3-radio1" value = 'yes' assignment_id= {{labeler_data.assignment_id}} 
+                                    class = 'radio_button view'  name= "radio_{{labeler_data.assignment_id}}" data-hotkey="1">
+                                    <label for="switch3-radio1"></label>
+                            
+                                    <input type="radio" id="switch3-radio2" value = 'none' assignment_id= {{labeler_data.assignment_id}} 
+                                    class = 'radio_button view' name = "radio_{{labeler_data.assignment_id}}" data-hotkey="3" checked>
+                                    <label for="switch3-radio2"></label>
+                            
+                                    <input type="radio" id="switch3-radio3"  value = 'no' assignment_id= {{labeler_data.assignment_id}} 
+                                    class = 'radio_button view' name = "radio_{{labeler_data.assignment_id}}" data-hotkey="2">
+                                    <label for="switch3-radio3"></label>          
+                                    
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                </div>
+
+
+            </div>
+
+        </div>
+
+    </div>
+{% endfor %} 
+
+{% endblock%}
