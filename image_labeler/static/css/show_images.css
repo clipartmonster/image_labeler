@@ -469,6 +469,14 @@ button.label_option.button {
     
 }
 
+button.label_option.start_labelling {
+    background-color: #a9b9b9;
+    border: 2px solid #8a9c9c; 
+    border-radius: 10px;
+    pointer-events: auto;
+}
+
+
 button.label_option.button.yes {
     background-color: #8eb284;
 }

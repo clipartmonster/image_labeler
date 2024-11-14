@@ -3,7 +3,6 @@
 
 {% block content %}
 
-
 {% for asset_id, asset_data in assets_w_responses.items %}
 
     <div id = 'listing_container_{{forloop.counter0}}' class = 'listing light container' style = 'display:grid; grid-template-columns: 1fr 1fr;'>
@@ -15,7 +14,7 @@
 
         
         </div>
-        
+
         <div class = 'listing_info container'>
             
             <div>
@@ -118,6 +117,8 @@
             </div>
 
         </div>
+
+       
 
     </div>
 {% endfor %} 
