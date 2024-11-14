@@ -7,7 +7,11 @@ from .models import listings_to_be_labeled
 
 from django.conf import settings
 from django.http import FileResponse, Http404
+
 import os
+import random
+import string
+
 
 import requests
 import json
@@ -86,15 +90,21 @@ def initialize_session(request):
 def mturk_redirect(request):
 
     task_type = request.GET.get('task_type')
-    labeler_source = request.GET.get('label_source')
+    labeler_source = request.GET.get('label_source', None)
     label_type = request.GET.get('label_type')
     labeler_id = request.GET.get('labeler_id')
     samples = request.GET.get('samples',50)
     asset_id = request.GET.get('asset_id',None)
+    sandbox_flag = request.GET.get('sandbox_flag', None)
 
-    assignment_id = request.GET.get('assignmentId')
+    assignment_id = request.GET.get('assignmentId',None)
     hit_id = request.GET.get('hitId')
     worker_id = request.GET.get('workerId')
+
+    #Create an assignment id when not provided one. Important for submission status
+    if assignment_id == None:
+        assignment_id = ''.join(random.choices( string.ascii_letters + string.digits, k =20))
+
 
     if labeler_source == 'MTurk':
         labeler_id = worker_id 
@@ -103,7 +113,7 @@ def mturk_redirect(request):
     api_url = 'https://backend-python-nupj.onrender.com/get_assets_to_label/'
 
     if asset_id is None: 
-        data = {'samples':samples,
+        data = {'samples':int(samples),
                 'labeler_id':1,
                 'task_type':'art_type'}
 
@@ -150,7 +160,8 @@ def mturk_redirect(request):
                                                   'collection_data':collection_data,
                                                   'labeler_source':labeler_source, 
                                                   'assignment_id':assignment_id,
-                                                  'hit_id':hit_id
+                                                  'hit_id':hit_id,
+                                                  'sandbox_flag':sandbox_flag
                                                   })
 
 
@@ -166,10 +177,9 @@ def view_mturk_responses(request):
         }
 
     response = requests.get(api_url, json = data, headers = header)
-    print(response)
-    labelling_rules = dict(json.loads(response.content))['labeling_rules']
+    labelling_rules = dict(json.loads(response.content))['labeling_rules']['clip_art']
 
-    prompts = {(item['prompt'], item['rule_index']) for item in labelling_rules['clip_art']}
+    prompts = {(item['prompt'], item['rule_index']) for item in labelling_rules}
     prompts = [{'prompt': prompt, 'rule_index': rule_index} for prompt, rule_index in prompts]    
 
 
@@ -183,7 +193,9 @@ def view_mturk_responses(request):
     response = requests.get(api_url, headers = header)
     assets_w_responses = json.loads(response.content)
    
-
+    print(assets_w_responses)
+    # print(labelling_rules)
 
     return render(request, 'view_mturk_responses.html', {'assets_w_responses':assets_w_responses,
+                                                         'labelling_rules':labelling_rules,
                                                          'prompts':prompts})

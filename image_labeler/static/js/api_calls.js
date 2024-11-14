@@ -297,6 +297,8 @@ function api_remove_prompt_responses(asset_id, labeler_id) {
 
 function api_collect_validation_response(assignment_id, response, feedback) {
 
+    console.log(feedback)
+
     api_url = 'https://backend-python-nupj.onrender.com/collect_validation_response/'
 
     headers = {
@@ -319,3 +321,32 @@ function api_collect_validation_response(assignment_id, response, feedback) {
     .then(data => { return console.log(data) })
 
 }
+
+
+
+
+function api_update_submission_status(assignment_id) {
+
+    console.log(assignment_id)
+
+    api_url = 'https://backend-python-nupj.onrender.com/update_submission_status/'
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    data = {
+        assignment_id:assignment_id
+    }
+
+    return fetch(api_url, {
+    method:'POST',
+    headers : headers,
+    mode:'cors',
+    body: JSON.stringify(data)})
+    .then(response => { return response.json() })
+    .then(data => { return console.log(data) })
+
+}
+

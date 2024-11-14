@@ -120,13 +120,25 @@ function direct_hotkey_action(hotkey) {
 
         } else {
 
+            //update submission status
+            console.log("hello")
+
+            collection_data = document
+            .getElementsByClassName('collection_data')
+
+            assignment_id = collection_data[0].getAttribute('assignment_id')
+            labeler_source = collection_data[0].getAttribute('labeler_source')
+
+            api_update_submission_status(assignment_id)
+   
+            //advance the page where next page is determined by mturk or not
             const form = document.getElementById('submit_labels')
-            
-            if (form.getAttribute('labeler_source') === 'MTurk')
-                form.submit()
-            else{
-                window.location.href = window.location.href;
-            }
+
+            // if (form.getAttribute('labeler_source') === 'MTurk')
+            //     form.submit()
+            // else{
+            //     window.location.href = window.location.href;
+            // }
 
         }
 

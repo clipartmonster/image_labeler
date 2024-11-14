@@ -87,6 +87,31 @@
                         </div>
                     </div>
 
+                    {% for labeler_id, labeler_data in asset_data.labelers.items %}   
+                        <div assignment_id =  {{labeler_data.assignment_id}} class = 'label_option popup container'>
+                            {% for labelling_rule in labelling_rules %}
+                            <div class = 'label_option directive container'>
+                                    <h1 class = 'label_option intro'>
+                                        {{labelling_rule.title}}
+                                    </h1>
+
+                                    <div class='label_option directive panel'>
+                                        <ul>
+                                            {% for directive in labelling_rule.directives %}
+                                                <li style="list-style-type: decimal; margin-bottom: 8px;">
+                                                    <label style="display: flex; align-items: center;">
+                                                        <input type='radio' directive = "{{directive}}" class = 'radio_button rule_violation'
+                                                         name='{{labeler_data.assignment_id}}' assignment_id = {{labeler_data.assignment_id}} style="margin-right: 8px;">
+                                                        <span class='label_option rule'>{{ directive }}</span>
+                                                    </label>
+                                                </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                </div>                        
+                            {% endfor %}    
+                        </div>
+                    {% endfor %}
                 </div>
 
 
