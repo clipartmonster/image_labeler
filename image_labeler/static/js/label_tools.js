@@ -392,3 +392,21 @@ document.addEventListener('DOMContentLoaded', function(){
     })
 
 })
+
+//activeate first listing after content loadsa
+document.addEventListener('DOMContentLoaded', function(){
+
+    collection_data = document
+    .getElementsByClassName('collection_data')
+    
+    labeler_source = collection_data[0].getAttribute('labeler_source')
+
+    if (labeler_source = 'MTurk') {
+
+        iFrame = document.getElementsByClassName('embed-responsive-item')[0]
+        if (iFrame){
+            iFrame.focus()
+        }
+    }
+
+})
