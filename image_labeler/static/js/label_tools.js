@@ -134,11 +134,11 @@ function direct_hotkey_action(hotkey) {
             //advance the page where next page is determined by mturk or not
             const form = document.getElementById('submit_labels')
 
-            // if (form.getAttribute('labeler_source') === 'MTurk')
-            //     form.submit()
-            // else{
-            //     window.location.href = window.location.href;
-            // }
+            if (form.getAttribute('labeler_source') === 'MTurk')
+                form.submit()
+            else{
+                window.location.href = window.location.href;
+            }
 
         }
 
