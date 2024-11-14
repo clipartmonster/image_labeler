@@ -106,6 +106,21 @@ def mturk_redirect(request):
         assignment_id = ''.join(random.choices( string.ascii_letters + string.digits, k =20))
 
 
+    from datetime import datetime
+    import pytz
+
+    # Define the Central Time zone
+    central_time_zone = pytz.timezone('America/Chicago')
+
+    # Get the current time in Central Time
+    central_time = datetime.now(central_time_zone)
+
+    print('----------------------------------------------------')
+    print(central_time.strftime("%Y-%m-%d %I:%M:%S %p"))
+    print(assignment_id)
+    print('----------------------------------------------------')
+
+
     if labeler_source == 'MTurk':
         labeler_id = worker_id 
 
