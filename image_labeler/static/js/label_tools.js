@@ -402,7 +402,7 @@ document.addEventListener('DOMContentLoaded', function(){
     labeler_source = collection_data[0].getAttribute('labeler_source')
 
     if (labeler_source = 'MTurk') {
-
+        console.log('here')
         iFrame = document.getElementsByClassName('image-labeler-wqmc')[0]
         if (iFrame){
             console.log('iFrame gets focus')
