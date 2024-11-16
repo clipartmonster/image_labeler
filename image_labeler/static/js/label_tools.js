@@ -393,26 +393,3 @@ document.addEventListener('DOMContentLoaded', function(){
 
 })
 
-//activeate first listing after content loadsa
-document.addEventListener('DOMContentLoaded', function(){
-
-
-    accept_button = document.getElementsByClassName('btn btn-primary')
-    console.log(accept_button)
-
-    collection_data = document
-    .getElementsByClassName('collection_data')
-    
-    labeler_source = collection_data[0].getAttribute('labeler_source')
-
-    if (labeler_source = 'MTurk') {
-        console.log('here')
-        iFrame = document.querySelectorAll('iframe');
-        console.log(iFrame)
-        if (iFrame){
-            console.log('iFrame gets focus')
-            iFrame.contentWindow.focus();
-        }
-    }
-
-})
