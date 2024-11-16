@@ -396,6 +396,10 @@ document.addEventListener('DOMContentLoaded', function(){
 //activeate first listing after content loadsa
 document.addEventListener('DOMContentLoaded', function(){
 
+
+    accept_button = document.getElementsByClassName('btn btn-primary')
+    console.log(accept_button)
+
     collection_data = document
     .getElementsByClassName('collection_data')
     
