@@ -411,7 +411,7 @@ document.addEventListener('DOMContentLoaded', function(){
         console.log(iFrame)
         if (iFrame){
             console.log('iFrame gets focus')
-            iframe.contentWindow.focus();
+            iFrame.contentWindow.focus();
         }
     }
 
