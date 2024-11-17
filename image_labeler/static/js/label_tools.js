@@ -393,3 +393,25 @@ document.addEventListener('DOMContentLoaded', function(){
 
 })
 
+//hide listings --> user will hit a ready button to show them
+document.addEventListener('DOMContentLoaded', function(){
+    const listing_containers = 
+         document.querySelectorAll('.listing.light.container.open, .listing.light.container.active');
+
+    listing_containers.forEach(listing_container =>{
+        listing_container.style.display = 'none'
+    })
+})
+
+//function to show the listings when a user hits the ready button
+function show_listings(){
+    const listing_containers = 
+         document.querySelectorAll('.listing.light.container.open, .listing.light.container.active');
+
+    listing_containers.forEach(listing_container =>{
+        listing_container.style.display = 'grid'        
+    })
+
+    first_listing_container = document.querySelector('.listing.light.container.active')
+    first_listing_container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
