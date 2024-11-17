@@ -8,6 +8,7 @@
     <div id = 'listing_container_{{forloop.counter0}}' class = 'listing light container' style = 'display:grid; grid-template-columns: 1fr 1fr;'>
 
         <div class = 'design dark container' >
+            {{asset_data.asset_id}}
 
             <img id = "image_{{asset_data.asset_id}}" class="design" src="{{ asset_data.image_link }}" crossOrigin="anonymous" >
 
