@@ -96,6 +96,9 @@ def mturk_redirect(request):
     samples = request.GET.get('samples',50)
     asset_id = request.GET.get('asset_id',None)
     sandbox_flag = request.GET.get('sandbox_flag', None)
+    test_the_labeler = request.GET.get('test_the_labeler', True)
+
+    print(test_the_labeler)
 
     assignment_id = request.GET.get('assignmentId',None)
     hit_id = request.GET.get('hitId')
@@ -167,6 +170,28 @@ def mturk_redirect(request):
         "hit_id":hit_id,             
     }
     
+    #Get text examples 
+
+    if test_the_labeler == True:
+        api_url = 'https://backend-python-nupj.onrender.com/get_test_questions/'
+
+        data = {'samples':2}
+
+        header = {
+            'Content-Type': 'application/json',
+            'Authorization': settings.API_ACCESS_KEY
+            }
+
+        response = requests.get(api_url, json = data, headers = header)
+        test_questions = dict(json.loads(response.content))
+        print(test_questions)
+
+    else:
+        test_questions = []    
+
+    print('00000000000000000000000000000000000000000000000000000000000')
+    print('00000000000000000000000000000000000000000000000000000000000')
+    print(labelling_rules)
 
     return render(request, 'label_content.html', {'task_type':task_type,
                                                   'label':label_type,                                                  
@@ -176,7 +201,9 @@ def mturk_redirect(request):
                                                   'labeler_source':labeler_source, 
                                                   'assignment_id':assignment_id,
                                                   'hit_id':hit_id,
-                                                  'sandbox_flag':sandbox_flag
+                                                  'sandbox_flag':sandbox_flag,
+                                                  'test_the_labeler':test_the_labeler,
+                                                  'test_questions':test_questions
                                                   })
 
 
@@ -214,3 +241,4 @@ def view_mturk_responses(request):
     return render(request, 'view_mturk_responses.html', {'assets_w_responses':assets_w_responses,
                                                          'labelling_rules':labelling_rules,
                                                          'prompts':prompts})
+

@@ -790,3 +790,17 @@ div.label_option.directive.panel{
     display:none;
 
 }
+
+div.label_option.response_feedback{
+    display:none;
+    background-color: #bd4444;
+    border:2px solid #d3e3df;
+    border-radius:10px;
+    padding:5px;
+    align-items: center;
+    justify-items: center;
+    width:200px;
+    height:50px;
+    justify-self:center
+
+}

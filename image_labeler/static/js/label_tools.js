@@ -88,9 +88,8 @@ function collect_prompt(element, reponse){
             rule_index:parseInt(element.getAttribute('rule_index')),
             prompt_response:reponse,
             assignment_id:collection_data.getAttribute('assignment_id'),
-            hit_id:collection_data.getAttribute('hit_id')
-
-
+            hit_id:collection_data.getAttribute('hit_id'),
+            is_test_question:collection_data.getAttribute('is_test_question')
     }
 
     api_collect_prompt(data)
@@ -110,8 +109,7 @@ function direct_hotkey_action(hotkey) {
         if (priority_element.type === 'prompt') {
 
             collect_prompt(priority_element.element, response)
-            update_prompt(hotkey,priority_element.element)
-
+            update_prompt(hotkey,priority_element.element, response)
 
         } else if (priority_element.type === 'button_container'){
 
@@ -119,9 +117,6 @@ function direct_hotkey_action(hotkey) {
             collect_label(priority_element.element, response)
 
         } else {
-
-            //update submission status
-            console.log("hello")
 
             collection_data = document
             .getElementsByClassName('collection_data')
@@ -149,22 +144,20 @@ document.addEventListener('keydown', function(event) {
 
     if (hotkey === '1' || hotkey === '2') {
 
-        console.log(hotkey)
         direct_hotkey_action(hotkey)
        
     }
 
-
 })
 
 //activeate first listing after content loadsa
-document.addEventListener('DOMContentLoaded', function(){
+// document.addEventListener('DOMContentLoaded', function(){
 
-    first_listing_container = document.getElementById('listing_container_0')
+//     first_listing_container = document.getElementById('listing_container_0')
 
-    activate_listing_container(first_listing_container)
+//     activate_listing_container(first_listing_container)
 
-})
+// })
 
 
 function select_element(elements) {
@@ -215,9 +208,11 @@ function activate_listing_container(listing_container) {
 
 }
 
-function update_prompt(hotkey, element) {
+function update_prompt(hotkey, element, response) {
 
-    const radioButton = element.querySelector(`input.radio_button[data-hotkey="${hotkey}"]`);
+
+    const radioButton = 
+        element.querySelector(`input.radio_button[data-hotkey="${hotkey}"]`);
             
     if (radioButton) {
         radioButton.click();  // Select the radio button
@@ -230,62 +225,117 @@ function update_prompt(hotkey, element) {
     .querySelectorAll('[class*="open"], [class*="active"]')
     .length;
 
-    // console.log(open_prompt_count)
-
-    if (open_prompt_count > 0) {
-    
+    if (open_prompt_count > 0) {    
         element
         .nextElementSibling
         .className = 'label_option rule_validator active'
-
     } else {
-
         close_listing_container(element)
-
     }
+
+    // if (element.getAttribute('correct_response') === null || element.getAttribute('correct_response') === response){
+    //     console.log('correct or irrevelant')
+
+    //     element.className = 'label_option rule_validator closed'
+
+    //     const open_prompt_count = element
+    //     .closest('.label_option.prompt.container.active')
+    //     .querySelectorAll('[class*="open"], [class*="active"]')
+    //     .length;
+    
+    //     if (open_prompt_count > 0) {    
+    //         element
+    //         .nextElementSibling
+    //         .className = 'label_option rule_validator active'
+    //     } else {
+    //         close_listing_container(element)
+    //     }
+
+    // } else {
+    //     console.log('incorrect')
+    // }
+
+
 
 }
 
 
 function close_listing_container(element){
 
-    // element
-    // .closest('.label_option.prompt.container.active')
-    // .nextElementSibling
-    // .className = 'label_option button container active'
+    prompts = element
+    .closest('.listing_info.container')
+    .querySelectorAll('.label_option.rule_validator.closed')
 
-    prompt_container = element
-    .closest('.label_option.prompt.container.active')
-    prompt_container.className = 'label_option prompt container closed'
-    prompt_container.style.opacity = .35        
-
-    // element
-    // .closest('.label_option.prompt.container.active')
-    // .style.opacity = .25
-
-    element
+    is_test_question = element
     .closest('.listing.light.container.active')
-    .className = 'listing light container closed'
+    .getAttribute('test_question')
 
-    // element
-    // .className = 'label_option button container'
-
-    open_listing_containers = document
-    .querySelectorAll('.listing.light.container.open')
+    feedback_container = element
+    .closest('.listing_info.container')
+    .getElementsByClassName('label_option response_feedback incorrect')[0]
 
 
-    if (open_listing_containers.length > 0) {
+    if (is_test_question == 'yes'){
+        result = check_responses(prompts)
+    }    
 
-        open_listing_container = open_listing_containers[0]
-        activate_listing_container(open_listing_container)
+    if (result == 'incorrect') {
 
+        
+        feedback_container.style.display = 'grid'
+
+        element
+        .closest('.listing.light.container.active')
+        .querySelector('.label_option.reset.button')
+        .click()
+    
     } else {
 
-        //wiht no more open listing containers show the sumbit button for leaving page
-        document.querySelector('.submit.button.container').style.display = 'grid'
-        document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (feedback_container != null){
+            feedback_container.style.display = 'none'
+        }
+        
+        // element
+        // .closest('.label_option.prompt.container.active')
+        // .nextElementSibling
+        // .className = 'label_option button container active'
 
+        prompt_container = element
+        .closest('.label_option.prompt.container.active')
+
+
+        prompt_container.className = 'label_option prompt container closed'
+        prompt_container.style.opacity = .35        
+
+        // element
+        // .closest('.label_option.prompt.container.active')
+        // .style.opacity = .25
+
+        element
+        .closest('.listing.light.container.active')
+        .className = 'listing light container closed'
+
+        // element
+        // .className = 'label_option button container'
+
+        open_listing_containers = document
+        .querySelectorAll('.listing.light.container.open, .listing.light.container.test_question')
+
+        if (open_listing_containers.length > 0) {
+
+            open_listing_container = open_listing_containers[0]
+            activate_listing_container(open_listing_container)
+
+        } else {
+
+            //wiht no more open listing containers show the sumbit button for leaving page
+            document.querySelector('.submit.button.container').style.display = 'grid'
+            document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        }
     }
+
+
 }
 
 
@@ -395,18 +445,31 @@ document.addEventListener('DOMContentLoaded', function(){
 
 //hide listings --> user will hit a ready button to show them
 document.addEventListener('DOMContentLoaded', function(){
+    
     const listing_containers = 
-         document.querySelectorAll('.listing.light.container.open, .listing.light.container.active');
+         document.querySelectorAll(
+            '.listing.light.container.open, \
+             .listing.light.container.active, \
+             .listing.light.container.test_question');
 
-    listing_containers.forEach(listing_container =>{
-        listing_container.style.display = 'none'
+    activate_listing_container(listing_containers[0])
+
+
+    listing_containers.forEach((listing_container, index) =>{
+
+            listing_container.id = 'listing_container_' + index
+            listing_container.style.display = 'none'
+
     })
+
 })
 
 //function to show the listings when a user hits the ready button
 function show_listings(){
     const listing_containers = 
-         document.querySelectorAll('.listing.light.container.open, .listing.light.container.active');
+         document.querySelectorAll('.listing.light.container.open, \
+                                    .listing.light.container.active, \
+                                    .listing.light.container.test_question');
 
     listing_containers.forEach(listing_container =>{
         listing_container.style.display = 'grid'        
@@ -414,4 +477,44 @@ function show_listings(){
 
     first_listing_container = document.querySelector('.listing.light.container.active')
     first_listing_container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+//Utiltiy Functions
+function sum_array(array){
+    sum = 0
+    for (let i = 0; i < array.length; i++ ) {
+        sum += array[i];
+    }
+    return sum
+}
+
+function check_responses(prompts) {
+
+    correct_responses = []
+
+    prompts.forEach(prompt => {
+
+        responses = prompt.querySelectorAll('.radio_button')
+        responses.forEach(response => {
+            if (response.checked) {
+                user_response = response.getAttribute('prompt_response')
+                
+            } 
+        })
+
+        if (user_response == prompt.getAttribute('correct_response')) {
+            correct_responses.push(1)
+        } else {
+            correct_responses.push(0)
+        }
+
+    })
+
+    if (sum_array(correct_responses) == prompts.length) {
+        result = 'correct'
+    } else {
+        result = 'incorrect'
+    }
+
+    return result
 }

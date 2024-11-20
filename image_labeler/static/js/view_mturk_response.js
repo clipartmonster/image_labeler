@@ -50,7 +50,6 @@ document.addEventListener('DOMContentLoaded', function(){
 
             feedback = radio_button.getAttribute('directive')
 
-            console.log(assignment_id, response, feedback)
 
             api_collect_validation_response(assignment_id, response, feedback)
         

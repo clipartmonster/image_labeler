@@ -1,0 +1,84 @@
+{% load static %}
+
+{% for asset_id, question in test_questions.items %}
+ 
+    <div id = 'listing_container' test_question = 'yes' class = 'listing light container test_question' style = 'display:grid; grid-template-columns: 1fr 1fr;'>
+
+        <div class = 'collection_data' style = 'display:none' 
+            asset_id = {{asset_id}}
+            task_type = {{collection_data.task_type}}
+            labeler_source = {{collection_data.labeler_source}}
+            labeler_id = {{collection_data.labeler_id}}
+            label_type = {{collection_data.label_type}}
+            assignment_id = {{collection_data.assignment_id}}
+            hit_id = {{collection_data.hit_id}}
+            is_test_question = 'yes'>
+        </div>
+
+        <div class = 'design dark container' >
+
+            <img id = "image_{{asset_id}}" class="design" src="{{ question.image_link }}" crossOrigin="anonymous" >
+        
+        </div>
+    
+        <div class = 'listing_info container'>
+           
+                <div class = 'label_option prompt container open' >
+
+                    {% for rule in question.rule_data %}
+                        {% if rule.rule_index != 0 %}
+
+                            <div id = 'rule_valdiator_{{asset_id}}_{{rule.rule_index}}' correct_response = {{rule.prompt_response}} class = 'label_option rule_validator open' rule_index = {{rule.rule_index}}>
+
+                                <img id = yes_icon class = 'key icon' src="{% static 'images/yes_icon.png'%}">
+                                <div class="switch3-container">
+                                    <div class="switch3">
+                                    <input type="radio" id="switch3-radio1"  prompt_response = 'yes' class = 'radio_button' data-hotkey="1" name="radio_{{forloop.counter}}_{{asset_id}}"/>
+                                    <label for="switch3-radio1"></label>
+                            
+                                    <input type="radio" id="switch3-radio2"  prompt_response = 'none' class = 'radio_button' data-hotkey="3" name="radio_{{forloop.counter}}_{{asset_id}}" checked/>
+                                    <label for="switch3-radio2"></label>
+                            
+                                    <input type="radio" id="switch3-radio3"  prompt_response = 'no' class = 'radio_button' data-hotkey="2" name="radio_{{forloop.counter}}_{{asset_id}}"/>
+                                    <label for="switch3-radio3"></label>          
+                                    </div>
+                                </div>
+                            
+                                <img id = no_icon class = 'key icon' src="{% static 'images/no_icon.png'%}">
+                            
+                                <div class = 'separator'>||</div>
+                                
+                                {% for label_rule in labelling_rules %}
+
+                                    {% if label_rule.rule_index|add:0 == rule.rule_index|add:0 %}
+                                    
+                                    <h1 class = 'label_option rule'>
+                                        {{label_rule.prompt}}
+                                    </h1>
+                                    {% endif %}
+                                {% endfor %}
+
+                            </div>
+
+                        {% endif %}  
+                    {% endfor %}
+                
+                </div>    
+
+                <div class = 'label_option response_feedback incorrect'>
+                    <h1 class = 'label_option text response'>Incorrect Response</h1>
+                </div>
+
+
+                <div class = 'label_option reset button' onclick = 'reset_responses(event)'>
+                    <img src="{% static 'images/reset.png'%}">
+                    <h1 class = 'listing_info label'>Clear Responses</h1>
+                </div>
+
+          
+
+
+        </div>
+
+    </div>
+{% endfor %} 
