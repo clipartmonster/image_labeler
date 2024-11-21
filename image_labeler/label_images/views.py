@@ -104,7 +104,7 @@ def mturk_redirect(request):
 
     assignment_id = request.GET.get('assignmentId',None)
     hit_id = request.GET.get('hitId')
-    worker_id = request.GET.get('workerId')
+    worker_id = request.GET.get('workerId', None)
 
     #Create an assignment id when not provided one. Important for submission status
     if assignment_id == None:
