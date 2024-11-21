@@ -191,14 +191,11 @@ def mturk_redirect(request):
 
         response = requests.get(api_url, json = data, headers = header)
         test_questions = dict(json.loads(response.content))
-        print(test_questions)
+        
 
     else:
         test_questions = []    
 
-    print('00000000000000000000000000000000000000000000000000000000000')
-    print('00000000000000000000000000000000000000000000000000000000000')
-    print(labelling_rules)
 
     return render(request, 'label_content.html', {'task_type':task_type,
                                                   'label':label_type,                                                  
