@@ -97,8 +97,9 @@ def mturk_redirect(request):
     asset_id = request.GET.get('asset_id',None)
     sandbox_flag = request.GET.get('sandbox_flag', None)
     test_the_labeler = request.GET.get('test_the_labeler', True)
+    batch_index  = request.GET.get('batch_index', None)
 
-    print(test_the_labeler)
+
 
     assignment_id = request.GET.get('assignmentId',None)
     hit_id = request.GET.get('hitId')
@@ -128,15 +129,18 @@ def mturk_redirect(request):
         labeler_id = worker_id 
 
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_assets_to_label/'
+    # api_url = 'https://backend-python-nupj.onrender.com/get_assets_to_label/'
+   
+    # if asset_id is None: 
+    #     data = {'samples':int(samples),
+    #             'labeler_id':1,
+    #             'task_type':'art_type'}
 
-    if asset_id is None: 
-        data = {'samples':int(samples),
-                'labeler_id':1,
-                'task_type':'art_type'}
+    # else:
+    #     data = {'asset_id':asset_id}
 
-    else:
-        data = {'asset_id':asset_id}
+    api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
+    data = {'batch_index':batch_index}
 
     header = {
         'Content-Type': 'application/json',
@@ -144,7 +148,10 @@ def mturk_redirect(request):
         }
 
     response = requests.get(api_url, json = data, headers = header)
-    assets_to_label = json.loads(response.content)['assets_to_label']
+    # assets_to_label = json.loads(response.content)['assets_to_label']
+    assets_to_label = json.loads(response.content)
+
+  
 
     api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
 
@@ -170,7 +177,7 @@ def mturk_redirect(request):
         "hit_id":hit_id,             
     }
     
-    #Get text examples 
+    #Get test examples 
 
     if test_the_labeler == True:
         api_url = 'https://backend-python-nupj.onrender.com/get_test_questions/'
