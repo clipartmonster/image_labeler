@@ -279,61 +279,94 @@ function close_listing_container(element){
         result = check_responses(prompts)
     }    
 
-    if (result == 'incorrect') {
+    prompt_container = element
+    .closest('.label_option.prompt.container.active')
 
-        
-        feedback_container.style.display = 'grid'
 
-        element
-        .closest('.listing.light.container.active')
-        .querySelector('.label_option.reset.button')
-        .click()
-    
+    prompt_container.className = 'label_option prompt container closed'
+    prompt_container.style.opacity = .35        
+
+    // element
+    // .closest('.label_option.prompt.container.active')
+    // .style.opacity = .25
+
+    element
+    .closest('.listing.light.container.active')
+    .className = 'listing light container closed'
+
+    // element
+    // .className = 'label_option button container'
+
+    open_listing_containers = document
+    .querySelectorAll('.listing.light.container.open, .listing.light.container.test_question')
+
+    if (open_listing_containers.length > 0) {
+
+        open_listing_container = open_listing_containers[0]
+        activate_listing_container(open_listing_container)
+
     } else {
 
-        if (feedback_container != null){
-            feedback_container.style.display = 'none'
-        }
-        
-        // element
-        // .closest('.label_option.prompt.container.active')
-        // .nextElementSibling
-        // .className = 'label_option button container active'
+        //wiht no more open listing containers show the sumbit button for leaving page
+        document.querySelector('.submit.button.container').style.display = 'grid'
+        document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-        prompt_container = element
-        .closest('.label_option.prompt.container.active')
-
-
-        prompt_container.className = 'label_option prompt container closed'
-        prompt_container.style.opacity = .35        
-
-        // element
-        // .closest('.label_option.prompt.container.active')
-        // .style.opacity = .25
-
-        element
-        .closest('.listing.light.container.active')
-        .className = 'listing light container closed'
-
-        // element
-        // .className = 'label_option button container'
-
-        open_listing_containers = document
-        .querySelectorAll('.listing.light.container.open, .listing.light.container.test_question')
-
-        if (open_listing_containers.length > 0) {
-
-            open_listing_container = open_listing_containers[0]
-            activate_listing_container(open_listing_container)
-
-        } else {
-
-            //wiht no more open listing containers show the sumbit button for leaving page
-            document.querySelector('.submit.button.container').style.display = 'grid'
-            document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-        }
     }
+
+    // if (result == 'incorrect') {
+        
+    //     feedback_container.style.display = 'grid'
+
+    //     element
+    //     .closest('.listing.light.container.active')
+    //     .querySelector('.label_option.reset.button')
+    //     .click()
+    
+    // } else {
+
+    //     if (feedback_container != null){
+    //         feedback_container.style.display = 'none'
+    //     }
+        
+    //     // element
+    //     // .closest('.label_option.prompt.container.active')
+    //     // .nextElementSibling
+    //     // .className = 'label_option button container active'
+
+    //     prompt_container = element
+    //     .closest('.label_option.prompt.container.active')
+
+
+    //     prompt_container.className = 'label_option prompt container closed'
+    //     prompt_container.style.opacity = .35        
+
+    //     // element
+    //     // .closest('.label_option.prompt.container.active')
+    //     // .style.opacity = .25
+
+    //     element
+    //     .closest('.listing.light.container.active')
+    //     .className = 'listing light container closed'
+
+    //     // element
+    //     // .className = 'label_option button container'
+
+    //     open_listing_containers = document
+    //     .querySelectorAll('.listing.light.container.open, .listing.light.container.test_question')
+
+    //     if (open_listing_containers.length > 0) {
+
+    //         open_listing_container = open_listing_containers[0]
+    //         activate_listing_container(open_listing_container)
+
+    //     } else {
+
+    //         //wiht no more open listing containers show the sumbit button for leaving page
+    //         document.querySelector('.submit.button.container').style.display = 'grid'
+    //         document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    //     }
+    // }
 
 
 }

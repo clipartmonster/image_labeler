@@ -7,6 +7,8 @@ urlpatterns = [
     path('initialize_session/', views.initialize_session, name = 'initialize_session'),
 
     path('mturk_redirect/', views.mturk_redirect, name= 'mturk_redirect'),
-    path('view_mturk_responses/', views.view_mturk_responses, name = 'view_mturk_responses')
+    path('view_mturk_responses/', views.view_mturk_responses, name = 'view_mturk_responses'),
+
+   
 
 ]

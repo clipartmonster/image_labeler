@@ -96,10 +96,11 @@ def mturk_redirect(request):
     samples = request.GET.get('samples',50)
     asset_id = request.GET.get('asset_id',None)
     sandbox_flag = request.GET.get('sandbox_flag', None)
-    test_the_labeler = request.GET.get('test_the_labeler', True)
+    test_the_labeler = request.GET.get('test_the_labeler', False)
     batch_index  = request.GET.get('batch_index', None)
+    rule_indexes  = json.loads(request.GET.get('rule_indexes', None))
 
-
+    print(test_the_labeler)
 
     assignment_id = request.GET.get('assignmentId',None)
     hit_id = request.GET.get('hitId')
@@ -121,7 +122,8 @@ def mturk_redirect(request):
 
     print('----------------------------------------------------')
     print(central_time.strftime("%Y-%m-%d %I:%M:%S %p"))
-    print(assignment_id)
+    print('assignment id:' + assignment_id)
+    print('worker id:' + worker_id)
     print('----------------------------------------------------')
 
 
@@ -140,6 +142,7 @@ def mturk_redirect(request):
     #     data = {'asset_id':asset_id}
 
     api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
+    
     data = {'batch_index':batch_index}
 
     header = {
@@ -155,7 +158,10 @@ def mturk_redirect(request):
 
     api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
 
-    data = {'task_type':task_type}
+    data = {'task_type':task_type,
+            'label_type':'clip_art',
+            'rule_indexes':rule_indexes
+            }
 
     header = {
         'Content-Type': 'application/json',
@@ -215,7 +221,9 @@ def view_mturk_responses(request):
 
     api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
 
-    data = {'task_type':'art_type'}
+    data = {'task_type':'art_type',
+            'label_type':'clip_art',
+             'rule_indexes':[1,2,3,4,5]}
 
     header = {
         'Content-Type': 'application/json',
@@ -231,6 +239,8 @@ def view_mturk_responses(request):
 
     api_url = 'https://backend-python-nupj.onrender.com/get_prompt_responses/'
 
+
+
     header = {
         'Content-Type': 'application/json',
         'Authorization': settings.API_ACCESS_KEY
@@ -245,4 +255,24 @@ def view_mturk_responses(request):
     return render(request, 'view_mturk_responses.html', {'assets_w_responses':assets_w_responses,
                                                          'labelling_rules':labelling_rules,
                                                          'prompts':prompts})
+
+
+
+
+
+def label_images(request):
+
+    label_type = request.GET.get('label_type',None)
+    rule_indexes = request.GET.get('rule_index',None)
+
+
+
+    print(rule_index)
+
+
+
+    return render(request, 'label_images.html', {})
+
+
+
 
