@@ -258,6 +258,8 @@ function api_collect_prompt(data) {
         'Authorization': API_ACCESS_KEY,
     }
 
+    console.log(data)
+
     return fetch(api_url, {
     method:'POST',
     headers : headers,

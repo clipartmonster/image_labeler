@@ -1,0 +1,89 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+    <div style = 'display:flex; flex-direction: row;'>
+
+        <div class = 'listing light container side_panel'>
+
+            <h1 class = 'label_option intro'>Filter mturk batch id</h1>
+
+                <div class = 'option container view_assets_labels' style = 'display:flex; gap:5px'>
+                    {% for batch_id in batch_ids%}
+                        <div class = 'option button batch_id selected' batch_id = {{batch_id}}>
+                            <h1 class = 'option title'> {{batch_id}} </h1>
+                        </div>
+                    {% endfor %}
+                </div>
+
+
+
+        </div>
+
+        <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
+
+            {% for asset_id, asset_data in assets_w_labels.items %}
+
+                <div id = 'listing_container_{{forloop.counter0}}' class = 'listing light container image_box' >
+
+                    <div class = 'design dark container' >
+                        {{asset_id}}
+            
+                        <img id = "image_{{asset_id}}" class="design view_asset_labels" src="{{ asset_data.image_link }}" crossOrigin="anonymous" >
+                
+                    
+                    </div>
+
+                    <div style = 'display:grid; grid-template-rows: auto; gap:7px; margin:auto' >
+
+                            {% for key, items in asset_data.data.items %}
+                                <div style = 'display:flex; flex-direction: row; gap:5px;'>
+                                    <div style ='display:flex; flex-direction: row; gap:5px;'>rule - {{key}}</div>
+                                
+                                        <div style = 'display:flex; flex-direction:row; gap:5px'>
+                                            {% for item in items %}
+                                                    
+                                                <div class = 'labeler container' style = 'display:flex; flex-direction:row; gap:5px;'>
+                                                    
+                                                    <div class = 'labeler_data' style = 'display:none' 
+                                                    asset_id = {{item.asset_id}}
+                                                    task_type = {{item.task_type}}
+                                                    labeler_source = {{item.labeler_source}}
+                                                    labeler_id = {{item.labeler_id}}
+                                                    label_type = {{item.label_type}}
+                                                    assignment_id = {{item.assignment_id}}
+                                                    hit_id = {{item.hit_id}}
+                                                    accept_response = {{item.accept_response}}
+                                                    mturk_batch_id = {{item.mturk_batch_id}}>
+                                                    </div>
+
+                                                    <div>{{item.mturk_batch_id}}</div>
+                                                    <div class = 'labeler response indicator {{item.prompt_response}}'></div>
+                                                    <div style = 'display:flex; flex-direction: column; gap:4px'>
+                                                        
+                                                        <div class = 'labeler response validator top'></div>
+                                                        <div class = 'labeler response validator bot'></div>
+                                                    </div>
+        
+                                                </div>
+
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+
+                                
+                            {% endfor %}
+                                            
+        
+                    </div>
+
+
+                </div>    
+
+            {% endfor %}
+
+        </div>
+    </div>
+
+{% endblock %}

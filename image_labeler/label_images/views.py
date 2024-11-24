@@ -98,7 +98,10 @@ def mturk_redirect(request):
     sandbox_flag = request.GET.get('sandbox_flag', None)
     test_the_labeler = request.GET.get('test_the_labeler', False)
     batch_index  = request.GET.get('batch_index', None)
+    mturk_batch_id = request.GET.get('mturk_batch_id',None)
     rule_indexes  = json.loads(request.GET.get('rule_indexes', None))
+    
+    print(mturk_batch_id)
 
     print(test_the_labeler)
 
@@ -180,9 +183,12 @@ def mturk_redirect(request):
         "label_type":label_type,
         "labeler_id":labeler_id,  
         "assignment_id":assignment_id,
-        "hit_id":hit_id,             
+        "hit_id":hit_id,      
+        'mturk_batch_id':mturk_batch_id       
     }
     
+    print(collection_data)
+
     #Get test examples 
 
     if test_the_labeler == True:
@@ -239,8 +245,6 @@ def view_mturk_responses(request):
 
     api_url = 'https://backend-python-nupj.onrender.com/get_prompt_responses/'
 
-
-
     header = {
         'Content-Type': 'application/json',
         'Authorization': settings.API_ACCESS_KEY
@@ -249,6 +253,7 @@ def view_mturk_responses(request):
     response = requests.get(api_url, headers = header)
     assets_w_responses = json.loads(response.content)
    
+    print('----------------------------------')
     print(assets_w_responses)
     # print(labelling_rules)
 
@@ -258,21 +263,35 @@ def view_mturk_responses(request):
 
 
 
+def view_asset_labels(request):
 
+    api_url = 'https://backend-python-nupj.onrender.com/get_asset_labels/'
 
-def label_images(request):
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+    
+    response = requests.get(api_url, headers = header)
+    assets_w_labels = json.loads(response.content)
+   
+    print('----------------------------------')
+    print(type(assets_w_labels))
+   
+    batch_indexes = set()
+    for label in assets_w_labels.values():
+        print(label['data']['1'])
+        print('vvvvvvvvvvvvvvv')
+        # for label in labels:
+            # mturk_batch_id = label.get('mturk_batch_id')
+            # if mturk_batch_id:  # Ensure mturk_batch_id is not None or empty
+            #     batch_indexes.add(mturk_batch_id)
 
-    label_type = request.GET.get('label_type',None)
-    rule_indexes = request.GET.get('rule_index',None)
+    print(batch_indexes)
 
+    batch_ids = [1,2,3]
 
+    data = {'assets_w_labels':assets_w_labels,
+            'batch_ids':batch_ids}
 
-    print(rule_index)
-
-
-
-    return render(request, 'label_images.html', {})
-
-
-
-
+    return render(request, 'view_asset_labels.html', data)

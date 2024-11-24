@@ -89,8 +89,11 @@ function collect_prompt(element, reponse){
             prompt_response:reponse,
             assignment_id:collection_data.getAttribute('assignment_id'),
             hit_id:collection_data.getAttribute('hit_id'),
-            is_test_question:collection_data.getAttribute('is_test_question')
+            is_test_question:collection_data.getAttribute('is_test_question'),
+            mturk_batch_id:collection_data.getAttribute('mturk_batch_id')
     }
+
+    console.log(data)
 
     api_collect_prompt(data)
 

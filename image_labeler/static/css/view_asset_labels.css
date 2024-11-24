@@ -1,0 +1,81 @@
+div.labeler.container{
+    padding:4px;
+    border:2px solid #97a0a0;
+   
+}
+
+
+div.labeler.response.validator{
+    border-radius: 15%;
+    background-color: #8a9c9c;
+    width:20px;
+    height:10px;
+}
+
+div.labeler.response.validator.bot.no{
+    background-color: #bd4444;
+}
+
+div.labeler.response.validator.top.yes{
+    background-color: #8eb284;
+}
+
+div.labeler.response.indicator{
+    border-radius: 100%;
+    background-color: #8a9c9c;
+    width:25px;
+    height:25px;
+}
+
+div.labeler.response.indicator.yes{
+    background-color: #8eb284;
+}
+
+div.labeler.response.indicator.no{
+    background-color: #bd4444;
+}
+
+
+div.listing.light.container.side_panel{
+    width:500px;
+}
+
+img.design.view_asset_labels{
+    width:200px;
+}
+
+div.listing.light.container.image_box{
+    width:215px;
+    display:grid; 
+    grid-template-rows: 1fr auto; 
+    gap:20px; 
+}
+
+div.option.button{
+    display:grid;
+    align-items: center;
+    justify-items: center;
+    background-color: #799494;
+    border-radius: 100%;
+    border: 2px solid #d2e2e2; 
+    width:35px;
+    height:35px
+}
+
+div.option.button.selected{
+    border: 2px solid #c8fafa; 
+    background-color: #7cbebe;
+}
+
+
+h1.option{
+    font-family: 'Roboto';
+    color:#d2e2e2;
+    line-height: 0px;
+    margin:auto;
+}
+
+div.option.container.view_assets_labels{
+    width:auto;
+    height:auto
+}
