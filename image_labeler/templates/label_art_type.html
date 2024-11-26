@@ -14,11 +14,18 @@
 
     <div class = 'design dark container'>
         <h1 class = 'label_option intro'>
-            <p>In this HITT, you will answer a series of yes no questions for a number of images. </p>
+            <!-- <p>In this HITT, you will answer a series of yes no questions for a number of images. </p>
             <p></p>Please review the information below to understand the criteria needed to determine if an image should receive a yes or no for each question. These sections include numerous examples to make it easier for you to determine the right response for each question. Make sure to click on them to see the reason why they receive a yes or a no.</p> 
             <p></p>Underneath the information you will see several images with each one accompanied by five questions. For many of the images you will not have to answer all questions the questions. In this HITT you will only to use the ‘1’ and ‘2’ keys on the keyboard. </p>
+             -->
             
+            <p>In this HIT, you will classify a set of images.</p> 
+            <p></p>Criteria for classifying these images can be found below.</p> 
+            <p></p>Rejecting a HIT: In the set of images you will classify, several will have a known correct answer. Incorrectly classifying these images will result in your HIT being REJECTED even if you answer the other ones correctly.</p> 
+            <p></p>Make sure to pay attention to the examples.</p>
+            <p></p>You will be using the 1 and 2 key on your keyboard to classify the image.</p> 
             
+
         </h1>
     </div>
 
@@ -105,7 +112,8 @@
 </div>
 
 {% block content %}
-    {% if test_the_labeler == True %}
+
+    {% if test_the_labeler == 'True' %}
         {% include 'test_questions.html' %}
     {% endif %}
 {% endblock content %}
@@ -113,6 +121,7 @@
 {% for asset in assets_to_label %}
 
     <div id = 'listing_container_{{forloop.counter0}}' class = 'listing light container open' style = 'display:grid; grid-template-columns: 1fr 1fr;'>
+
 
         <div class = 'collection_data' style = 'display:none' 
             asset_id = {{asset.asset_id}}
@@ -122,7 +131,14 @@
             label_type = {{collection_data.label_type}}
             assignment_id = {{collection_data.assignment_id}}
             hit_id = {{collection_data.hit_id}}
-            mturk_batch_id ={{collection_data.mturk_batch_id}}>
+            mturk_batch_id ={{collection_data.mturk_batch_id}}
+            {% if asset.correct_response %}
+                correct_response = "{{ asset.correct_response }}"
+                is_lure_question = 'yes'
+            {% else %}
+                is_lure_question = 'no'
+            {% endif %}
+            >
         </div>
 
         <div class = 'design dark container' >
@@ -132,9 +148,7 @@
         </div>
         
     <div class = 'listing_info container'>
-           
-            
-
+              
                 <div class = 'label_option prompt container open' >
 
                     {% for rule in labelling_rules %}

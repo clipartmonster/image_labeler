@@ -90,7 +90,8 @@ function collect_prompt(element, reponse){
             assignment_id:collection_data.getAttribute('assignment_id'),
             hit_id:collection_data.getAttribute('hit_id'),
             is_test_question:collection_data.getAttribute('is_test_question'),
-            mturk_batch_id:collection_data.getAttribute('mturk_batch_id')
+            mturk_batch_id:collection_data.getAttribute('mturk_batch_id'),
+            is_lure_question:collection_data.getAttribute('is_lure_question')
     }
 
     console.log(data)
@@ -277,11 +278,6 @@ function close_listing_container(element){
     .closest('.listing_info.container')
     .getElementsByClassName('label_option response_feedback incorrect')[0]
 
-
-    if (is_test_question == 'yes'){
-        result = check_responses(prompts)
-    }    
-
     prompt_container = element
     .closest('.label_option.prompt.container.active')
 
@@ -316,60 +312,68 @@ function close_listing_container(element){
 
     }
 
-    // if (result == 'incorrect') {
-        
-    //     feedback_container.style.display = 'grid'
-
-    //     element
-    //     .closest('.listing.light.container.active')
-    //     .querySelector('.label_option.reset.button')
-    //     .click()
     
-    // } else {
+    if (is_test_question == 'yes'){
+        result = check_responses(prompts)
+    }    
 
-    //     if (feedback_container != null){
-    //         feedback_container.style.display = 'none'
-    //     }
+
+    if (result == 'incorrect') {
         
-    //     // element
-    //     // .closest('.label_option.prompt.container.active')
-    //     // .nextElementSibling
-    //     // .className = 'label_option button container active'
+        feedback_container.style.display = 'grid'
 
-    //     prompt_container = element
-    //     .closest('.label_option.prompt.container.active')
+        console.log(element.closest('.listing.light.container.active'))
+
+        element
+        .closest('.listing.light.container.closed')
+        .querySelector('.label_option.reset.button')
+        .click()
+    
+    } else {
+
+        if (feedback_container != null){
+            feedback_container.style.display = 'none'
+        }
+        
+        // element
+        // .closest('.label_option.prompt.container.active')
+        // .nextElementSibling
+        // .className = 'label_option button container active'
+
+        prompt_container = element
+        .closest('.label_option.prompt.container.active')
 
 
-    //     prompt_container.className = 'label_option prompt container closed'
-    //     prompt_container.style.opacity = .35        
+        prompt_container.className = 'label_option prompt container closed'
+        prompt_container.style.opacity = .35        
 
-    //     // element
-    //     // .closest('.label_option.prompt.container.active')
-    //     // .style.opacity = .25
+        // element
+        // .closest('.label_option.prompt.container.active')
+        // .style.opacity = .25
 
-    //     element
-    //     .closest('.listing.light.container.active')
-    //     .className = 'listing light container closed'
+        element
+        .closest('.listing.light.container.active')
+        .className = 'listing light container closed'
 
-    //     // element
-    //     // .className = 'label_option button container'
+        // element
+        // .className = 'label_option button container'
 
-    //     open_listing_containers = document
-    //     .querySelectorAll('.listing.light.container.open, .listing.light.container.test_question')
+        open_listing_containers = document
+        .querySelectorAll('.listing.light.container.open, .listing.light.container.test_question')
 
-    //     if (open_listing_containers.length > 0) {
+        if (open_listing_containers.length > 0) {
 
-    //         open_listing_container = open_listing_containers[0]
-    //         activate_listing_container(open_listing_container)
+            open_listing_container = open_listing_containers[0]
+            activate_listing_container(open_listing_container)
 
-    //     } else {
+        } else {
 
-    //         //wiht no more open listing containers show the sumbit button for leaving page
-    //         document.querySelector('.submit.button.container').style.display = 'grid'
-    //         document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            //wiht no more open listing containers show the sumbit button for leaving page
+            document.querySelector('.submit.button.container').style.display = 'grid'
+            document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-    //     }
-    // }
+        }
+    }
 
 
 }
@@ -385,6 +389,7 @@ function reset_responses(event){
 
 
     listing_container = event.target.closest('.listing.light.container')
+    listing_container.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
     prompt_container = listing_container.querySelector('.label_option.prompt.container')
 

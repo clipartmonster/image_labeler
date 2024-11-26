@@ -26,7 +26,7 @@
                 <div class = 'label_option prompt container open' >
 
                     {% for rule in question.rule_data %}
-                        {% if rule.rule_index != 0 %}
+                        {% if rule.rule_index == '1' %}
 
                             <div id = 'rule_valdiator_{{asset_id}}_{{rule.rule_index}}' correct_response = {{rule.prompt_response}} class = 'label_option rule_validator open' rule_index = {{rule.rule_index}}>
 

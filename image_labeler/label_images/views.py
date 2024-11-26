@@ -100,10 +100,10 @@ def mturk_redirect(request):
     batch_index  = request.GET.get('batch_index', None)
     mturk_batch_id = request.GET.get('mturk_batch_id',None)
     rule_indexes  = json.loads(request.GET.get('rule_indexes', None))
+    add_lure_questions = request.GET.get('add_lure_questions', None)
     
     print(mturk_batch_id)
-
-    print(test_the_labeler)
+    print(bool(test_the_labeler))
 
     assignment_id = request.GET.get('assignmentId',None)
     hit_id = request.GET.get('hitId')
@@ -146,7 +146,8 @@ def mturk_redirect(request):
 
     api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
     
-    data = {'batch_index':batch_index}
+    data = {'batch_index':batch_index,
+            'lure_samples':2}
 
     header = {
         'Content-Type': 'application/json',
@@ -186,12 +187,11 @@ def mturk_redirect(request):
         "hit_id":hit_id,      
         'mturk_batch_id':mturk_batch_id       
     }
-    
-    print(collection_data)
 
     #Get test examples 
 
-    if test_the_labeler == True:
+    if bool(test_the_labeler) == True:
+        print('preparing test questions')
         api_url = 'https://backend-python-nupj.onrender.com/get_test_questions/'
 
         data = {'samples':2}
@@ -204,10 +204,11 @@ def mturk_redirect(request):
         response = requests.get(api_url, json = data, headers = header)
         test_questions = dict(json.loads(response.content))
         
-
     else:
         test_questions = []    
 
+
+    print(assets_to_label)
 
     return render(request, 'label_content.html', {'task_type':task_type,
                                                   'label':label_type,                                                  
@@ -276,20 +277,14 @@ def view_asset_labels(request):
     assets_w_labels = json.loads(response.content)
    
     print('----------------------------------')
-    print(type(assets_w_labels))
+    print(assets_w_labels.values())
    
-    batch_indexes = set()
+    batch_ids = []
+
     for label in assets_w_labels.values():
-        print(label['data']['1'])
-        print('vvvvvvvvvvvvvvv')
-        # for label in labels:
-            # mturk_batch_id = label.get('mturk_batch_id')
-            # if mturk_batch_id:  # Ensure mturk_batch_id is not None or empty
-            #     batch_indexes.add(mturk_batch_id)
-
-    print(batch_indexes)
-
-    batch_ids = [1,2,3]
+        batch_ids.append(int(label['data']['1'][0]['mturk_batch_id']))
+ 
+    batch_ids = list(set(batch_ids))
 
     data = {'assets_w_labels':assets_w_labels,
             'batch_ids':batch_ids}
