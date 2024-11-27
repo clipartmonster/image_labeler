@@ -514,6 +514,7 @@ div.label_option.thumbnail.container.incorrect {
 }
 
 div.label_option.thumbnail.panel{
+    flex-wrap:wrap;
     display:flex;
     gap:5px;
 }
