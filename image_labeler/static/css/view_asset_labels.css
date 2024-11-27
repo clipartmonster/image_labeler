@@ -45,7 +45,7 @@ img.design.view_asset_labels{
 }
 
 div.listing.light.container.image_box{
-    width:215px;
+    width:auto;
     display:grid; 
     grid-template-rows: 1fr auto; 
     gap:20px; 

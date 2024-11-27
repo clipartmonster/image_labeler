@@ -8,6 +8,8 @@
         {% endif %}
 
 
+       
+
         {% if labeler_source == 'MTurk' %}
             {% if sandbox_flag == 'True' %}
                 <form id="submit_labels" action="https://workersandbox.mturk.com/mturk/externalSubmit" method="post" labeler_source = {{labeler_source}}>
@@ -23,7 +25,7 @@
                         <input type="hidden" name="assignmentId" value="{{assignment_id}}">
                         <input type="hidden" name="hitId" value="{{hit_id}}">
                         <input type="hidden" name="response" value= "completed">
-                        <input type="submit" id="submitButton" class = 'label_option submit button' value="" name="submitButton">            
+                        <input type="submit" id="submitButton" class = 'label_option submit button' value="" name="submitButton" style = 'pointer-events:none;'>            
 
                     </div>
                 </div>

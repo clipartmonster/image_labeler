@@ -285,7 +285,7 @@ def view_asset_labels(request):
 
     for label in assets_w_labels.values():
         batch_ids.append(int(label['data']['1'][0]['mturk_batch_id']))
- 
+
     batch_ids = list(set(batch_ids))
 
     data = {'assets_w_labels':assets_w_labels,
