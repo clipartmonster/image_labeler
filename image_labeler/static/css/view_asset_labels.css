@@ -4,6 +4,9 @@ div.labeler.container{
    
 }
 
+div.labeler.container.Internal{
+    background-color: #ffe51d;
+}
 
 div.labeler.response.validator{
     border-radius: 15%;
@@ -62,6 +65,12 @@ div.option.button{
     height:35px
 }
 
+div.option.button.rectangle{
+    border-radius: 10px;
+    padding:5px;
+    width:auto;
+}
+
 div.option.button.selected{
     border: 2px solid #c8fafa; 
     background-color: #7cbebe;
@@ -70,6 +79,7 @@ div.option.button.selected{
 
 h1.option{
     font-family: 'Roboto';
+    font-size:16px;
     color:#d2e2e2;
     line-height: 0px;
     margin:auto;

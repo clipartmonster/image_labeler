@@ -11,12 +11,35 @@
 
                 <div class = 'option container view_assets_labels' style = 'display:flex; gap:5px'>
                     {% for batch_id in batch_ids%}
-                        <div class = 'option button batch_id' batch_id = {{batch_id}}>
+                        <div class = 'option button circle batch_id' filter_type = mturk_batch_id filter_value = {{batch_id}}>
                             <h1 class = 'option title'> {{batch_id}} </h1>
                         </div>
                     {% endfor %}
                 </div>
 
+            <h1 class = 'label_option intro'>Filter Label Source</h1>
+
+            <div class = 'option container view_assets_labels' style = 'display:flex; gap:5px'>
+                <div class = 'option button rectangle labeler_source' filter_type = labeler_source filter_value = MTurk>
+                    <h1 class = 'option title'> MTurk </h1>
+                </div>
+
+                <div class = 'option button rectangle labeler_source' filter_type = labeler_source filter_value = Internal>
+                    <h1 class = 'option title'> Internal </h1>
+                </div>
+            </div>
+
+            <h1 class = 'label_option intro'>Labelers Agree</h1>
+
+            <div class = 'option container view_assets_labels' style = 'display:flex; gap:5px'>
+                <div class = 'option button rectangle labeler_agree' filter_type = labeler_source filter_value = MTurk>
+                    <h1 class = 'option title'> Labelers Agreed </h1>
+                </div>
+
+                <div class = 'option button rectangle labeler_agree' filter_type = labeler_source filter_value = Internal>
+                    <h1 class = 'option title'> Labelers Disagreed </h1>
+                </div>
+            </div>
 
 
         </div>
@@ -41,10 +64,11 @@
                                 <div style = 'display:flex; flex-direction: row; gap:5px;'>
                                     <div style ='display:flex; flex-direction: row; gap:5px;'>rule - {{key}}</div>
                                 
-                                        <div style = 'display:flex; flex-direction:row; gap:5px'>
+                                        <div style = 'display:flex; flex-direction:row; gap:5px; flex-wrap:wrap'>
                                             {% for item in items %}
                                                     
-                                                <div class = 'labeler container' style = 'display:flex; flex-direction:row; gap:5px;'>
+                                                <div class = 'labeler container {{item.labeler_source}} '
+                                                style = 'display:flex; flex-direction:row; gap:5px;'>
                                                     
                                                     <div class = 'labeler_data' style = 'display:none' 
                                                     asset_id = {{item.asset_id}}
