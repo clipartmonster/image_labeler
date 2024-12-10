@@ -3,9 +3,14 @@
 
     {% block content %}
 
-        {% if task_type == 'art_type' %}
+        
+
+        {% if task_type == 'art_type' and labeler_source == 'reconcile_label' %}
+            {% include 'reconcile_labels.html' %}
+        {% else %}
             {% include 'label_art_type.html'%}
         {% endif %}
+
 
 
        

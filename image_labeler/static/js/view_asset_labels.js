@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
 
 
-function filter_image_boxes(element){
+function filter_image_boxes(element, image_container_class = '.listing.light.container.image_box'){
 
     if (['selected'].some(className => element.classList.contains(className))) {
         element.classList.remove('selected')
@@ -73,7 +73,7 @@ function filter_image_boxes(element){
     //get images boxes to filter
 
     image_boxes = 
-    document.querySelectorAll('.listing.light.container.image_box')
+    document.querySelectorAll('.image_box')
 
     image_boxes.forEach(image_box => {
         image_box.style.display = 'none'
@@ -81,9 +81,9 @@ function filter_image_boxes(element){
 
     //////////////
     //get count of selected buttons
-    const selected_buttons = Array.from(document.querySelectorAll('[class]')).filter(el =>
-    /^option.button.*selected$/.test(el.className)
-    );
+    const selected_buttons = Array.from(document.querySelectorAll('[class]'))
+    .filter(el => /^option.button.*selected$/.test(el.className))
+    .filter(el => !el.hasAttribute('filter_type'))
 
     selected_button_count = selected_buttons.length
 
@@ -101,9 +101,21 @@ function filter_image_boxes(element){
                 filter_type = selected_buttons[column].getAttribute('filter_type')
                 filter_value = selected_buttons[column].getAttribute('filter_value')
 
+                // console.log('---------------hhhhh-------------')
+                // console.log(filter_type)
+                // console.log(filter_value)
+                // console.log('---------------hhhhh-------------')
+
                 labeler_data_sets = image_boxes[row].querySelectorAll('.labeler_data')
 
                 labeler_data_sets.forEach(labeler_data => {
+
+                    console.log('------------------------')
+                    console.log(labeler_data.getAttribute('asset_id'))    
+                    console.log(labeler_data.getAttribute(filter_type))
+                    console.log(filter_value)
+                    console.log(labeler_data.getAttribute(filter_type) == filter_value)
+                    console.log('------------------------')
 
                     if (labeler_data.getAttribute(filter_type) == filter_value) {
                        
@@ -145,11 +157,16 @@ function filter_image_boxes(element){
         return rowSums;
       }
 
+    
     batch_id_condition_vector = create_condition_vector(document.querySelectorAll('.batch_id.selected'))
     labeler_source_condition_vector = create_condition_vector(document.querySelectorAll('.labeler_source.selected'))
+    rule_index_condition_vector = create_condition_vector(document.querySelectorAll('.rule_index.selected'))
 
+    console.log(rule_index_condition_vector)
 
-    condition_array =computeRowSums(labeler_source_condition_vector,batch_id_condition_vector)
+    condition_array =computeRowSums(labeler_source_condition_vector,
+                                    batch_id_condition_vector,
+                                    rule_index_condition_vector)
     
     condition_array.forEach((value, index) => {
 
@@ -158,94 +175,6 @@ function filter_image_boxes(element){
         }
 
     })
-
-    // image_boxes = 
-    // document.querySelectorAll('.listing.light.container.image_box')
-
-    // image_boxes.forEach(image_box => {
-    //     image_box.style.display = 'none'
-    // })
-
-    // const condition_array = Array.from({ length: image_boxes.length }, () =>
-    //     Array(selected_buttons.length).fill(0)
-    // );
-
-    // for (let row = 0; row < image_boxes.length; row++) {
-    //     for (let column = 0; column < selected_buttons.length; column++) {
-    
-    //         filter_type = selected_buttons[column].getAttribute('filter_type')
-    //         filter_value = selected_buttons[column].getAttribute('filter_value')
-
-    //         labeler_data = image_boxes[row].querySelectorAll('.labeler_data')
-
-    //         if (labeler_data[0].getAttribute(filter_type) == filter_value) {
-
-    //             console.log('condition met')
-    //             condition_array[row][column] = 1
-
-    //         }
-                
-
-    //     }
-    // }
-
-    // let across_column_sum = condition_array.map(row => row.reduce((sum, value) => sum + value, 0));
-
-    // console.log(selected_buttons)
-
-    // across_column_sum.forEach((sum, index) => {
-    //     if (sum == selected_buttons.length) {            
-    //         image_boxes[index].style.display = 'grid'            
-    //     } else {   
-    //         image_boxes[index].style.display = 'none'            
-    //     }
-    // });
-
-
-
-    // image_boxes.forEach(image_box => {
-
-    //     selected_buttons.forEach(selected_button => {
-
-    //         filter_type = selected_button.getAttribute('filter_type')
-    //         filter_value = selected_button.getAttribute('filter_value')
-
-    //         // console.log(filter_type)
-
-    //         if (filter_type == 'labeler_source'){
-
-
-    //             label_boxes = image_box.querySelectorAll('.labeler.container')
-
-    //             label_boxes.forEach(label_box => {
-
-    //                 if (label_box.querySelector('.labeler_data').getAttribute(filter_type) == filter_value){
-    //                     console.log('triggred labeler condition')
-    //                     image_box.style.display = 'grid'
-    //                 }        
-
-    //             })
-
-    //         } else if (filter_type == 'mturk_batch_id') {
-
-    //             if (image_box.querySelector('.labeler_data').getAttribute(filter_type) != filter_value
-    //                 && image_box.style.display == 'grid'){
-    //                 console.log('triggred mturk batch id condition')
-    //                 image_box.style.display = 'none'
-    //             }   
-
-    //         } else {
-
-    //             // image_box.style.display = 'none'
-            
-    //         }
-    //     })        
-
-    // })
-
-        // const selected_buttons = Array.from(document.querySelectorAll('[class]')).filter(el =>
-    //     /^option.button.*selected$/.test(el.className)
-    // );
 
 }
 

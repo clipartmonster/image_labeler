@@ -8,6 +8,10 @@ div.labeler.container.Internal{
     background-color: #ffe51d;
 }
 
+div.labeler.container.chat-gpt{
+    background-color: #ccb3ed;
+}
+
 div.labeler.response.validator{
     border-radius: 15%;
     background-color: #8a9c9c;
@@ -46,6 +50,7 @@ div.listing.light.container.side_panel{
 img.design.view_asset_labels{
     width:200px;
 }
+
 
 div.listing.light.container.image_box{
     width:auto;
