@@ -6,56 +6,146 @@
 
 <div class = 'light container'>
    
-    <form method = post id = radioForm action = '{% url "initialize_session"  %}'>
-        {% csrf_token %}
-   
-        <div class="option_container">
-            <h1 id = 'title' class = 'listing_info label'> Select you labeler id</h1>
-            <select id="labeler_id" class = 'title_font field_label' name="labeler_id">
-                <option  value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-            </select>
+        <div class="option_container" style = 'display:flex; flex-direction: row; flex-wrap: wrap;'>
+
+            <div style = 'margin:5px; width:100%'>
+                <h1 id = 'title' class = 'listing_info label'> Select your labeler id</h1>
+                <select id="labeler_id" class = 'title_font field_label' name="labeler_id">
+
+                    {% for labeler_id in session_options.labeler_ids %}
+                        <option value="{{ labeler_id.labeler_id }}">{{ labeler_id.labeler_id }}</option>
+                    {% endfor %}
+                        <option value="add_a_labeler">add labeler</option>
+
+                </select>
+            </div>
+
+            <div class="text_field container" id="add_a_name_field" >
+                <input type="text" placeholder="Enter new labeler ID" class="title_font field_label" style="margin:5px;">
+            </div>
+            
+            
+            <div style = 'margin:5px; width:100%'>
+                <h1 id = 'title' class = 'listing_info label'> Select task type</h1>
+
+                <div style = 'display:flex; flex-wrap: wrap; flex-direction: row; gap:10px'> 
+        
+                    <div class = 'option button rectangle task_type'> 
+                        <h1 class = 'option title'>{{session_options.task_type}}</h1>
+                    </div>   
+                    <div class = 'option button rectangle task_type'> 
+                        <h1 class = 'option title'> clip art type </h1>
+                    </div>   
+                    <div class = 'option button rectangle task_type'> 
+                        <h1 class = 'option title'> primary color </h1>
+                    </div>              
+        
+                </div>
+            </div>
+
         </div>
 
-        <div class = 'option_container'>
-                <h1 id = 'title' class = 'listing_info label'> Select a source of images to label</h1>
+        <div class = 'option_container'  style = 'display:flex; flex-wrap: wrap; flex-direction: row; gap:10px'>
+            
+            <div style = 'margin:5px; width:100%'>
+                <h1 id = 'title' class = 'listing_info label'> Select task type</h1>
+                <div style = 'display:flex; flex-wrap: wrap; flex-direction: row; gap:10px'> 
+                    {% for labeling_rule_option in session_options.labeling_rule_options  %}
+                    
+                            <div class = 'option button rectangle rule_option' rule_index = {{labeling_rule_option.rule_index}}> 
+                                <div style="display: grid; grid-template-rows: 20px 20px 20px; justify-items: start; text-align: left;">
 
-                <div class = 'field_container radio'>
-                    <input type = radio name = source value = initial_training_set ></input>
-                    <h1 class = 'title_font field_label'> Initial Training Set</h1>
+                                    <div style = 'display:grid; width:200px; grid-template-columns: 50px auto; align-items:center'>
+                                        <h1 style = 'margin-left:0' class="option title">rule {{ labeling_rule_option.rule_index }}</h1>
+                                        {% for rule_index_group in session_options.assets_label_counts_by_rule %}   
+                                        {% if rule_index_group.rule_index == labeling_rule_option.rule_index %} 
+                                           <div style = 'text-align:right' >
+                                               <h3 class = 'option title' style = 'padding:5px;' >
+                                                   {{rule_index_group.label_count}} / {{rule_index_group.asset_count}}
+                                               </h3>
+                                           </div>
+                                         {% endif %}
+                                       {% endfor %}   
+                                    </div>
+
+                                    <h3 style = 'margin-left:0' class="option title">{{ labeling_rule_option.title }}</h3>
+
+
+                                </div>
+                            </div>
+
+                    {% endfor %}        
+                </div>
+            </div>
+        </div>
+
+
+        <div class = 'option_container'  >
+
+           
+                <h1 id = 'title' class = 'listing_info label'>Select a batch to work on:</h1>
+
+                <div style = 'display:flex; flex-wrap:wrap; flex-direction:row; gap:10px;'>
+
+                    {% for labeling_rule_option in session_options.labeling_rule_options  %}
+
+                        <div class = 'batch indicator container' rule_index = {{labeling_rule_option.rule_index}} >
+                            {% for available_batch in session_options.availabe_batches  %}
+
+                                {% if available_batch.rule_index == labeling_rule_option.rule_index %}
+                                        {% if available_batch.remaining == 0 %}
+                                            <div class = 'batch indicator completed' batch_index = {{available_batch.large_sub_batch}} >     
+                                        {% else %}
+                                            {% if available_batch.percent_remaining > .25 %}
+                                                <div class = 'batch indicator' batch_index = {{available_batch.large_sub_batch}} style= 'opacity:{{available_batch.percent_remaining }}'>  
+                                            {% else %}
+                                                <div class = 'batch indicator' batch_index = {{available_batch.large_sub_batch}} style= 'opacity:.35'>   
+                                            {% endif %}  
+                                        {% endif %}
+                                            
+                                            <h1 style = 'text-align:center' class = 'listing_info label'>Batch: {{available_batch.large_sub_batch}}</h1> 
+                                            <h1 style = 'text-align:center' class = 'listing_info label'>{{available_batch.remaining}}</h1>
+        
+                                            <div style = 'display:flex; gap:5px'>
+                                                <div class = 'label_count field'>
+                                                    <h1 style = 'text-align:center' class = 'listing_info label'>0: {{ available_batch.0|floatformat:0  }}</h1>
+                                                </div>
+
+                                                <div class = 'label_count field'>
+                                                    <h1 style = 'text-align:center' class = 'listing_info label'>1: {{ available_batch.1|floatformat:0  }}</h1>
+                                                </div>
+                                            </div>
+
+
+                                        </div>
+     
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+
+                    {% endfor %}   
 
                 </div>
-
-                <div class = 'field_container radio'>
-                    <input type = radio name = source value = content_asset></input>
-                    <h1 class = 'title_font field_label'> Content Assets</h1>
-                </div>
+           
         
         </div>
 
-        <div class = 'option_container'>
-            <h1 id = 'title' class = 'listing_info label'> Select features to label</h1>
-
-            {% for feature in features %}
-
-            <div class = 'field_container radio'>
-                <input type = checkbox name = features value = {{feature}} ></input>
-                <h1 class = 'title_font field_label'> {{feature}}</h1>
-            </div>   
-
-            {% endfor %}
-
-
-    
-        </div>
-
-        <button class = 'get_images'>
+        <button class = 'get_images' onclick = 'show_images_wo_labels()'>            
             <h1 class = 'title_font field_label'> Start Labeling</h1>
         </button>   
 
-    </form>
+
+        <!-- <form method = post action = '{% url "initialize_session"  %}'>
+
+            <input type="hidden" name="features" value="{{ request.session.features }}">
+
+            {% csrf_token %}
+            
+            <button class = 'get_images'>            
+                <h1 class = 'title_font field_label'> Start Labeling</h1>
+            </button>   
+
+        </form> -->
 
 </div>
 

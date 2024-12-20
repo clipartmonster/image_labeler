@@ -136,7 +136,15 @@ function direct_hotkey_action(hotkey) {
             if (form.getAttribute('labeler_source') === 'MTurk')
                 form.submit()
             else{
-                window.location.href = window.location.href;
+                console.log('here')
+                // window.location.href = window.location.href;
+
+                const form = document.getElementById('submit_labels');
+                const baseUrl = `${window.location.protocol}//${window.location.host}`;
+                console.log(baseUrl)
+                form.action = `${baseUrl}/label_images/setup_session/`;
+                form.submit()
+
             }
 
         }
@@ -392,10 +400,13 @@ function reset_responses(event){
     listing_container.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
     prompt_container = listing_container.querySelector('.label_option.prompt.container')
-
     prompt_container.className = 'label_option prompt container open'
     prompt_container.style.opacity = 1
 
+    //get active prompt to get the rule index attribute 
+    active_prompt = prompt_container.querySelector('.label_option.rule_validator')
+    
+  
     prompts = prompt_container.querySelectorAll('.label_option.rule_validator')
 
     prompts.forEach(prompt => {
@@ -413,13 +424,6 @@ function reset_responses(event){
     })
 
 
-    // button_container = listing_container.querySelector('.label_option.button.container')
-
-    // button_container.className ='label_option button container open'
-
-    // button_container.querySelectorAll('button.label_option.button')
-    // .forEach(button =>{button.className = 'button label_option button'})
-
     activate_listing_container(listing_container)
 
     document.querySelector('.submit.button.container').style.display = 'none'
@@ -428,7 +432,8 @@ function reset_responses(event){
     listing_data = listing_container.querySelector('.collection_data')
 
     api_remove_prompt_responses(listing_data.getAttribute('asset_id'),
-                                listing_data.getAttribute('labeler_id'))
+                                listing_data.getAttribute('labeler_id'),
+                                active_prompt.getAttribute('rule_index'))
 
 
 }

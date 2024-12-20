@@ -8,6 +8,12 @@
 
     <div class = 'listing light container side_panel'>
 
+        <div style = 'display:flex'>
+            <h2 id = image_count class = 'label_option label'> {{total_available_images}} </h2>
+            <h2 class = 'label_option label'>/</h2>            
+            <h2 class = 'label_option label'>{{total_available_images}}</h2>
+        </div>
+
         <h1 class = 'label_option intro'>Image Size</h1>
 
         <div class = 'option container' style = 'display:flex; gap: 15px'>
@@ -54,7 +60,6 @@
                     rule_index_1 = {{asset.rule_1}}
                     rule_index_2 = {{asset.rule_2}}
                     rule_index_3 = {{asset.rule_3}}
-                    rule_index_4 = {{asset.rule_4}}
                     rule_index_5 = {{asset.rule_5}}
                     rule_index_6 = {{asset.rule_6}}
                     rule_index_7 = {{asset.rule_7}}    

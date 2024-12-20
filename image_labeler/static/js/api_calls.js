@@ -251,14 +251,18 @@ function api_collect_label(data) {
 
 function api_collect_prompt(data) {
 
-    api_url = 'https://backend-python-nupj.onrender.com/collect_prompt/'
+    console.log(data)
+
+    if (data.labeler_source == 'Internal' || data.labeler_source == 'reconcile_label') {
+        api_url = 'https://backend-python-nupj.onrender.com/collect_prompt_internal_source/' 
+    } else {
+        api_url = 'https://backend-python-nupj.onrender.com/collect_prompt/'
+    }
 
     headers = {
         'Content-Type': 'application/json',
         'Authorization': API_ACCESS_KEY,
     }
-
-    console.log(data)
 
     return fetch(api_url, {
     method:'POST',
@@ -271,7 +275,7 @@ function api_collect_prompt(data) {
 }
 
 
-function api_remove_prompt_responses(asset_id, labeler_id) {
+function api_remove_prompt_responses(asset_id, labeler_id, rule_index) {
 
     api_url = 'https://backend-python-nupj.onrender.com/remove_prompt_responses/'
 
@@ -282,7 +286,8 @@ function api_remove_prompt_responses(asset_id, labeler_id) {
 
     data = {
         asset_id:asset_id,
-        labeler_id:labeler_id
+        labeler_id:labeler_id,
+        rule_index:rule_index
     }
 
     return fetch(api_url, {

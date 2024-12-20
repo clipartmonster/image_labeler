@@ -66,23 +66,38 @@ def show_images(request):
 
 def setup_session(request):
 
-    
+    api_url = 'https://backend-python-nupj.onrender.com/get_session_options/'
 
-    features = ['title', 'main_element', 'description', 'art_type', 
-                'clip_art_type', 'count', 'primary_colors', 'line_width', 'color_depth']
+    data = {'source':request.session['selected_source'],
+            'samples':50}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+    
+    response = requests.get(api_url, json = data, headers = header)
+    session_options = json.loads(response.content)
+    
+    print(session_options)
+
 
    
-    return render(request, 'setup_session.html', {'features':features})
+    return render(request, 'setup_session.html', {'session_options':session_options})
 
 def initialize_session(request):
     if request.method == 'POST':
-        selected_source = request.POST.get('source')
-        selected_features = request.POST.get('features')
-        labeler_id = request.POST.get('labeler_id')
-        # Save the selected source in the session
-        request.session['selected_source'] = selected_source
-        request.session['features'] = selected_features
-        request.session['labeler_id'] = labeler_id
+
+        print(request.POST.get('source'))
+
+
+        # selected_source = request.POST.get('source')
+        # selected_features = request.POST.get('features')
+        # labeler_id = request.POST.get('labeler_id')
+        # # Save the selected source in the session
+        # request.session['selected_source'] = selected_source
+        # request.session['features'] = selected_features
+        # request.session['labeler_id'] = labeler_id
         return redirect('show_images')
     return redirect('select_source')
 
@@ -339,6 +354,9 @@ def reconcile_labels(request):
     rule_indexes  = json.loads(request.GET.get('rule_indexes', None))
     rule_index = int(rule_indexes[0])
 
+    print('000000000000000000')
+    print(rule_index)
+
     api_url = 'https://backend-python-nupj.onrender.com/get_disputed_assets/'
     
     data = {'rule_index':rule_index}
@@ -366,10 +384,12 @@ def reconcile_labels(request):
     response = requests.get(api_url, json = data, headers = header)
     labelling_rules = dict(json.loads(response.content))['labeling_rules']
 
+    print('----VvV----')
+    print(labelling_rules)
+
     labelling_rules = sorted(labelling_rules, key=lambda x: x['rule_index'])
 
-    print('----VvV----')
-    print(assets_to_label)
+
 
     collection_data = {
         "task_type":task_type,
@@ -377,6 +397,9 @@ def reconcile_labels(request):
         "assignment_id":assignment_id,
         "labeler_source":labeler_source,
     }
+
+    print(collection_data)
+    print(task_type)
 
     return render(request, 'label_content.html', {'task_type':task_type,
                                                   'labeler_id':labeler_id,
@@ -405,7 +428,8 @@ def view_labels(request):
     
     labeled_assets = json.loads(response.content)
   
-    rule_options = pd.DataFrame(labeled_assets)['rule_index'] \
+    rule_options = pd.DataFrame(labeled_assets) \
+    .query('rule_index != 4')['rule_index'] \
     .drop_duplicates() \
     .sort_values()
    
@@ -414,6 +438,7 @@ def view_labels(request):
     .drop_duplicates() \
 
     labeled_assets = pd.DataFrame(labeled_assets) \
+    .query('rule_index != 4') \
     .assign(label = lambda x: x['label'].astype(int)) \
     .assign(rule_index = lambda x: 'rule_' + x['rule_index'].astype(str)) \
     .filter(['asset_id', 'rule_index', 'label']) \
@@ -424,6 +449,7 @@ def view_labels(request):
     .to_dict(orient = 'records')
 
     data = {"rule_options":rule_options,
-            "labeled_assets":labeled_assets}
+            "labeled_assets":labeled_assets,
+            "total_available_images":len(labeled_assets)}
 
     return render(request, 'view_labels.html', data)

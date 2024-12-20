@@ -117,16 +117,20 @@ function switch_filter(element){
     condition_vector = 
         condition_array.map(row => row.reduce((sum, value) => sum + value, 0))
 
+    box_image_count = 0
+
     condition_vector.forEach((value, index) => {
 
         if (value == selected_filter_count) {
             image_boxes[index].style.display = 'block'
+            box_image_count +=1
         } else {
             image_boxes[index].style.display = 'none'
         }
 
     })   
 
+    document.getElementById('image_count').textContent = box_image_count
 
 
 }

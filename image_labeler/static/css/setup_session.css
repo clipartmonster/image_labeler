@@ -29,3 +29,59 @@ button.get_images{
     border:2px solid #969d9d;
     border-radius: 15px;
 }
+
+div.batch.indicator{
+    background-color:#b4dc76;
+    border-radius:5px;
+    border:1px solid #799494;
+    padding:10px 20px
+}
+
+
+div.batch.indicator.selected{
+    background-color: #c8fafa;
+    opacity: 1 !important;
+}
+
+div.batch.indicator.completed{
+    background-color: #799494;
+    opacity: 1;
+}
+
+
+div.batch.container.indicator{
+    background-color:#9daeae;
+    display:flex;
+    flex-wrap:wrap;
+    flex-direction: row;
+    padding:5px;
+    gap:10px;
+    border-radius: 5px;
+
+    
+}
+
+h3.option.title{
+    font-family: 'Roboto';
+    font-size: 12px;
+    color: #d2e2e2;
+    line-height: 0px;
+    margin: auto;
+}
+
+div.option.button.rectangle.task_type{
+    padding:20px;
+}
+
+div.label_count.field{
+
+    border-radius: 7px;
+    background-color: #98c160;
+    padding:3px;  
+    width:50px;
+
+}
+
+div#add_a_name_field{
+    display:none;
+}

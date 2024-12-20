@@ -3,11 +3,9 @@
 
     {% block content %}
 
-        
-
         {% if task_type == 'art_type' and labeler_source == 'reconcile_label' %}
-            {% include 'reconcile_labels.html' %}
-        {% else %}
+              {% include 'reconcile_labels.html' %}
+         {% else %}
             {% include 'label_art_type.html'%}
         {% endif %}
 
@@ -21,6 +19,7 @@
             {% else %}
                 <form id="submit_labels" action="https://www.mturk.com/mturk/externalSubmit" method="post" labeler_source = {{labeler_source}}>
             {% endif %}
+        
 
                 <div class = 'listing light container'>
                     <div class = 'submit button container' >
@@ -36,10 +35,7 @@
                 </div>
             </form>
         {% else %}
-            <form id="submit_labels" labeler_source = {{labeler_source}} > <!-- Action is empty to reload the page -->
-                
-
-
+            <form id="submit_labels" labeler_source = {{labeler_source}} action = "" > <!-- Action is empty to reload the page -->
                 <div class='listing light container'>
                     <div class='submit button container'>
                         <h1 class='listing_info label'>Load more images to label?</h1>
