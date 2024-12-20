@@ -68,8 +68,7 @@ def setup_session(request):
 
     api_url = 'https://backend-python-nupj.onrender.com/get_session_options/'
 
-    data = {'source':request.session['selected_source'],
-            'samples':50}
+    data = {}
 
     header = {
         'Content-Type': 'application/json',
