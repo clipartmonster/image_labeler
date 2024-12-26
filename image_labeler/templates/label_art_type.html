@@ -34,6 +34,7 @@
                 <!-- <div class = 'label_option label container'> -->
                                        
                     {% for rule in labelling_rules %}
+  
                         {% if rule.rule_index != 0 %}
 
                             <div class = 'label_option rule_container'>
@@ -46,7 +47,7 @@
   
                                         <ul>
                                             {% for directive in rule.directives %}
-                                                <li><h1 class = 'label_option rule'>{{directive}}</h1></li>
+                                                <li><h1 class = 'label_option rule'>{{directive.directive}}</h1></li>
                                             {% endfor %}
                                         </ul>
     
@@ -79,6 +80,7 @@
                                         <h2 class = "label_option label">no</h2>
                                         
                                         <div class = 'label_option thumbnail panel' >
+
                                             {% for example in rule.examples %}
                                                 {% if example.example_type == 'incorrect' %}
                                                 <img class="label_option thumbnail incorrect" src="{{ example.image_path }}" onclick = "expand_image(event)">

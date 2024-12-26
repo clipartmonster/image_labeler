@@ -1,0 +1,97 @@
+div.rule.container {
+    border:2px solid #969d9d; 
+    margin:10px;
+}
+
+div.rule_container.add_rule{
+    padding:10px;
+}
+
+div.rule.header{
+    display:grid;
+    grid-template-rows: 45px auto auto;
+    padding:10px;
+}
+
+h3.rule.text.copy {
+    font-family:"Roboto";
+    color: #596767;
+    font-size: 16px;
+    margin:0px;
+}
+
+
+h4.rule.text.copy {
+    font-family:"Roboto";
+    color: #809090;
+    font-size: 14px;
+    margin:0px;
+}
+
+div.feature.container{
+    display:grid;
+    grid-template-columns: 45px auto;
+    align-items: center;
+    margin-bottom:20px;
+}
+
+div.feature.container.title{
+    grid-template-columns: 45px auto 75px;
+}
+
+h1.field_label.manage_rule{
+    color:#799494;
+    font-size:14px
+}
+
+div.manage_rule.container{
+    display:grid;
+    grid-template-columns: auto 35px;
+    padding: 10px;
+    background-color: #bed3d3;
+    border:2px solid #c6dfdf; 
+}
+
+div.copy.container{
+    display:grid;
+    grid-template-rows:20px auto;
+    align-items:start;
+}
+
+h3.rule.text.directives {
+    font-family:"Roboto";
+    color: #596767;
+    font-size: 14px;
+    margin:0px;
+    padding-bottom: 5px;
+}
+
+img.manage_rule.thumbnail.example {
+    border-radius: 5px;
+    max-height:75px;
+}
+
+img.image.icon {
+    max-height: 20px;
+    align-self: start;
+    justify-self:end;
+}
+
+input.text.field.add_rule{
+    font-family: "Roboto";
+    font-weight: bold;
+    color: #596767;
+    font-size:18px;
+    border-radius: 5px;
+    background-color:#bed3d3;
+    border: 2px solid #c6dfdf;
+    width:100%
+
+}
+
+
+
+div.option.button.circle.directive {
+    width:30px;
+    height:30px;
+}

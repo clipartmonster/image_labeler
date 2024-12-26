@@ -1,20 +1,34 @@
 if (window.location.pathname === '/label_images/setup_session/')
 document.addEventListener('DOMContentLoaded', function(){
 
+    selected_options = document.getElementById('selected_options')
+  
+    /////////////////////
     task_type_options = document.querySelectorAll('.task_type')
-    task_type_options[0].classList.add('selected')
 
     task_type_options.forEach(task_type_option => {
         task_type_option.addEventListener('click', ()=> select_option(task_type_option))
+
+        if (task_type_option.getAttribute('task_type') == selected_options.getAttribute('task_type')){
+            task_type_option.classList.add('selected')
+        }
+
     })
 
+    /////////////////////
     rule_options = document.querySelectorAll('.rule_option')
-    rule_options[0].classList.add('selected')
+    // rule_options[0].classList.add('selected')
 
     rule_options.forEach(rule_option => {
         rule_option.addEventListener('click', ()=> select_option(rule_option))
+
+        if (rule_option.getAttribute('rule_index') === selected_options.getAttribute('rule_index')){
+            rule_option.classList.add('selected')
+        }
+        
     })
 
+    /////////////////////
     batch_option_containers = document.querySelectorAll('.batch.indicator.container')
 
     batch_option_containers.forEach(batch_option_container => {      
@@ -36,6 +50,8 @@ document.addEventListener('DOMContentLoaded', function(){
     add_name_field = document.getElementById('add_a_name_field')
     add_name_field.addEventListener('keydown', add_labeler_name)
 
+    console.log(selected_options.getAttribute('labeler_id'))
+    labeler_control.value = selected_options.getAttribute('labeler_id')
 
 })
 

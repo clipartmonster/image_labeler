@@ -65,6 +65,10 @@ def show_images(request):
 
 
 def setup_session(request):
+ 
+    labeler_id = request.GET.get('labeler_id','Steve')
+    task_type = request.GET.get('task_type','art_type')
+    rule_index = request.GET.get('rule_index',1)
 
     api_url = 'https://backend-python-nupj.onrender.com/get_session_options/'
 
@@ -77,12 +81,15 @@ def setup_session(request):
     
     response = requests.get(api_url, json = data, headers = header)
     session_options = json.loads(response.content)
-    
-    print(session_options)
 
+    selected_options = {'labeler_id':labeler_id,
+                        'task_type':task_type,
+                        'rule_index':rule_index}    
 
+    print(selected_options)
    
-    return render(request, 'setup_session.html', {'session_options':session_options})
+    return render(request, 'setup_session.html', {'session_options':session_options,
+                                                  'selected_options':selected_options})
 
 def initialize_session(request):
     if request.method == 'POST':
@@ -179,18 +186,6 @@ def mturk_redirect(request):
     if labeler_source == 'MTurk':
         labeler_id = worker_id 
 
-    
-
-    # api_url = 'https://backend-python-nupj.onrender.com/get_assets_to_label/'
-   
-    # if asset_id is None: 
-    #     data = {'samples':int(samples),
-    #             'labeler_id':1,
-    #             'task_type':'art_type'}
-
-    # else:
-    #     data = {'asset_id':asset_id}
-
     api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
     
     data = {'batch_type':'large_sub_batch',
@@ -206,9 +201,6 @@ def mturk_redirect(request):
         }
 
     response = requests.get(api_url, json = data, headers = header)
-    print(response)
-    # assets_to_label = json.loads(response.content)['assets_to_label']
-    print('00000000000000000000000000000')
     assets_to_label = json.loads(response.content)['aset_batch']
   
 
@@ -224,9 +216,7 @@ def mturk_redirect(request):
         }
 
     response = requests.get(api_url, json = data, headers = header)
-    labelling_rules = dict(json.loads(response.content))['labeling_rules']
-
-    labelling_rules = sorted(labelling_rules, key=lambda x: x['rule_index'])
+    labelling_rules = dict(json.loads(response.content))['labelling_rules']
 
 
     collection_data = {
@@ -236,8 +226,12 @@ def mturk_redirect(request):
         "labeler_id":labeler_id,  
         "assignment_id":assignment_id,
         "hit_id":hit_id,      
-        'mturk_batch_id':mturk_batch_id    
+        "mturk_batch_id":mturk_batch_id,    
+        "rule_index":rule_indexes[0]
     }
+
+    print('2222222222222222')
+    print(collection_data)
 
     #Get test examples 
 
@@ -259,7 +253,6 @@ def mturk_redirect(request):
         test_questions = []    
 
 
-    print(assets_to_label)
 
     return render(request, 'label_content.html', {'task_type':task_type,
                                                   'label':label_type,                                                  
@@ -452,3 +445,25 @@ def view_labels(request):
             "total_available_images":len(labeled_assets)}
 
     return render(request, 'view_labels.html', data)
+
+def manage_rules(request):
+    
+    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
+
+    data = {}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+
+    response = requests.get(api_url, json = data, headers = header)
+    labelling_rules = dict(json.loads(response.content))
+    
+    rule_table = labelling_rules['labelling_rules']
+    task_types = labelling_rules['task_type_set']
+
+    data = {"task_types":task_types,
+            "rule_table":rule_table}
+    
+    return render(request, 'manage_rules.html', data)

@@ -1,0 +1,73 @@
+{% load static %}
+
+<div class = 'rule container' task_type = "{{rule.task_type}}">
+    <div class = 'rule header' >
+        <div class = 'feature container title'>
+            <div class = 'option button circle rule index'>
+                <h1 class = 'option title'>{{rule.id}}</h1>
+            </div>
+            <div style = 'display:grid; grid-template-rows:15px auto; align-items: center;'>
+                <!-- <h1 class = 'field_label' style = 'font-size:16px; color:#799494'>Title:</h1> -->
+                <h1 class = 'field_label'> {{rule.title}} </h1>                            
+            </div>
+
+            <div style = 'display:flex; align-items:flex-start; justify-content:flex-end; gap: 5px'>
+                <img class = 'image icon' src="{% static 'images/manage_rules/edit_icon.png' %}" >
+                <img class = 'image icon' src="{% static 'images/manage_rules/remove_icon.png' %}" >
+            </div>
+        </div>
+
+        <div class = detail style = 'display:none'>
+
+            <div class = 'feature container'>
+                <div></div>
+                <div class = 'manage_rule container' >
+                    <div>
+                        <h1 class = 'field_label manage_rule'>Description:</h1>
+                        <h3 class = 'rule text copy'> {{rule.description}} </h3>  
+                    </div>                          
+                    <img class = 'image icon' src="{% static 'images/manage_rules/edit_icon.png' %}" >
+                   
+                </div>
+                                        
+            </div>
+
+            <div class = 'feature container'>
+                <div></div>
+                <div class = 'manage_rule container' >
+                    <div>
+                        <h1 class = 'field_label manage_rule'>Prompt:</h1>
+                        <h3 class = 'rule text copy'> {{rule.prompt}} </h3>  
+                    </div>                          
+                    <img class = 'image icon' src="{% static 'images/manage_rules/edit_icon.png' %}" >
+                    
+                </div>
+                                        
+            </div>
+
+            <div class = 'feature container'>
+                <div></div>
+                <div class = 'copy container'>
+                    <h1 class = 'field_label manage_rule'>Directives:</h1>
+                        <div >
+                            {% for directive in rule.directives %}
+                                <div style= "background-color:#c1e4e4; margin-bottom:10px; border-radius:8px; padding:10px">
+                                    <h3 class = 'rule text directives'> {{directive.directive}} </h3>
+                                    <div style = 'display:flex; gap:8px'>
+                                        {% for examples in directive.examples %}
+                                            <img class="manage_rule example thumbnail" src="{{examples.image_link}}"> 
+                                        {% endfor %}
+                                        <img class = "manage_rule example thumbnail" src = "{% static 'images/manage_rules/add_example_icon.png' %}"></img>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>                            
+                </div>                     
+            </div>
+
+        </div>
+
+    </div>
+   
+</div>
+               

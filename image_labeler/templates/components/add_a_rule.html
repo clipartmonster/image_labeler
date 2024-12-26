@@ -1,0 +1,47 @@
+{% load static %}
+
+<div class = 'light container'>
+
+    <div style = 'margin:20px'>
+        <h1 class = 'field_label'>Add a Rule</h1>
+    </div>
+
+    <div class = 'rule_container add_rule'>
+
+        <div style = 'margin:20px'>
+            <h1 class = 'field_label manage_rule'>Title</h1>
+            <input type="text" id = title class="text field add_rule" value = 'title'>
+        </div>
+
+        <div style = 'margin:20px'>
+            <h1 class = 'field_label manage_rule'>Description</h1>
+            <input type="text"  id = description class="text field add_rule"  value = 'description'>
+        </div>
+
+        <div style = 'margin:20px'>
+            <h1 class = 'field_label manage_rule'>Prompt</h1>
+            <input type="text"  id = prompt class="text field add_rule"  value = 'prompt'>
+        </div>
+
+        <div style = 'margin:20px; '>
+            <h1 class = 'field_label manage_rule'>Directive(s)</h1>
+
+            <div class = 'directive container' style = 'display: flex; gap:5px; margin-bottom:10px'>
+
+                <!-- <div class = 'option button circle directive'>
+                    <h1 class = 'option title'>+</h1>
+                </div>
+
+                <div class = 'option button circle directive'>
+                    <h1 class = 'option title'>-</h1>
+                </div> -->
+
+                <input type="text"  id = directive class="text field add_rule directive"  placeholder='directive'>
+            
+            </div>
+        </div>
+
+        <button class = 'add_rule' onclick = "add_a_rule()">Add Rule</button>
+
+    </div>
+</div>

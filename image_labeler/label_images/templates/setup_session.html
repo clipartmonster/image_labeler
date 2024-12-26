@@ -5,7 +5,14 @@
 
 
 <div class = 'light container'>
-   
+
+        <div id = selected_options 
+            task_type = {{selected_options.task_type}}
+            labeler_id = {{selected_options.labeler_id}}
+            rule_index = {{selected_options.rule_index}}
+            >
+        </div>
+
         <div class="option_container" style = 'display:flex; flex-direction: row; flex-wrap: wrap;'>
 
             <div style = 'margin:5px; width:100%'>
@@ -30,14 +37,14 @@
 
                 <div style = 'display:flex; flex-wrap: wrap; flex-direction: row; gap:10px'> 
         
-                    <div class = 'option button rectangle task_type'> 
+                    <div class = 'option button rectangle task_type' task_type = 'art_type'> 
                         <h1 class = 'option title'>{{session_options.task_type}}</h1>
                     </div>   
-                    <div class = 'option button rectangle task_type'> 
-                        <h1 class = 'option title'> clip art type </h1>
+                    <div class = 'option button rectangle task_type' task_type = 'clip_art_type'> 
+                        <h1 class = 'option title'> clip_art_type </h1>
                     </div>   
-                    <div class = 'option button rectangle task_type'> 
-                        <h1 class = 'option title'> primary color </h1>
+                    <div class = 'option button rectangle task_type' task_type = 'primary_color'> 
+                        <h1 class = 'option title'> primary_color </h1>
                     </div>              
         
                 </div>
@@ -133,19 +140,6 @@
         <button class = 'get_images' onclick = 'show_images_wo_labels()'>            
             <h1 class = 'title_font field_label'> Start Labeling</h1>
         </button>   
-
-
-        <!-- <form method = post action = '{% url "initialize_session"  %}'>
-
-            <input type="hidden" name="features" value="{{ request.session.features }}">
-
-            {% csrf_token %}
-            
-            <button class = 'get_images'>            
-                <h1 class = 'title_font field_label'> Start Labeling</h1>
-            </button>   
-
-        </form> -->
 
 </div>
 

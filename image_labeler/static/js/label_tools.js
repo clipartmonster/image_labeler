@@ -112,7 +112,7 @@ function direct_hotkey_action(hotkey) {
 
         if (priority_element.type === 'prompt') {
 
-            collect_prompt(priority_element.element, response)
+            // collect_prompt(priority_element.element, response)
             update_prompt(hotkey,priority_element.element, response)
 
         } else if (priority_element.type === 'button_container'){
@@ -141,8 +141,8 @@ function direct_hotkey_action(hotkey) {
 
                 const form = document.getElementById('submit_labels');
                 const baseUrl = `${window.location.protocol}//${window.location.host}`;
-                console.log(baseUrl)
-                form.action = `${baseUrl}/label_images/setup_session/`;
+              
+                form.action = `${baseUrl}/label_images/setup_session`;
                 form.submit()
 
             }

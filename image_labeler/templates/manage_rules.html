@@ -1,0 +1,55 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+{% include 'components/add_a_rule.html' %}
+
+<div class = 'light container'>
+    
+        <div style = 'padding:10px'>
+
+            <h1 id = title class = 'listing_info label'> Select task type:</h1>
+
+            <div style = 'display:flex; gap:10px; margin-top:10px'>
+                {% for task in task_types %}           
+                    <div class = 'option button rectangle task_type' task_type = {{task}}> 
+                        <h1 class = 'option title'>{{task}}</h1>
+                    </div>   
+                {% endfor %}
+
+                <div class = 'option button rectangle task_type' task_type = 'add_task'> 
+                    <h1 class = 'option title'>Add a Task</h1>
+                </div>   
+            </div>
+
+        </div>
+
+</div>
+
+<div class = 'light container'>
+
+        {% for rule in rule_table %}
+
+            {% include 'components/rule_container.html' %}
+                           
+        {% endfor %}
+
+        <div class = 'rule header'>
+            <div class = 'feature container title'>
+                <div class = 'option button circle rule index'>
+                    <h1 class = 'option title'>+</h1>
+                </div>
+                <div style = 'display:grid; grid-template-rows:15px auto; align-items: center;'>
+                    <!-- <h1 class = 'field_label' style = 'font-size:16px; color:#799494'>Title:</h1> -->
+                    <h1 class = 'field_label'> Add A Rule </h1>                            
+                </div>
+            </div>
+        </div>
+
+</div>
+
+
+
+
+{% endblock %}

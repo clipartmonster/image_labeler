@@ -36,6 +36,12 @@
             </form>
         {% else %}
             <form id="submit_labels" labeler_source = {{labeler_source}} action = "" > <!-- Action is empty to reload the page -->
+                
+                <input type="hidden" name="labeler_id" value="{{collection_data.labeler_id}}">
+                <input type="hidden" name="task_type" value="{{collection_data.task_type}}">
+                <input type="hidden" name="rule_index" value="{{collection_data.rule_index}}"> 
+ 
+                
                 <div class='listing light container'>
                     <div class='submit button container'>
                         <h1 class='listing_info label'>Load more images to label?</h1>
