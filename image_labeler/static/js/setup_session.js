@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', function(){
     task_type_options.forEach(task_type_option => {
         task_type_option.addEventListener('click', ()=> select_option(task_type_option))
 
+        console.log(selected_options.getAttribute('task_type'))
+        console.log(task_type_option.getAttribute('task_type'))
+
         if (task_type_option.getAttribute('task_type') == selected_options.getAttribute('task_type')){
             task_type_option.classList.add('selected')
         }
@@ -98,7 +101,8 @@ function toggle_add_a_name_field(labeler_control){
 }
 
 function select_option(element){
-    options = Array.from(element.parentNode.children)
+
+     options = Array.from(element.parentNode.children)
 
     options.forEach(option => {
         option.classList.remove('selected')
@@ -111,7 +115,6 @@ function select_option(element){
         show_batch_indicator_container(element.getAttribute('rule_index'))
     }
 
-    
 
 }
 

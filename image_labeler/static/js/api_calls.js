@@ -252,6 +252,7 @@ function api_collect_label(data) {
 function api_collect_prompt(data) {
 
     console.log(data)
+    console.log('hello')
 
     if (data.labeler_source == 'Internal' || data.labeler_source == 'reconcile_label') {
         api_url = 'https://backend-python-nupj.onrender.com/collect_prompt_internal_source/' 

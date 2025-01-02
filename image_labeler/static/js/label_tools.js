@@ -76,6 +76,8 @@ function collect_label(element, response){
 
 function collect_prompt(element, reponse){
 
+    console.log('executing collect prompt function')
+    
     collection_data = element
     .closest('.listing.light.container')
     .querySelector('.collection_data')
@@ -94,9 +96,7 @@ function collect_prompt(element, reponse){
             is_lure_question:collection_data.getAttribute('is_lure_question')
     }
 
-    console.log(data)
-
-    api_collect_prompt(data)
+     api_collect_prompt(data)
 
 }
 
@@ -112,7 +112,7 @@ function direct_hotkey_action(hotkey) {
 
         if (priority_element.type === 'prompt') {
 
-            // collect_prompt(priority_element.element, response)
+            collect_prompt(priority_element.element, response)
             update_prompt(hotkey,priority_element.element, response)
 
         } else if (priority_element.type === 'button_container'){

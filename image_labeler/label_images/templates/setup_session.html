@@ -36,16 +36,13 @@
                 <h1 id = 'title' class = 'listing_info label'> Select task type</h1>
 
                 <div style = 'display:flex; flex-wrap: wrap; flex-direction: row; gap:10px'> 
-        
-                    <div class = 'option button rectangle task_type' task_type = 'art_type'> 
-                        <h1 class = 'option title'>{{session_options.task_type}}</h1>
-                    </div>   
-                    <div class = 'option button rectangle task_type' task_type = 'clip_art_type'> 
-                        <h1 class = 'option title'> clip_art_type </h1>
-                    </div>   
-                    <div class = 'option button rectangle task_type' task_type = 'primary_color'> 
-                        <h1 class = 'option title'> primary_color </h1>
-                    </div>              
+
+                    {% for task_type in session_options.task_types%}
+             
+                        <div class = 'option button rectangle task_type' task_type = {{task_type.task_type}}> 
+                            <h1 class = 'option title'> {{task_type.task_type}} </h1>
+                        </div>  
+                    {% endfor %}
         
                 </div>
             </div>
