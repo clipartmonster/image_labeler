@@ -276,7 +276,7 @@ function api_collect_prompt(data) {
 }
 
 
-function api_remove_prompt_responses(asset_id, labeler_id, rule_index) {
+function api_remove_prompt_responses(asset_id, labeler_id, labeler_source, task_type, rule_index) {
 
     api_url = 'https://backend-python-nupj.onrender.com/remove_prompt_responses/'
 
@@ -288,7 +288,9 @@ function api_remove_prompt_responses(asset_id, labeler_id, rule_index) {
     data = {
         asset_id:asset_id,
         labeler_id:labeler_id,
-        rule_index:rule_index
+        labeler_source:labeler_source,
+        rule_index:rule_index,
+        task_type:task_type
     }
 
     return fetch(api_url, {

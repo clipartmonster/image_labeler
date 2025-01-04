@@ -76,6 +76,7 @@ function collect_label(element, response){
 
 function collect_prompt(element, reponse){
 
+    console.log(element)
     console.log('executing collect prompt function')
     
     collection_data = element
@@ -431,8 +432,13 @@ function reset_responses(event){
     //hit api to remove entries in database
     listing_data = listing_container.querySelector('.collection_data')
 
+    console.log(listing_data)
+    console.log(active_prompt)
+
     api_remove_prompt_responses(listing_data.getAttribute('asset_id'),
                                 listing_data.getAttribute('labeler_id'),
+                                listing_data.getAttribute('labeler_source'),
+                                listing_data.getAttribute('task_type'),
                                 active_prompt.getAttribute('rule_index'))
 
 

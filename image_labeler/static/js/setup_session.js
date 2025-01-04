@@ -7,10 +7,7 @@ document.addEventListener('DOMContentLoaded', function(){
     task_type_options = document.querySelectorAll('.task_type')
 
     task_type_options.forEach(task_type_option => {
-        task_type_option.addEventListener('click', ()=> select_option(task_type_option))
-
-        console.log(selected_options.getAttribute('task_type'))
-        console.log(task_type_option.getAttribute('task_type'))
+        task_type_option.addEventListener('click', ()=> select_task_type_option(task_type_option))
 
         if (task_type_option.getAttribute('task_type') == selected_options.getAttribute('task_type')){
             task_type_option.classList.add('selected')
@@ -23,7 +20,7 @@ document.addEventListener('DOMContentLoaded', function(){
     // rule_options[0].classList.add('selected')
 
     rule_options.forEach(rule_option => {
-        rule_option.addEventListener('click', ()=> select_option(rule_option))
+        rule_option.addEventListener('click', ()=> select_rule_option(rule_option))
 
         if (rule_option.getAttribute('rule_index') === selected_options.getAttribute('rule_index')){
             rule_option.classList.add('selected')
@@ -41,10 +38,10 @@ document.addEventListener('DOMContentLoaded', function(){
     })
 
     batch_options = document.querySelectorAll('.batch.indicator:not(.container')
-    batch_options[0].classList.add('selected')
+    // batch_options[0].classList.add('selected')
 
     batch_options.forEach(batch_option => {
-        batch_option.addEventListener('click', ()=> select_option(batch_option))
+        batch_option.addEventListener('click', ()=> select_batch_option(batch_option))
     })
 
     labeler_control = document.getElementById('labeler_id')
@@ -53,10 +50,22 @@ document.addEventListener('DOMContentLoaded', function(){
     add_name_field = document.getElementById('add_a_name_field')
     add_name_field.addEventListener('keydown', add_labeler_name)
 
-    console.log(selected_options.getAttribute('labeler_id'))
     labeler_control.value = selected_options.getAttribute('labeler_id')
 
 })
+
+function select_batch_option(selected_batch_option){
+
+    batch_options = document.querySelectorAll('.batch.indicator:not(.container')
+
+    batch_options.forEach(batch_option => {
+        batch_option.classList.remove('selected')
+    })
+
+    selected_batch_option.classList.add('selected')
+
+}
+
 
 function add_labeler_name(event) {
     
@@ -100,23 +109,57 @@ function toggle_add_a_name_field(labeler_control){
 
 }
 
-function select_option(element){
 
-     options = Array.from(element.parentNode.children)
+function select_task_type_option(task_type_option) {
 
-    options.forEach(option => {
-        option.classList.remove('selected')
+    task_type_controls = document.querySelectorAll('.task_type')
+    batch_control_containers = document.querySelectorAll('.batch_control.container')
+
+    task_type_controls.forEach(task_type_control => {
+
+        task_type_control.classList.remove('selected')
+
+        if (task_type_control.getAttribute('task_type') == task_type_option.getAttribute('task_type')){
+            task_type_control.classList.add('selected')
+        }
     })
 
-    element.classList.add('selected')
+    batch_control_containers.forEach(batch_container => {
 
-    //show batch indicator container based on rule selected
-    if (element.classList.contains('rule_option')) {
-        show_batch_indicator_container(element.getAttribute('rule_index'))
-    }
+        batch_container.style.display = 'none'
+
+        if (batch_container.getAttribute('task_type') == task_type_option.getAttribute('task_type')){
+            batch_container.style.display = 'block'
+        }
+
+    })
+
+}
+
+function select_rule_option(rule_option){
+
+    batch_option_containers = document.querySelectorAll('.batch.indicator.container')
+    rule_option_controls = document.querySelectorAll('.rule_option')
+
+    rule_option_controls.forEach(rule_control => {
+        rule_control.classList.remove('selected')
+    })
+
+    rule_option.classList.add('selected')
+
+    batch_option_containers.forEach(batch_container => {
+
+        batch_container.style.display = 'none'
+
+        if (batch_container.getAttribute('rule_index') == rule_option.getAttribute('rule_index')) {
+            batch_container.style.display = 'flex';
+        }
+
+    })
 
 
 }
+
 
 
 

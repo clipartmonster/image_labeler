@@ -202,6 +202,8 @@ def mturk_redirect(request):
         }
 
     response = requests.get(api_url, json = data, headers = header)
+    print('----------vNv----------')
+    print(response.content)
     assets_to_label = json.loads(response.content)['asset_batch']
 
 
@@ -218,7 +220,8 @@ def mturk_redirect(request):
 
     response = requests.get(api_url, json = data, headers = header)
     labelling_rules = dict(json.loads(response.content))['labelling_rules']
-
+    print('---------vvvv-----------')
+    print(labelling_rules)
 
     collection_data = {
         "task_type":task_type,
@@ -260,6 +263,7 @@ def mturk_redirect(request):
                                                   'labeler_source':labeler_source, 
                                                   'assignment_id':assignment_id,
                                                   'hit_id':hit_id,
+                                                  'rule_index':rule_index,
                                                   'sandbox_flag':sandbox_flag,
                                                   'test_the_labeler':test_the_labeler,
                                                   'test_questions':test_questions
@@ -344,12 +348,10 @@ def reconcile_labels(request):
     rule_indexes  = json.loads(request.GET.get('rule_indexes', None))
     rule_index = int(rule_indexes[0])
 
-    print('000000000000000000')
-    print(rule_index)
-
     api_url = 'https://backend-python-nupj.onrender.com/get_disputed_assets/'
     
-    data = {'rule_index':rule_index}
+    data = {'rule_index':rule_index,
+            'task_type':task_type}
 
     header = {
         'Content-Type': 'application/json',
@@ -359,6 +361,9 @@ def reconcile_labels(request):
     response = requests.get(api_url, json = data, headers = header)
     assets_to_label = json.loads(response.content)
   
+    print('-----69-69-------')
+    print(assets_to_label)
+
 
     api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
 
@@ -372,7 +377,7 @@ def reconcile_labels(request):
         }
 
     response = requests.get(api_url, json = data, headers = header)
-    labelling_rules = dict(json.loads(response.content))['labeling_rules']
+    labelling_rules = dict(json.loads(response.content))['labelling_rules']
 
     print('----VvV----')
     print(labelling_rules)
