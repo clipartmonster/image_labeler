@@ -12,6 +12,8 @@ urlpatterns = [
     path('view_asset_labels/', views.view_asset_labels, name = 'view_asset_labels'),
     path('reconcile_labels/', views.reconcile_labels, name = 'reconcile_labels'),
     path('view_labels/', views.view_labels, name = 'view_labels'),
+    path('view_batch_labels/', views.view_batch_labels, name = 'view_batch_labels'),
+    path('view_prediction_labels/', views.view_prediction_labels, name = 'view_prediction_labels'),
 
     path('manage_rules/', views.manage_rules, name = 'manage_rules'),
 

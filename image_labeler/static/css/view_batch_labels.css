@@ -1,0 +1,30 @@
+div.asset.container {
+    margin:10px;
+    padding:10px;
+}
+
+div.asset.container.no{
+    background-color: #bd4444
+}
+
+div.asset.container.yes{
+    background-color: #8eb284
+}
+
+h3.title.view_batch{
+    font-family:"Roboto";
+    font-size: 14px;
+    color:#6f7a7a
+}
+
+div.view_button{
+    display:grid;
+    align-items:center;
+    margin:auto;
+    margin-top:10px;
+    border-radius: 50px;
+    height:20px;
+    width:20px;
+    background-color: #93b5b5;
+    justify-content: center;
+}

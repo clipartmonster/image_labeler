@@ -42,3 +42,10 @@ div.option.triple_switch_state.yes.selected{
 div.option.triple_switch_state.no.selected{
     background-color: #bd4444;
 }
+
+
+h2.label_option.view_labels {
+    font-size: 14px;
+    line-height: 1;
+
+}

@@ -30,14 +30,15 @@
             <div class = 'option container view_assets_labels' style = 'display:flex; gap:5px'>
                 {% for rule_option in rule_options%}
                     <div style = 'display:flex; flex-direction: column; gap:4px; align-items:center'>
-                        <div class = 'option button circle rule_index' filter_type = 'rule_index_{{rule_option}}' filter_value = "1">
-                            <h1 class = 'option title'> {{rule_option}} </h1>
+                        <div class = 'option button circle rule_index' filter_type = 'rule_index_{{rule_option.rule_index}}' filter_value = "1">
+                            <h1 class = 'option title'> {{rule_option.rule_index}} </h1>
                         </div>
-                        
-                        <div class = 'triple_switch container' filter_type = 'rule_index_{{rule_option}}'>
-                            <div class = 'option triple_switch_state yes' filter_type = 'rule_index_{{rule_option}}' filter_value = 'yes'></div>
-                            <div class = 'option triple_switch_state off' filter_type = 'rule_index_{{rule_option}}' filter_value = 'off'></div>
-                            <div class = 'option triple_switch_state no'  filter_type = 'rule_index_{{rule_option}}' filter_value = 'no'></div>
+                            <h2 class = 'label_option view_labels'> {{rule_option.title}} </h2>
+
+                        <div class = 'triple_switch container' filter_type = 'rule_index_{{rule_option.rule_index}}'>
+                            <div class = 'option triple_switch_state yes' filter_type = 'rule_index_{{rule_option.rule_index}}' filter_value = 'yes'></div>
+                            <div class = 'option triple_switch_state off' filter_type = 'rule_index_{{rule_option.rule_index}}' filter_value = 'off'></div>
+                            <div class = 'option triple_switch_state no'  filter_type = 'rule_index_{{rule_option.rule_index}}' filter_value = 'no'></div>
                         </div>
 
                     </div>
@@ -51,8 +52,6 @@
 
         {% for asset in labeled_assets %}
 
-
-
                 <div id = container_{{asset.asset_id}} class = 'design dark container asset_view image_box' >
 
                     <div class = 'labeler_data' style = 'display:none' 
@@ -60,6 +59,7 @@
                     rule_index_1 = {{asset.rule_1}}
                     rule_index_2 = {{asset.rule_2}}
                     rule_index_3 = {{asset.rule_3}}
+                    rule_index_4 = {{asset.rule_4}}
                     rule_index_5 = {{asset.rule_5}}
                     rule_index_6 = {{asset.rule_6}}
                     rule_index_7 = {{asset.rule_7}}    

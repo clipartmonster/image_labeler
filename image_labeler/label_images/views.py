@@ -72,7 +72,7 @@ def setup_session(request):
 
     api_url = 'https://backend-python-nupj.onrender.com/get_session_options/'
 
-    data = {"task_type":"asset_type"}
+    data = {}
 
     header = {
         'Content-Type': 'application/json',
@@ -85,11 +85,6 @@ def setup_session(request):
     selected_options = {'labeler_id':labeler_id,
                         'task_type':task_type,
                         'rule_index':rule_index}    
-
-    print('-------0*0-------')
-    print(selected_options)
-    print('-------0*0-------')
-    print(session_options)
    
     return render(request, 'setup_session.html', {'session_options':session_options,
                                                   'selected_options':selected_options})
@@ -405,13 +400,45 @@ def reconcile_labels(request):
                                                   'assignment_id':assignment_id                                                 
                                                   })
 
+def view_batch_labels(request):
 
+    task_type = request.GET.get('task_type', 'asset_type')
+    rule_index = int(request.GET.get('rule_index', 1))
+    batch_index = int(request.GET.get('batch_index', 1))
 
-def view_labels(request):
+    print(task_type,rule_index,batch_index)
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_assets_w_rule_labels/'
+    ###############################
+    #get batches assets
 
-    data = {"samples":10000}
+    api_url = 'https://backend-python-nupj.onrender.com/get_batch_for_viewing/'
+
+    data = {"task_type":task_type,
+            "rule_index":rule_index,
+            "batch_index":batch_index}
+
+    print(data)
+
+    header = {
+    'Content-Type': 'application/json',
+    'Authorization': settings.API_ACCESS_KEY
+    }
+
+    response = requests.get(api_url, json = data, headers = header)
+    batch_of_assets = json.loads(response.content)
+
+    label_counts = pd.DataFrame(batch_of_assets['assets_w_labels']) \
+    .groupby('label') \
+    .agg(count = ('asset_id','count')) \
+    .reset_index() \
+    .to_dict(orient = 'records')
+
+    
+
+    ###############################
+    #get labelling rules
+    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
+
     data = {}
 
     header = {
@@ -420,20 +447,67 @@ def view_labels(request):
         }
 
     response = requests.get(api_url, json = data, headers = header)
-    
-    labeled_assets = json.loads(response.content)
-  
-    rule_options = pd.DataFrame(labeled_assets) \
-    .query('rule_index != 4')['rule_index'] \
+    labelling_rules = dict(json.loads(response.content))
+
+    rule_entry = pd.DataFrame(labelling_rules['labelling_rules']) \
+    .query("task_type == @task_type") \
+    .query("rule_index == @rule_index") \
+    .to_dict(orient = 'records')
+
+    print('------------')
+    print(rule_entry)
+
+    ##########################
+
+    total_assets = len(batch_of_assets['assets_w_labels'])
+
+    data = {"rule_entry":rule_entry[0],
+            "label_counts":label_counts,
+            "total_assets": total_assets,
+            "batch_of_assets":batch_of_assets['assets_w_labels']}
+
+    return render(request, 'view_batch_labels.html', data)
+
+
+
+def view_labels(request):
+
+    task_type = request.GET.get('task_type', 'asset_type')
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_assets_w_rule_labels/'
+
+    data = {"samples":60000,
+            "task_type":'asset_type'}
+    # data = {}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+
+    response = requests.get(api_url, json = data, headers = header)
+
+    labeled_assets = pd.DataFrame(json.loads(response.content))
+
+    print('-----------')
+    print(labeled_assets)
+
+    task_types = pd.DataFrame(labeled_assets) \
+    ['task_type'] \
     .drop_duplicates() \
     .sort_values()
-   
+
+    rule_options = pd.DataFrame(labeled_assets) \
+    .filter(['rule_index']) \
+    .drop_duplicates() \
+    .sort_values(['rule_index']) \
+    .reset_index(drop = True)
+
     asset_links = pd.DataFrame(labeled_assets) \
     .filter(['asset_id', 'asset_link']) \
     .drop_duplicates() \
 
     labeled_assets = pd.DataFrame(labeled_assets) \
-    .query('rule_index != 4') \
     .assign(label = lambda x: x['label'].astype(int)) \
     .assign(rule_index = lambda x: 'rule_' + x['rule_index'].astype(str)) \
     .filter(['asset_id', 'rule_index', 'label']) \
@@ -442,6 +516,34 @@ def view_labels(request):
     .dropna() \
     .astype('Int8', errors = 'ignore') \
     .to_dict(orient = 'records')
+
+    print('-----------')
+    print(labeled_assets)
+
+    #######################
+    #get labelling rule title
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
+
+    data = {}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+
+    response = requests.get(api_url, json = data, headers = header)
+    labelling_rules = dict(json.loads(response.content))
+
+    temp = pd.DataFrame(labelling_rules['labelling_rules']) \
+    .query('task_type == @task_type') \
+    .filter(['rule_index','title']) 
+
+    rule_options = rule_options \
+    .merge(temp, on = 'rule_index', how = 'left') \
+    .to_dict(orient = 'records')
+
+    print(rule_options)
 
     data = {"rule_options":rule_options,
             "labeled_assets":labeled_assets,
@@ -470,3 +572,74 @@ def manage_rules(request):
             "rule_table":rule_table}
     
     return render(request, 'manage_rules.html', data)
+
+
+
+
+
+def view_prediction_labels(request):
+
+    task_type = request.GET.get('task_type', 'asset_type')
+    rule_index = request.GET.get('rule_index', 3)
+
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
+
+    data = {}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+
+    response = requests.get(api_url, json = data, headers = header)
+
+    labelling_rules = pd.DataFrame(dict(json.loads(response.content))['labelling_rules'])
+    labelling_rules = labelling_rules \
+    .query('task_type == @task_type') \
+    .query('rule_index == @rule_index') 
+
+    print('00000000000000')
+    print(labelling_rules)
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_predictions/'
+
+    data = {"rule_index":rule_index,
+            "task_type":task_type}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+
+    response = requests.get(api_url, json = data, headers = header)
+    prediction_data = pd.DataFrame(dict(json.loads(response.content))['prediction_data'])
+
+    print(prediction_data)
+    print(prediction_data.columns)
+
+    from sklearn.metrics import confusion_matrix
+    confusion_matrix = confusion_matrix(prediction_data['label'],prediction_data['predicted_label'])
+    print(confusion_matrix)
+
+    TN, FP, FN, TP = confusion_matrix.ravel()
+    precision = TP / (TP + FP) if (TP + FP) > 0 else 0
+    recall = TP / (TP + FN) if (TP + FN) > 0 else 0
+
+    print('precision: ' +  str(precision))
+    print('recall: ' +  str(recall))
+
+    prediction_data = prediction_data \
+    .query('predicted_label == 0') \
+    .query('label_match == 0') \
+    .sort_values('probability', ascending=False)
+
+    print(len(prediction_data))
+
+
+    data = {'prediction_data':prediction_data.to_dict(orient = 'records'),
+            'task_type':task_type,
+            'rule_index':rule_index,
+            'label_title':labelling_rules['title'].values[0]}
+    
+    return render(request, 'view_prediction_labels.html', data)

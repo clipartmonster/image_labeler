@@ -44,6 +44,17 @@ document.addEventListener('DOMContentLoaded', function(){
         batch_option.addEventListener('click', ()=> select_batch_option(batch_option))
     })
 
+    /////////////////////
+    view_buttons = document.querySelectorAll('.view_button')
+
+    console.log(view_buttons)
+
+    view_buttons.forEach(view_button => {
+        view_button.addEventListener('click', ()=> go_to_view_page(view_button))
+    })
+
+
+
     labeler_control = document.getElementById('labeler_id')
     labeler_control.addEventListener('click', ()=> toggle_add_a_name_field(labeler_control))
 
@@ -53,6 +64,45 @@ document.addEventListener('DOMContentLoaded', function(){
     labeler_control.value = selected_options.getAttribute('labeler_id')
 
 })
+
+function go_to_view_page(view_button){
+
+    batch_index = view_button
+    .closest('.batch.indicator.container')
+    .children[0]
+    .getAttribute('batch_index')
+    
+    selected_options = document.querySelectorAll('.selected')
+    console.log(selected_options)
+    
+    selected_options.forEach(selected_option => {
+
+        console.log(selected_option)
+
+        selected_option.classList.forEach(selected_option_class => {
+
+            if (selected_option_class == 'task_type') {
+                task_type = selected_option.children[0].textContent
+            } else if (selected_option_class == 'rule_option') {
+                rule_index = selected_option.getAttribute('rule_index')               
+            }
+        })
+
+
+    })
+
+    console.log(task_type, rule_index, batch_index)
+
+     href = window.location.origin  
+     + '/label_images/view_batch_labels/?task_type='+task_type
+     + '&rule_index=' + rule_index
+     + '&batch_index=' + batch_index
+    
+     window.location.href = href;
+    
+
+
+}
 
 function select_batch_option(selected_batch_option){
 

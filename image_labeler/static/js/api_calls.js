@@ -360,3 +360,22 @@ function api_update_submission_status(assignment_id) {
 
 }
 
+function api_collect_label_issue(data){
+
+    api_url = 'https://backend-python-nupj.onrender.com/collect_label_issue/'
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    return fetch(api_url, {
+        method:'POST',
+        headers : headers,
+        mode:'cors',
+        body: JSON.stringify(data)})
+        .then(response => { return response.json() })
+        .then(data => { return console.log(data) })
+
+}
+
