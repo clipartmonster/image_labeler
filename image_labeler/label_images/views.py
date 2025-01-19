@@ -182,12 +182,16 @@ def mturk_redirect(request):
     if labeler_source == 'MTurk':
         labeler_id = worker_id 
 
+
+    print('-----------varaibles-----------')
+    print(batch_index, task_type, rule_index,labeler_id)
+
+ 
+
     api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
     
     data = {'batch_type':'large_sub_batch',
             'batch_index':batch_index,
-            'labeler_id':labeler_id,
-            'lure_samples':0,
             'task_type':task_type,
             'rule_index':rule_index}
 
@@ -197,9 +201,12 @@ def mturk_redirect(request):
         }
 
     response = requests.get(api_url, json = data, headers = header)
-    print('----------vNv----------')
-    print(response.content)
+    print('|-------response.content----------|')
+    print(json.loads(response.content))
     assets_to_label = json.loads(response.content)['asset_batch']
+
+    print('|-------assets to label----------|')
+    print(pd.DataFrame(assets_to_label))
 
 
     api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
@@ -215,8 +222,6 @@ def mturk_redirect(request):
 
     response = requests.get(api_url, json = data, headers = header)
     labelling_rules = dict(json.loads(response.content))['labelling_rules']
-    print('---------vvvv-----------')
-    print(labelling_rules)
 
     collection_data = {
         "task_type":task_type,
@@ -599,9 +604,6 @@ def view_prediction_labels(request):
     .query('task_type == @task_type') \
     .query('rule_index == @rule_index') 
 
-    print('00000000000000')
-    print(labelling_rules)
-
     api_url = 'https://backend-python-nupj.onrender.com/get_predictions/'
 
     data = {"rule_index":rule_index,
@@ -615,27 +617,9 @@ def view_prediction_labels(request):
     response = requests.get(api_url, json = data, headers = header)
     prediction_data = pd.DataFrame(dict(json.loads(response.content))['prediction_data'])
 
-    print(prediction_data)
-    print(prediction_data.columns)
-
-    from sklearn.metrics import confusion_matrix
-    confusion_matrix = confusion_matrix(prediction_data['label'],prediction_data['predicted_label'])
-    print(confusion_matrix)
-
-    TN, FP, FN, TP = confusion_matrix.ravel()
-    precision = TP / (TP + FP) if (TP + FP) > 0 else 0
-    recall = TP / (TP + FN) if (TP + FN) > 0 else 0
-
-    print('precision: ' +  str(precision))
-    print('recall: ' +  str(recall))
-
     prediction_data = prediction_data \
-    .query('predicted_label == 0') \
-    .query('label_match == 0') \
+    .query('predicted_label == "no"') \
     .sort_values('probability', ascending=False)
-
-    print(len(prediction_data))
-
 
     data = {'prediction_data':prediction_data.to_dict(orient = 'records'),
             'task_type':task_type,
@@ -643,3 +627,57 @@ def view_prediction_labels(request):
             'label_title':labelling_rules['title'].values[0]}
     
     return render(request, 'view_prediction_labels.html', data)
+
+
+
+def view_asset(request):
+
+    asset_id = request.GET.get('asset_id', 'none')
+
+    
+    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
+
+    data = {}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+
+    response = requests.get(api_url, json = data, headers = header)
+    labelling_rules = dict(json.loads(response.content))['labelling_rules']
+
+
+    task_types = pd.DataFrame(labelling_rules) \
+    .filter(['task_type']) \
+    .drop_duplicates() \
+    .squeeze() \
+    .tolist()
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_asset_labels/'
+
+    data = {"asset_id":asset_id}
+
+    header = {
+    'Content-Type': 'application/json',
+    'Authorization': settings.API_ACCESS_KEY
+    }
+
+    response = requests.get(api_url, json = data, headers = header)
+    asset_labels = json.loads(response.content)
+
+    print(asset_labels)
+    # print(asset_labels['asset_data'])
+
+    print('-----------------s--------------------')
+    print(asset_labels['rule_labels'])
+
+
+    data = {"task_types":task_types,
+            "labelling_rules":labelling_rules,
+            "asset_metadata":asset_labels['asset_metadata'][0],
+            "asset":asset_labels['asset_data'][0],
+            "prompt_responses":asset_labels['prompt_responses'],
+            "labels":asset_labels['rule_labels']}
+
+    return render(request, 'view_asset.html', data)

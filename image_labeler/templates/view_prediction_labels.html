@@ -21,19 +21,24 @@
                 
                 <div style = 'display:flex; width:100%'>
                     <h2 class = 'label_option label'> {{asset.asset_id}}</h2>
-                    <img class = 'flag_issue {{asset.label_issue}}' style = 'margin-left:auto' src = "{% static 'images/flag_icon.png' %}">
+    
+                    <div style = 'display:flex; margin-left:auto'>
+                        <img class = 'info' style = 'margin-left:auto' src = "{% static 'images/info_icon.png' %}">
+                        <img class = 'flag_issue {{asset.label_issue}}' style = 'margin-left:auto' src = "{% static 'images/flag_icon.png' %}">
+                    </div>
+    
                 </div>
                 
                 <h2 class = 'label_option label'>  {{label_title}} </h2>
                     
                 <div style = 'display:flex; gap:5px; margin:5px'>
 
-                    <div class = 'response  {% if asset.label == 0 %} no {% else %} yes {% endif %}'>
-                        <h2 class = 'label_option label'>{% if asset.label == 0 %} no {% else %} yes {% endif %}</h2>
+                    <div class = 'response {{asset.label}}'>
+                        <h2 class = 'label_option label'> {{asset.label}} </h2>
                     </div>
 
-                    <div class = 'response  {% if asset.predicted_label == 0 %} no {% else %} yes {% endif %}'>
-                        <h2 class = 'label_option label'>{% if asset.predicted_label == 0 %} no {% else %} yes {% endif %}</h2>
+                    <div class = 'response {{asset.predicted_label}}'>
+                        <h2 class = 'label_option label'> {{asset.predicted_label}} </h2>
                     </div>
                         
                     <h2 class = 'label_option label'>{{asset.probability}}</h2>

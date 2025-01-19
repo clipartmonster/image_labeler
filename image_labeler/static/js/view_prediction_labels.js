@@ -7,7 +7,29 @@ if (window.location.pathname === '/label_images/view_prediction_labels/')
             button.addEventListener('click', ()=> collect_label_issue(button))
         })
 
+        info_buttons = document.querySelectorAll('.info')
+
+        info_buttons.forEach(button => {
+            button.addEventListener('click', ()=> view_asset_page(button))
+        })
+
+
 })
+
+
+function view_asset_page(button){
+
+    asset_id = button.closest('.image_box').getAttribute('asset_id')
+
+    href = window.location.origin  
+    + '/label_images/view_asset/?asset_id='+ asset_id
+   
+    window.location.href = href;
+
+
+}
+
+
 
 
 function collect_label_issue(button){

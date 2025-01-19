@@ -1,0 +1,123 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
+
+        <div style = 'display:flex; flex-direction: column;'>
+
+
+                <img class="view_asset" src="{{ asset.image_link }}" crossOrigin="anonymous" >
+   
+            <div class = 'label container view_asset'>
+
+                <div style = 'display:flex; gap:10px'>
+
+                    <div style = 'display:flex; gap:5px; align-items: center;'>
+                        <a href="{{ asset_metadata.page_link }}">
+                            <img src="{% static 'images/link_icon.png' %}" alt="Link Icon">
+                        </a>
+                        <h2 class = 'field_title view_asset'>asset type: </h2>
+                        <h2 class = 'field_text view_asset'> {{asset.asset_type}}</h2>
+                    </div>
+
+                    <div style = 'display:flex; gap:5px; justify-self:end; align-items: center;'>
+                        <h2 class = 'field_title view_asset'>color type: </h2>
+                        <h2 class = 'field_text view_asset'> {{asset.color_type}}</h2>
+                    </div>
+                
+                </div>
+
+                <h1 class = 'title view_asset'>{{asset_metadata.page_title}}</h1>
+                <h3 class = 'tag view_asset'>{{asset_metadata.tags}}</h3>
+                
+                <div class = 'table container' style = 'display:flex; flex-direction: row; gap:10px'>
+
+                    {% for task_type in task_types %}
+
+                        <div id = 'table_{{task_type}}' class = 'table view_asset'>
+
+                            <h2 class = 'field_text view_asset'>{{task_type}}</h2>
+
+                            <div class = 'row table view_asset header'>
+                                <div></div>
+                                <div></div>
+                                <div style = 'display:flex; gap:5px'>
+                                    <h4 class = 'text table view_asset'>Manual</h4>
+                                    <h4 class = 'text table view_asset'>Model</h4>
+                                </div>
+
+                                <div style = 'display:flex; gap:5px;'>
+                                    <h4 class = 'text table view_asset'>No Count</h4>
+                                    <h4 class = 'text table view_asset'>Yes Count</h4>
+                                </div>
+
+
+                            </div>
+
+
+                            {% for rule in labelling_rules %}
+
+                                {% if rule.task_type == task_type %}
+
+                                <div class = 'row table view_asset'>
+
+                                    <div class = 'frame circle table'>
+                                        <h4 class = 'text table view_asset'>{{rule.rule_index}}</h4>
+                                    </div>
+                                    <h3 class = 'text table view_asset'>{{rule.title}}</h3>
+
+                                    {% for label in labels %}
+                                        {% if label.task_type == task_type and label.rule_index == rule.rule_index %}
+                                            <div class = 'temp container'>
+                                                <div class = 'response {{label.label}}' style ='display:grid; align-items:center' > 
+                                                    <h4 class = 'text table view_asset'>{{label.label}}</h4> 
+                                                </div>
+                                                    
+                                                <div class = 'response {{label.model_label}}' style ='display:grid; align-items:center' > 
+                                                    <h4 class = 'text table view_asset'>{{label.model_label}}</h4> 
+                                                </div>
+                                            </div>
+
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {% for prompt in prompt_responses %}
+
+                                        {% if prompt.task_type == task_type and prompt.rule_index == rule.rule_index %}
+
+                                        <div class = 'temp container'>
+                                            <div class = 'response no' style ='display:grid; align-items:center' >  
+                                                <h4 class = 'text table view_asset'>{{prompt.no}}</h4> 
+                                            </div>
+                                            
+                                            <div class = 'response yes' style ='display:grid; align-items:center' > 
+                                                <h4 class = 'text table view_asset'>{{prompt.yes}}</h4> 
+                                            </div>
+                                        </div>    
+
+                                        {% endif %}
+
+
+                                    {% endfor %}
+
+                                </div>
+
+                                {% endif %}
+                            
+                            {% endfor %}
+                            
+                        </div>
+                    {% endfor %}
+
+                </div>
+
+            </div>
+
+
+        </div>
+
+    </div>
+
+{% endblock %}

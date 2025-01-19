@@ -1,0 +1,109 @@
+div.label.container.view_asset{
+    margin:20px;
+    background-color: #a9b9b9;
+    padding:10px;
+    border-radius:10px;
+    border:solid 2px #d2e2e2
+}
+
+div.table.view_asset{
+    width:100%
+}
+
+
+h1.title.view_asset{
+    font-family: Roboto;
+    font-size:26px;
+    color:White;
+}
+
+h3.tag.view_asset{
+    font-family: Roboto;
+    font-size:14px;
+    color:#708d8d;
+}
+
+img.view_asset{
+    align-self:center;
+    width:500px;
+    border-radius:10px;
+}
+
+h2.field_title.view_asset{
+    font-family: Roboto;
+    font-size:18px;
+    color:#799494;   
+    line-height:0px;  
+}
+
+h2.field_text.view_asset{
+    font-family: Roboto;
+    font-size:20px;
+    color:white;   
+    line-height:0px;  
+}
+
+h4.text.table.view_asset{
+    font-family:Roboto;
+    font-size:20px;
+    color:white;
+    line-height:1;
+    font-size:14px;
+    margin:auto;
+    text-align: center;
+}
+
+h3.text.table.view_asset{
+    font-family:Roboto;
+    font-size:20px;
+    color:#799494;
+    font-size:14px;
+    font-weight:400;
+    line-height: .15;
+}
+
+
+div.frame.circle.table{
+    width:25px;
+    height:25px;
+    border-radius:100%;
+    background-color:#799494;
+    display:grid;
+    align-items: center;
+    justify-items:center;   
+}
+
+div.table.view_asset{
+    padding:10px;
+    background-color: #799494;
+    border-radius: 10px;;
+}
+
+div.row.table.view_asset{
+    display:grid;
+    grid-template-columns: 30px 200px 100px 100px ;
+    gap:5px;
+    align-items: center;
+    margin-bottom:2px;
+    padding:2px;
+    background-color: #c3d6d6;
+}
+
+div.table.container{
+    display:flex;
+    flex-direction:row;
+    gap:10px;
+
+
+}
+
+
+div.temp.container{
+    display:flex;
+    gap:5px;
+    padding:5px;
+    border: solid 2px #d8e5e5;
+    background-color: #abcccc;
+}
+
+

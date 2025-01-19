@@ -570,3 +570,45 @@ function check_responses(prompts) {
 
     return result
 }
+
+
+function flag_asset_issue(event){
+
+    button = event.target
+
+    collection_data = button
+    .closest('.listing.light.container')
+    .querySelector('.collection_data')
+
+    rule_validator = button
+    .closest('.listing.light.container')
+    .querySelector('.label_option.rule_validator')
+
+    console.log(collection_data)
+    console.log(rule_validator)
+
+    button.style.opacity = .25
+
+    data = {asset_id:collection_data.getAttribute('asset_id'), 
+            task_type:collection_data.getAttribute('task_type'),
+            rule_index:rule_validator.getAttribute('rule_index')
+            }
+
+
+    api_collect_label_issue(data)
+
+
+    const key_event = new KeyboardEvent('keydown', {
+        key: '2',        // Key value
+        code: 'Digit2',  // Physical key on the keyboard
+        keyCode: 50,     // Deprecated but still used in some environments
+        charCode: 50,    // Deprecated but occasionally useful
+        which: 50,       // Deprecated but some older systems use it
+        bubbles: true,   // Ensures the event bubbles up
+        cancelable: true // Allows the event to be canceled
+    });
+
+    document.dispatchEvent(key_event);
+
+
+}
