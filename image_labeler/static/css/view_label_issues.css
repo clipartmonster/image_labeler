@@ -1,0 +1,37 @@
+div.label_field{
+    border-radius: 5px;
+    padding:2px;
+    justify-items:center;
+}
+
+div.label_field.header{
+    background-color: #98aeae;
+}
+
+div.label_field.official{
+    background-color: #ffd900;
+}
+
+div.label_field.model{
+    background-color: rgb(145, 189, 204);
+}
+
+div.label_field.manual{
+    background-color: rgb(145, 204, 176);
+}
+
+
+h2.label_field.label{
+    font-family: Roboto;
+    font-weight: 600;
+    font-size:14px;
+    line-height: 0px;
+}
+
+h2.label_field.label.header{
+    font-family: Roboto;
+    font-weight: 600;
+    font-size:14px;
+    line-height: 0px;
+    color:#717979
+}

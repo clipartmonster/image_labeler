@@ -1,6 +1,9 @@
 div.asset.container {
+    display:flex;
+    flex-wrap: wrap;
     margin:10px;
     padding:10px;
+
 }
 
 div.asset.container.no{

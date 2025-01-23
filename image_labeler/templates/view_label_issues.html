@@ -1,0 +1,90 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+<div style = 'display:flex; flex-direction: row;'>
+
+    <div class = 'listing light container side_panel'>
+
+        <h1 class = 'label_option intro'>Image Size</h1>
+
+        <div class = 'option container' style = 'display:flex; gap: 15px'>
+
+            <div class = 'option button circle image_size selected' size = 'small'>  <h1 class = 'option title'> S </h1></div>
+            <div class = 'option button circle image_size' size = 'medium'>   <h1 class = 'option title'> M </h1></div>
+            <div class = 'option button circle image_size' size = 'large'>  <h1 class = 'option title'> L </h1></div>
+            <div class = 'option button circle image_size' size = 'extra_large'>  <h1 class = 'option title'> XL </h1></div>
+
+        </div>
+    </div>
+
+    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
+     
+        {% for asset in assets %}
+
+            <div id = container_{{asset.asset_id}} class = 'design dark container asset_view image_box' 
+            asset_id = {{asset.asset_id}}
+            >
+                
+                <div style = 'display:flex; width:100%;'>
+                    <h2 class = 'label_option label'> {{asset.asset_id}}</h2>
+    
+                    <div style = 'display:flex; margin-left:auto'>
+                        <img class = 'info' style = 'margin-left:auto' src = "{% static 'images/info_icon.png' %}">
+                        <img class = 'flag_issue {{asset.label_issue}}' style = 'margin-left:auto' src = "{% static 'images/flag_icon.png' %}">
+                    </div>
+    
+                </div>
+                
+                <h2 class = 'label_field label asset_type header'> issuse status: {{asset.issue_status}} </h2>
+                                   
+                <div style = 'display:flex; flex-direction: column; gap:5px; margin:10px;'>
+                    
+                    <div style = 'display:grid; grid-template-columns: 1fr 1fr 1fr; gap:3px'>
+                        <div class = 'label_field asset_type header'>
+                            <h2 class = 'label_field label asset_type header'> official </h2>
+                        </div>
+
+                        <div class = 'label_field asset_type header'>
+                            <h2 class = 'label_field label asset_type header'> manual </h2>
+                        </div>
+
+                        <div class = 'label_field asset_type header'>
+                            <h2 class = 'label_field label asset_type header'> model </h2>
+                        </div>
+                    </div>
+
+                    <div style = 'display:grid; grid-template-columns: 1fr 1fr 1fr; gap:3px'>
+                        <div class = 'label_field asset_type official'>
+                            <h2 class = 'label_field label asset_type'> {{asset.asset_type}} </h2>
+                        </div>
+
+                        <div class = 'label_field asset_type manual'>
+                            <h2 class = 'label_field label asset_type'> {{asset.manual_asset_type}} </h2>
+                        </div>
+
+                        <div class = 'label_field asset_type model'>
+                            <h2 class = 'label_field label asset_type'> {{asset.model_asset_type}} </h2>
+                        </div>
+                    </div>
+
+                        
+                    <h2 class = 'label_option label'>{{asset.probability}}</h2>
+
+                </div>
+
+                <img id = "image_{{asset.asset_id}}" class="design view_asset_labels large" src="{{ asset.image_link }}" crossOrigin="anonymous" >
+            
+                
+
+            </div>
+
+        {% endfor %}
+
+    </div>
+
+</div>
+
+
+{% endblock%}

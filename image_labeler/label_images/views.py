@@ -82,6 +82,8 @@ def setup_session(request):
     response = requests.get(api_url, json = data, headers = header)
     session_options = json.loads(response.content)
 
+    print(session_options)
+
     selected_options = {'labeler_id':labeler_id,
                         'task_type':task_type,
                         'rule_index':rule_index}    
@@ -432,13 +434,14 @@ def view_batch_labels(request):
     response = requests.get(api_url, json = data, headers = header)
     batch_of_assets = json.loads(response.content)
 
-    label_counts = pd.DataFrame(batch_of_assets['assets_w_labels']) \
+    batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
+    .query('color_type == "multi-color"')
+
+    label_counts = batch_of_assets \
     .groupby('label') \
     .agg(count = ('asset_id','count')) \
     .reset_index() \
     .to_dict(orient = 'records')
-
-    
 
     ###############################
     #get labelling rules
@@ -464,12 +467,12 @@ def view_batch_labels(request):
 
     ##########################
 
-    total_assets = len(batch_of_assets['assets_w_labels'])
+    total_assets = len(batch_of_assets)
 
     data = {"rule_entry":rule_entry[0],
             "label_counts":label_counts,
             "total_assets": total_assets,
-            "batch_of_assets":batch_of_assets['assets_w_labels']}
+            "batch_of_assets":batch_of_assets.to_dict(orient = 'records')}
 
     return render(request, 'view_batch_labels.html', data)
 
@@ -477,7 +480,7 @@ def view_batch_labels(request):
 
 def view_labels(request):
 
-    task_type = request.GET.get('task_type', 'asset_type')
+    task_type = request.GET.get('task_type', 'clip_art_type')
 
     api_url = 'https://backend-python-nupj.onrender.com/get_assets_w_rule_labels/'
 
@@ -681,3 +684,26 @@ def view_asset(request):
             "labels":asset_labels['rule_labels']}
 
     return render(request, 'view_asset.html', data)
+
+
+
+def view_label_issues(request):
+
+    
+    api_url = 'https://backend-python-nupj.onrender.com/get_assets_w_label_issues/'
+
+    data = {}
+
+    header = {
+    'Content-Type': 'application/json',
+    'Authorization': settings.API_ACCESS_KEY
+    }
+
+    response = requests.get(api_url, json = data, headers = header)
+    assets_w_label_issues = json.loads(response.content)['issue_table']
+
+    print(assets_w_label_issues)
+
+    data = {'assets':assets_w_label_issues}
+
+    return render(request, 'view_label_issues.html', data)

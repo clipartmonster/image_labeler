@@ -41,7 +41,15 @@
 
                 {% if asset.label == 'no' %}
 
-                    <div id = container_{{asset.asset_id}} class = 'design dark container asset_view image_box' >
+                    <div id = container_{{asset.asset_id}} class = 'design dark container asset_view image_box'
+                    task_type = {{rule_entry.task_type}},
+                    rule_index = {{rule_entry.rule_index}},
+                    asset_id = {{asset.asset_id}} >
+
+                        <div style = 'display:flex; margin-left:auto'>
+                            <img class = 'info' style = 'margin-left:auto' src = "{% static 'images/info_icon.png' %}">
+                            <img class = 'flag_issue {{asset.label_issue}}' style = 'margin-left:auto' src = "{% static 'images/flag_icon.png' %}">
+                        </div>
 
                         <h2 class = 'label_option label'> {{asset.asset_id}}</h2>
                         <img id = "image_{{asset.asset_id}}" class="design view_asset_labels large" src="{{ asset.image_link }}" crossOrigin="anonymous" >
@@ -62,8 +70,14 @@
 
                     <div id = container_{{asset.asset_id}} class = 'design dark container asset_view image_box' >
 
+                        <div style = 'display:flex; margin-left:auto'>
+                            <img class = 'info' style = 'margin-left:auto' src = "{% static 'images/info_icon.png' %}">
+                            <img class = 'flag_issue {{asset.label_issue}}' style = 'margin-left:auto' src = "{% static 'images/flag_icon.png' %}">
+                        </div>
+
                         <h2 class = 'label_option label'> {{asset.asset_id}}</h2>
                         <img id = "image_{{asset.asset_id}}" class="design view_asset_labels large" src="{{ asset.image_link }}" crossOrigin="anonymous" >
+                        <h2 class = 'label_option label'> {{asset.agree_status}}</h2>
                     </div>
 
                 {% endif %}

@@ -5,18 +5,18 @@ img.design.view_asset_labels.small{
 }
 
 img.design.view_asset_labels.medium{
-    width:150px;
-    max-height:150px
+    width:175px;
+    max-height:175px
 }
 
 img.design.view_asset_labels.large{
-    width:225px;
-    max-height:225px
+    width:275px;
+    max-height:275px
 }
 
 img.design.view_asset_labels.extra_large{
-    width:300px;
-    max-height:300px
+    width:400px;
+    max-height:400px
 }
 
 
