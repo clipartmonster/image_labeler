@@ -163,15 +163,6 @@ document.addEventListener('keydown', function(event) {
 
 })
 
-//activeate first listing after content loadsa
-// document.addEventListener('DOMContentLoaded', function(){
-
-//     first_listing_container = document.getElementById('listing_container_0')
-
-//     activate_listing_container(first_listing_container)
-
-// })
-
 
 function select_element(elements) {
     let selectedElement = null;
@@ -205,8 +196,16 @@ function select_element(elements) {
 
 function activate_listing_container(listing_container) {
 
-    listing_container.className = 'listing light container active'
+    if (window.matchMedia('(max-width: 768px)').matches) {
+        mobile_keyboard = document.querySelector('#mobile_keyboard')
+        mobile_keyboard.style.display = 'flex'
 
+        prompt_container = listing_container.querySelector('.label_option.prompt.container')
+        prompt_container.append(mobile_keyboard)    
+    }
+
+    listing_container.className = 'listing light container active'
+    
     listing_container.querySelector('.label_option.prompt.container.open')
     .className = 'label_option prompt container active'
 
@@ -245,30 +244,6 @@ function update_prompt(hotkey, element, response) {
     } else {
         close_listing_container(element)
     }
-
-    // if (element.getAttribute('correct_response') === null || element.getAttribute('correct_response') === response){
-    //     console.log('correct or irrevelant')
-
-    //     element.className = 'label_option rule_validator closed'
-
-    //     const open_prompt_count = element
-    //     .closest('.label_option.prompt.container.active')
-    //     .querySelectorAll('[class*="open"], [class*="active"]')
-    //     .length;
-    
-    //     if (open_prompt_count > 0) {    
-    //         element
-    //         .nextElementSibling
-    //         .className = 'label_option rule_validator active'
-    //     } else {
-    //         close_listing_container(element)
-    //     }
-
-    // } else {
-    //     console.log('incorrect')
-    // }
-
-
 
 }
 
@@ -612,3 +587,27 @@ function flag_asset_issue(event){
 
 
 }
+
+document.addEventListener('DOMContentLoaded', function(){
+   
+    mobile_buttons = document.querySelectorAll('div.button.mobile_keyboard')
+
+    mobile_buttons.forEach(button => {
+        button.addEventListener('click', function(){
+
+            console.log('hello')
+
+            const keyStroke = button.getAttribute('key_stroke');
+
+            const key_event = new KeyboardEvent('keydown', {
+                key: keyStroke,  // Use the retrieved key stroke
+                bubbles: true,   // Ensures the event bubbles up
+                cancelable: true // Allows the event to be canceled
+            });
+        
+            document.dispatchEvent(key_event); 
+
+        } )
+    })
+
+})

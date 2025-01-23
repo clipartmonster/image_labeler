@@ -3,6 +3,21 @@
 
     {% block content %}
 
+        <div id = 'mobile_keyboard' class = 'listing light container mobile_keyboard'>
+
+            <div style = 'display:flex; gap: 35px;'>
+                <div class = 'button mobile_keyboard' key_stroke = 1>
+                    <h1 class = 'button text mobile_keyboard' example>1</h1>
+                </div>
+
+                <div class = 'button mobile_keyboard' key_stroke = 2>
+                    <h1 class = 'button text mobile_keyboard' example>2</h1>
+                </div>
+            </div>
+
+        </div>
+
+
         {% if task_type == 'art_type' and labeler_source == 'reconcile_label' %}
               {% include 'reconcile_labels.html' %}
          {% else %}
