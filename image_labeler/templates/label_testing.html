@@ -1,0 +1,156 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+
+<div style = 'display:flex; flex-direction: row;'>
+
+    <div class = 'listing light container side_panel'>
+           
+    </div>
+
+    <div class = 'listing light container'  >
+     
+       <div class = 'experiments container' style = 'display:flex; gap:20px'>
+
+        {% for experiment in experiments %}
+
+                <div class = 'dark container experiment'>
+
+                    <h3 class = 'title view_batch' >Experiment {{experiment.id}}</h3>
+
+                    <div style = 'display:grid; grid-template-columns: 1fr 1fr 1fr'>
+                        <h1 class = 'field_label label_testing'>acc: {{experiment.accuracy}}</h1>
+                        <h1 class = 'field_label label_testing'>fp: {{experiment.false_positive}}</h1>
+                        <h1 class = 'field_label label_testing'>fn: {{experiment.false_negative}}</h1>
+                    </div> 
+
+
+                    <div class = 'batch control container'>
+
+                        <div class = 'control panel'>
+                            <div class = 'option button circle' >
+                                <h1 class = 'option title'>{{experiment.batch_id}}</h1>
+                            </div>
+
+                            <h1 class = 'label_option intro'>batch</h1>
+                            
+                        </div>
+
+
+
+                    </div>
+
+                    <div class = 'directive control container' style = 'background-color:#a9b9b9'>
+
+                        <div class = 'control panel'>
+                            <div class = 'option button circle' >
+                                <h1 class = 'option title'>{{experiment.directive_id}}</h1>
+                            </div>
+
+                            <h1 class = 'label_option intro'>directives</h1>
+                            
+                        </div>
+
+                    </div>
+
+
+                </div>
+
+            {% endfor %}
+            
+            <div class = 'dark container experiment' style = 'display:flex;'>
+                <img class = 'image icon' style ='max-height:50px; align-self:center' src='/static/images/manage_rules/add_icon.png'>
+            </div>
+
+
+    </div>
+
+    </div>
+
+
+
+</div>
+
+<div class = 'listing light container footer'>
+        
+        {% for experiment in experiments %}
+
+        <h1 class = 'label_option intro'>Experiment {{experiment.id}}</h1>
+        <div class = 'experiment elements container'>
+
+            <div class = 'label_testing container images' >
+
+                <h1 class = 'label_option intro'>Images</h1>
+
+                <div class = 'label_testing image container'>
+    
+                    <div style = 'display:grid; grid-template-columns: 1fr 1fr;'>
+                        <div>
+                            <h1 class = 'field_label label_testing' style = 'line-height: .40; font-weight:700'>Yes</h1>
+                            <h1 class = 'field_label label_testing' style = 'line-height: .40'>{{experiment.batches.yes_count}} images</h1>
+                        </div>
+                        <img class = 'image icon' src='/static/images/manage_rules/edit_icon.png'>
+                    </div>
+
+                    <div style = 'display:flex; flex-wrap:wrap'>
+                        {% for image in experiment.batches.images %}
+                            {% if image.label == 'yes' %}
+                                <img class="label_testing thumbnail" src="{{ image.image_link }}" crossOrigin="anonymous" >
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class = 'label_testing image container'>
+
+                    <div style = 'display:grid; grid-template-columns: 1fr 1fr;'>
+                        <div>
+                            <h1 class = 'field_label label_testing' style = 'line-height: .40; font-weight:700'>No</h1>
+                            <h1 class = 'field_label label_testing' style = 'line-height: .40'>{{experiment.batches.no_count}} images</h1>
+                        </div>
+                        <img class = 'image icon' src='/static/images/manage_rules/edit_icon.png'>
+                    </div>
+
+                    <div style = 'display:flex; flex-wrap:wrap'>
+                        {% for image in experiment.batches.images %}
+                            {% if image.label == 'no' %}
+                                <img class="label_testing thumbnail" src="{{ image.image_link }}" crossOrigin="anonymous" >
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+
+
+            </div>
+
+            <div class = 'label_testing container directives' >
+
+                <h1 class = 'label_option intro'>Directives</h1>
+
+                {% for directive in experiment.directives %}
+                    <div class = 'directive container' style = 'display: grid; grid-template-columns: auto 50px; gap:5px; margin-bottom:10px'>
+                        
+                        <div class = 'field_label container label_testing directive'>
+                            <h1 class = 'field_label label_testing'>
+                                {{directive.directive}}
+                            </h1>
+                        </div>
+
+                        <div>
+                            <img class = 'image icon' src='/static/images/manage_rules/edit_icon.png'>
+                            <img class = 'image icon' src='/static/images/manage_rules/remove_icon.png'>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+        </div>
+        
+        {% endfor %}
+
+
+</div>
+
+
+{% endblock %}

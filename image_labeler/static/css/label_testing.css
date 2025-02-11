@@ -1,0 +1,85 @@
+div.experiment.container{
+    padding:10px;
+}
+
+div.experiment.elements.container{
+    display:grid;
+    grid-template-columns: 600px auto;
+    gap:10px;
+    padding:20px;
+}
+
+div.control.panel{
+    margin:auto;
+    margin-top:5px;
+    padding:4px;
+    display:flex;
+    gap:10px;
+    align-items: center;
+    background-color :#8b9f9f ;
+    border: solid 2px #728888;
+    border-radius: 8px;
+    width:175px;
+    height:50px;
+}
+
+
+div.listing.light.container.footer{
+    width:auto;
+}
+
+
+div.label_testing.container{
+    background-color: #a9b9b9;
+    border-radius: 10px;
+    border: 2px solid #d2e2e2;
+}
+
+
+div.field_label.container.label_testing.directive{
+    border: 0px 
+}
+
+h1.field_label.label_testing{
+    line-height: 1;
+    font-size:16px;
+    font-weight:400;
+}
+
+div.directive.container{
+    background-color: #d2e2e2;
+    padding:3px;
+}
+
+div.label_testing.container.directives{
+    padding:5px;
+}
+
+img.label_testing.thumbnail{
+    max-width: 50px;
+    max-height:50px;
+    border-radius: 7px;
+    border:2px solid #728888;
+    padding:3px;
+    margin:2px;
+}
+
+div.label_testing.container.images{
+
+
+}
+
+div.label_testing.image.container{
+    display:grid;
+    grid-template-rows: 45px auto;
+    background-color: #d2e2e2;
+    margin:5px;
+}
+
+div.label_testing.image.container.no{
+    background-color: #bd4444;
+}
+
+div.label_testing.image.container.yes{
+    background-color: #8eb284;
+}

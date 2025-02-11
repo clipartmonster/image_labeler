@@ -1,0 +1,200 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+
+<div style = 'display:flex; flex-direction: row;'>
+
+    <div class = 'listing light container side_panel'>
+        
+        {% for model_type in model_type_options %}
+            <div style = 'width:50%;  margin:auto'>
+                <h1 class = 'listing_info label'>Model Type</h1>
+                <div class = "option button rectangle">
+                    <h1 class = "option title">{{model_type}}</h1>
+                </div>
+            </div>
+        {% endfor %}
+
+        {% for task_type in task_type_options %}
+            <div style = 'width:50%;  margin:auto'>
+                <h1 class = 'listing_info label'>Task Type</h1>
+                <div class = "option button rectangle">
+                    <h1 class = "option title">{{task_type}}</h1>
+                </div>
+            </div>
+        {% endfor %}
+
+        {% for rule_index in rule_index_options %}
+        <div style = 'width:50%;  margin:auto'>
+            <h1 class = 'listing_info label'>Rule Index</h1>
+            <div class = "option button rectangle">
+                <h1 class = "option title">{{rule_index}}</h1>
+            </div>
+        </div>
+        {% endfor %}
+
+    </div>
+
+    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
+
+     
+
+        Parameters
+
+        {% for model in model_results%}
+           
+            <div style = 'display:flex; flex-direction: column; gap:5px; margin:10px;'>
+                    
+                <div style = 'display:grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr; gap:3px'>
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> Epochs </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> Batch Size </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> Image Size </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> Optimizer </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> Learning Rate </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> Weight Decay </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type official'>
+                        <h2 class = 'label_field label asset_type'> {{model.epochs}} </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type manual'>
+                        <h2 class = 'label_field label asset_type'> {{model.batch_size}} </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type model'>
+                        <h2 class = 'label_field label asset_type'> {{model.image_size.0}}, {{model.image_size.1}}  </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type official'>
+                        <h2 class = 'label_field label asset_type'> {{model.optimizer}} </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type manual'>
+                        <h2 class = 'label_field label asset_type'> {{model.learning_rate}} </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type model'>
+                        <h2 class = 'label_field label asset_type'> {{model.weight_decay}} </h2>
+                    </div>
+
+                </div>
+
+               <img src = {{model.image_link}}>
+
+                        
+                <div style = 'display:grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap:3px'>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> Validation Loss </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> Validation Accuracy </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> Validation AUC </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> Validation Precision </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> Validation Recall </h2>
+                    </div>
+
+
+
+                    <div class = 'label_field asset_type manual'>
+                        <h2 class = 'label_field label asset_type'> {{model.val_loss}} </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type model'>
+                        <h2 class = 'label_field label asset_type'> {{model.val_accuracy}}</h2>
+                    </div>
+
+                    <div class = 'label_field asset_type official'>
+                        <h2 class = 'label_field label asset_type'> {{model.val_auc}} </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type manual'>
+                        <h2 class = 'label_field label asset_type'> {{model.val_precision}} </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type model'>
+                        <h2 class = 'label_field label asset_type'> {{model.val_recall}} </h2>
+                    </div>
+                    
+                </div>
+           
+                <div style = 'display:grid; grid-template-columns: 1fr 1fr 1fr 1fr ; gap:3px'>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> True Positive </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> False Positive </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> True Negative </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type header'>
+                        <h2 class = 'label_field label asset_type header'> False Negative </h2>
+                    </div>
+
+
+                    <div class = 'label_field asset_type manual'>
+                        <h2 class = 'label_field label asset_type'> {{model.val_tp}} </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type model'>
+                        <h2 class = 'label_field label asset_type'> {{model.val_fp}}</h2>
+                    </div>
+
+                    <div class = 'label_field asset_type official'>
+                        <h2 class = 'label_field label asset_type'> {{model.val_tn}} </h2>
+                    </div>
+
+                    <div class = 'label_field asset_type manual'>
+                        <h2 class = 'label_field label asset_type'> {{model.val_fn}} </h2>
+                    </div>
+
+                    
+                </div>
+
+
+
+            </div>
+
+
+        {% endfor %}
+
+    </div>
+
+</div>
+
+
+{% endblock %}

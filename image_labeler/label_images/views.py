@@ -434,8 +434,11 @@ def view_batch_labels(request):
     response = requests.get(api_url, json = data, headers = header)
     batch_of_assets = json.loads(response.content)
 
-    batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
-    .query('color_type == "multi-color"')
+    batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) 
+
+    # batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
+    # .query('color_type == "multi-color"')
+
 
     label_counts = batch_of_assets \
     .groupby('label') \
@@ -480,11 +483,11 @@ def view_batch_labels(request):
 
 def view_labels(request):
 
-    task_type = request.GET.get('task_type', 'clip_art_type')
+    task_type = request.GET.get('task_type', 'asset_type')
 
     api_url = 'https://backend-python-nupj.onrender.com/get_assets_w_rule_labels/'
 
-    data = {"samples":60000,
+    data = {"samples":17000,
             "task_type":'asset_type'}
     # data = {}
 
@@ -495,6 +498,7 @@ def view_labels(request):
 
     response = requests.get(api_url, json = data, headers = header)
 
+    print(response)
     labeled_assets = pd.DataFrame(json.loads(response.content))
 
     print('-----------')
@@ -588,7 +592,7 @@ def manage_rules(request):
 def view_prediction_labels(request):
 
     task_type = request.GET.get('task_type', 'asset_type')
-    rule_index = request.GET.get('rule_index', 3)
+    rule_index = request.GET.get('rule_index', 5)
 
 
     api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
@@ -707,3 +711,58 @@ def view_label_issues(request):
     data = {'assets':assets_w_label_issues}
 
     return render(request, 'view_label_issues.html', data)
+
+
+def label_testing(request):
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_label_testing_options/'
+
+    data = {"session_id":2}
+
+    header = {
+    'Content-Type': 'application/json',
+    'Authorization': settings.API_ACCESS_KEY
+    }
+
+    response = requests.get(api_url, json = data, headers = header)
+    session_data = json.loads(response.content)
+
+    experiments = session_data['data']
+
+    data = {"experiments":experiments}
+
+    print(data)
+
+    return render(request, 'label_testing.html', data)
+
+
+def view_model_results(request):
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_model_results/'
+
+    header = {
+    'Content-Type': 'application/json',
+    'Authorization': settings.API_ACCESS_KEY
+    }
+
+    response = requests.get(api_url, json = {}, headers = header)
+    model_results = json.loads(response.content)
+
+    model_results = pd.DataFrame(model_results['model_results'])
+
+    print('---Model Results---')
+    print(model_results)
+
+    model_type_options = model_results['model_type'].unique()
+    task_type_options = model_results['task_type'].unique()
+    rule_index_options = model_results['model_type'].unique()
+
+    print(model_type_options)
+
+    data = {'model_results':model_results.to_dict(orient = 'records'),
+            'model_type_options':model_type_options,
+            'task_type_options':task_type_options,
+            'rule_index_options':rule_index_options,
+            }
+
+    return render(request, 'view_model_results.html', data)
