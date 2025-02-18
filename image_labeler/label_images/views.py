@@ -738,6 +738,23 @@ def label_testing(request):
 
 def view_model_results(request):
 
+    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
+
+    header = {
+    'Content-Type': 'application/json',
+    'Authorization': settings.API_ACCESS_KEY
+    }
+
+    response = requests.get(api_url, json = {}, headers = header)
+    label_rules = json.loads(response.content)
+
+    label_rules = label_rules['labelling_rules']
+
+    label_rules = [{'rule_index': entry['rule_index'], 'task_type': entry['task_type'], 'title': entry['title']} for entry in label_rules]
+    label_rules = pd.DataFrame(label_rules)
+    
+    
+
     api_url = 'https://backend-python-nupj.onrender.com/get_model_results/'
 
     header = {
@@ -748,14 +765,18 @@ def view_model_results(request):
     response = requests.get(api_url, json = {}, headers = header)
     model_results = json.loads(response.content)
 
-    model_results = pd.DataFrame(model_results['model_results'])
+    model_results = pd.DataFrame(model_results['model_results']) \
+    .merge(label_rules, on = ['rule_index','task_type'], how = 'left')
+
+    model_results['label'] = \
+        model_results['task_type'].str[0].str.upper() + model_results['rule_index'].astype(str)
 
     print('---Model Results---')
     print(model_results)
 
     model_type_options = model_results['model_type'].unique()
     task_type_options = model_results['task_type'].unique()
-    rule_index_options = model_results['model_type'].unique()
+    rule_index_options = model_results['title'].unique()
 
     print(model_type_options)
 

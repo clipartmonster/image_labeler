@@ -8,46 +8,124 @@
 
     <div class = 'listing light container side_panel'>
         
-        {% for model_type in model_type_options %}
-            <div style = 'width:50%;  margin:auto'>
+        <div class = "option button rectangle model_results control_plots" >
+            <h1 class = "option title">Hide Images</h1>
+        </div>
+       
+        <div class = 'option panel model_results'>
+            {% for model_type in model_type_options %}
                 <h1 class = 'listing_info label'>Model Type</h1>
-                <div class = "option button rectangle">
+                <div class = "option button rectangle model_results" >
                     <h1 class = "option title">{{model_type}}</h1>
                 </div>
-            </div>
-        {% endfor %}
-
-        {% for task_type in task_type_options %}
-            <div style = 'width:50%;  margin:auto'>
-                <h1 class = 'listing_info label'>Task Type</h1>
-                <div class = "option button rectangle">
+            {% endfor %}
+        </div>
+      
+        <div class = 'option panel model_results'>
+            <h1 class = 'listing_info label'>Task Type</h1>
+            {% for task_type in task_type_options %}
+                <div class = "option button rectangle model_results" >
                     <h1 class = "option title">{{task_type}}</h1>
                 </div>
-            </div>
-        {% endfor %}
-
-        {% for rule_index in rule_index_options %}
-        <div style = 'width:50%;  margin:auto'>
-            <h1 class = 'listing_info label'>Rule Index</h1>
-            <div class = "option button rectangle">
-                <h1 class = "option title">{{rule_index}}</h1>
-            </div>
+            {% endfor %}
         </div>
-        {% endfor %}
+        
+        <div class = 'option panel model_results'>
+            <h1 class = 'listing_info label'>Rule Index</h1>
+            {% for rule_index in rule_index_options %}
+                <div class = "option button rectangle model_results" >
+                    <h1 class = "option title">{{rule_index}}</h1>
+                </div>
+            {% endfor %}
+        </div>
 
     </div>
 
     <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
 
-     
-
-        Parameters
-
+        
+        
         {% for model in model_results%}
-           
-            <div style = 'display:flex; flex-direction: column; gap:5px; margin:10px;'>
+
+            <div class = 'model_view container' >
+
+                <div style = 'display:grid; grid-template-rows:20px 1fr'>
+
+                    <div>    
+                        <h1 class = 'text_field rule_title'>{{model.title}}</h1>
+                    </div>
+
+                    <div style = 'display:grid; grid-template-columns:80px 300px 1fr'>
+                        
+                        <div class = 'model_label badge'>
+                            <h1 class = 'text_field badge'>{{model.label}}</h1>
+                        </div>
+
+                        <div style = 'display:grid; grid-template-columns:140px 140px'>
+
+                            <div style ='display:grid; grid-template-rows:35px 20px 20px'>
+                            
+                                    <div class = 'text_field large container validation'>
+                                        <h1 class = 'text_field large'> {{model.val_recall}} </h1>                                        
+                                    </div>
+
+                                    <h5 class = 'text_field small'> Validation Recall </h5>                   
+
+                                    <h1 class = 'text_field confusion_metrics'>
+                                       tp: {{model.val_tp}} | fn: {{model.val_fn}}
+                                    </h1>
+
+                            </div>
+        
+                            <div style ='display:grid; grid-template-rows:35px 20px 20px'>
+                            
+                                <div class = 'text_field large container validation'>
+                                    <h1 class = 'text_field large'> {{model.val_precision}} </h1>                                        
+                                </div>
+
+                                <h5 class = 'text_field small'> Validation Precision </h5>                   
+
+                                <h1 class = 'text_field confusion_metrics'>
+                                    tp: {{model.val_tp}} | fp: {{model.val_fp}}
+                                </h1>
+
+                        </div>
+
+                        </div>
+
+                        <div style = 'display:flex; flex-direction:column' >
+                           <div style = 'display:flex'>
+                                <h5 class = 'text_field small'>Samples:</h5>
+                                <h1 class = 'text_field rule_title'>{{model.total_samples}}</h1>
+                           </div>
+
+                           <div style = 'display:flex'>
+                            <h5 class = 'text_field small'>Validation Samples:</h5>
+                            <h1 class = 'text_field rule_title'>{{model.val_samples}}</h1>
+                       </div>
+
+                        </div>
+                    </div>    
+
                     
-                <div style = 'display:grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr; gap:3px'>
+                </div> 
+
+              
+            </div>
+
+
+        {% endfor %}
+
+    </div>
+
+</div>
+
+
+{% endblock %}
+
+
+  <!-- <div style = 'display:grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr; gap:3px'>
+
                     <div class = 'label_field asset_type header'>
                         <h2 class = 'label_field label asset_type header'> Epochs </h2>
                     </div>
@@ -81,7 +159,7 @@
                     </div>
 
                     <div class = 'label_field asset_type model'>
-                        <h2 class = 'label_field label asset_type'> {{model.image_size.0}}, {{model.image_size.1}}  </h2>
+                        <h2 class = 'label_field label asset_type'> {{model.image_size_width}}, {{model.image_size_height}}  </h2>
                     </div>
 
                     <div class = 'label_field asset_type official'>
@@ -98,7 +176,7 @@
 
                 </div>
 
-               <img src = {{model.image_link}}>
+               <img class = 'model_results plot visible'src = {{model.image_link}} style = 'width:600px'>
 
                         
                 <div style = 'display:grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap:3px'>
@@ -183,18 +261,4 @@
                     </div>
 
                     
-                </div>
-
-
-
-            </div>
-
-
-        {% endfor %}
-
-    </div>
-
-</div>
-
-
-{% endblock %}
+                </div> -->

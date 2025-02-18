@@ -1,0 +1,94 @@
+div.model_view.container{
+    background-color: #799494;
+    display:flex; 
+    flex-direction: column; 
+    gap:5px; 
+    margin:10px; 
+    padding:20px;
+}
+
+h1.option.title{
+    line-height: 1;
+}
+
+
+div.option.panel.model_results{
+    display:flex;
+    flex-wrap: wrap;
+    margin:10px;
+}
+
+
+div.option.button.rectangle.model_results{
+    margin:10px
+}
+
+div.text_field.large.container{
+    display:grid;
+    align-content: end;
+    background-color: #ff8c00;
+    border-radius: 10px;
+    margin:4px;
+}
+
+div.text_field.large.container.validation{
+    background-color: #ff8c00;
+}
+
+div.text_field.large.container.validation{
+    background-color: #ffd900;
+}
+
+h1.text_field{
+    font-family:roboto;
+    font-size:20px;
+    margin:0px;
+    color:black;
+    text-align:center;
+    align-self:end;
+}
+
+h5.text_field{
+    font-family:roboto;
+    font-size:14px;
+    color:#364a4a;
+    margin:0px;
+    text-align:center;
+    font-weight:300;
+}
+
+div.model_label.badge{
+   display:grid; 
+   align-items:center; 
+   justify-items: center; 
+   border-radius:50px; 
+   background-color:#3e6868; 
+   height:60px; 
+   width:60px;
+   padding:10px;
+}
+
+h1.text_field.badge{
+    font-size:36px;
+    font-family:roboto;
+    line-height: 0px;
+    align-self:auto;
+    color:#d2e2e2;
+}
+
+h1.text_field.rule_title{
+    font-family:roboto;
+    font-size:14px;
+    color:#364a4a;
+    margin:0px;
+    text-align:left;
+ 
+}
+
+
+h1.text_field.confusion_metrics{
+    font-family:roboto;
+    font-size:14px;
+    color:#364a4a;
+    margin:0px; 
+}
