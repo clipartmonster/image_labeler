@@ -3,8 +3,8 @@ div.model_view.container{
     display:flex; 
     flex-direction: column; 
     gap:5px; 
-    margin:10px; 
-    padding:20px;
+    margin:5px; 
+    padding:5px;
 }
 
 h1.option.title{
@@ -28,7 +28,8 @@ div.text_field.large.container{
     align-content: end;
     background-color: #ff8c00;
     border-radius: 10px;
-    margin:4px;
+    margin:auto;
+    width:80px;
 }
 
 div.text_field.large.container.validation{
@@ -63,10 +64,22 @@ div.model_label.badge{
    justify-items: center; 
    border-radius:50px; 
    background-color:#3e6868; 
-   height:60px; 
-   width:60px;
+   height:20px; 
+   width:20px;
    padding:10px;
 }
+
+div.model_label.badge.small{
+    display:grid; 
+    align-items:center; 
+    justify-items: center; 
+    border-radius:50px; 
+    background-color:#3e6868; 
+    height:40px; 
+    width:40px;
+    padding:5px;
+ }
+
 
 h1.text_field.badge{
     font-size:36px;
@@ -91,4 +104,24 @@ h1.text_field.confusion_metrics{
     font-size:14px;
     color:#364a4a;
     margin:0px; 
+}
+
+h1.text_field.badge.label{
+    font-family:roboto;
+    font-size:25px;
+    color:#d2e2e2;
+    margin:0px; 
+}
+
+h1.text_field.badge.title{
+    font-family:roboto;
+    font-size:24px;
+    color:#364a4a;
+    margin:0px; 
+    align-self:center;
+    font-weight:300
+}
+
+h1.text_field.badge.small{
+    font-size:20px;
 }

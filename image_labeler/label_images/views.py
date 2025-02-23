@@ -69,6 +69,7 @@ def setup_session(request):
     labeler_id = request.GET.get('labeler_id','Steve')
     task_type = request.GET.get('task_type','asset_type')
     rule_index = request.GET.get('rule_index',1)
+    batch_id = request.GET.get('batch_id',1)
 
     api_url = 'https://backend-python-nupj.onrender.com/get_session_options/'
 
@@ -78,18 +79,23 @@ def setup_session(request):
         'Content-Type': 'application/json',
         'Authorization': settings.API_ACCESS_KEY
         }
-    
-    response = requests.get(api_url, json = data, headers = header)
+
+    print('--------------')    
+    print('sending request')
+    response = requests.get(api_url, json = data, headers = header )
+    print(response)
     session_options = json.loads(response.content)
 
-    print(session_options)
+    print(session_options['rule_index_stats'])
 
     selected_options = {'labeler_id':labeler_id,
                         'task_type':task_type,
-                        'rule_index':rule_index}    
+                        'rule_index':rule_index,
+                        'batch_id':batch_id}    
    
     return render(request, 'setup_session.html', {'session_options':session_options,
                                                   'selected_options':selected_options})
+
 
 def initialize_session(request):
     if request.method == 'POST':
@@ -149,7 +155,8 @@ def mturk_redirect(request):
     asset_id = request.GET.get('asset_id',None)
     sandbox_flag = request.GET.get('sandbox_flag', None)
     test_the_labeler = request.GET.get('test_the_labeler', False)
-    batch_index  = request.GET.get('batch_index', None)
+    batch_id  = request.GET.get('batch_id', None)
+    large_sub_batch = request.GET.get('large_sub_batch', None)
     mturk_batch_id = request.GET.get('mturk_batch_id',0)
     rule_indexes  = json.loads(request.GET.get('rule_indexes', None))
     add_lure_questions = request.GET.get('add_lure_questions', None)
@@ -186,14 +193,15 @@ def mturk_redirect(request):
 
 
     print('-----------varaibles-----------')
-    print(batch_index, task_type, rule_index,labeler_id)
+    print(batch_id, task_type, rule_index,labeler_id)
 
  
 
     api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
     
     data = {'batch_type':'large_sub_batch',
-            'batch_index':batch_index,
+            'large_sub_batch':large_sub_batch,
+            'batch_id':batch_id,
             'task_type':task_type,
             'rule_index':rule_index}
 
@@ -777,10 +785,16 @@ def view_model_results(request):
     model_type_options = model_results['model_type'].unique()
     task_type_options = model_results['task_type'].unique()
     rule_index_options = model_results['title'].unique()
+    model_labels = model_results['label'].unique()
+    model_labels = model_results \
+    .filter(['title','label']) \
+    .drop_duplicates()
 
     print(model_type_options)
+    print(model_labels)
 
     data = {'model_results':model_results.to_dict(orient = 'records'),
+            'model_labels':model_labels.to_dict(orient = 'records'),
             'model_type_options':model_type_options,
             'task_type_options':task_type_options,
             'rule_index_options':rule_index_options,

@@ -42,79 +42,95 @@
     </div>
 
     <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
+            
+        {% for label in model_labels%}
 
-        
-        
-        {% for model in model_results%}
+            <div class = 'model_view group container'>
 
-            <div class = 'model_view container' >
-
-                <div style = 'display:grid; grid-template-rows:20px 1fr'>
-
-                    <div>    
-                        <h1 class = 'text_field rule_title'>{{model.title}}</h1>
+                <div style = 'display:flex; gap:5px'>
+                    
+                    <div class = 'model_label badge small'>
+                        <h1 class = 'text_field badge label'>{{label.label}}</h1>                                        
                     </div>
+                    
+                    <h1 class = 'text_field badge title'>  {{label.title}}</h1>
 
-                    <div style = 'display:grid; grid-template-columns:80px 300px 1fr'>
-                        
-                        <div class = 'model_label badge'>
-                            <h1 class = 'text_field badge'>{{model.label}}</h1>
-                        </div>
 
-                        <div style = 'display:grid; grid-template-columns:140px 140px'>
+                </div>
 
-                            <div style ='display:grid; grid-template-rows:35px 20px 20px'>
-                            
-                                    <div class = 'text_field large container validation'>
-                                        <h1 class = 'text_field large'> {{model.val_recall}} </h1>                                        
+                {% for model in model_results%}
+
+                    {% if label.label == model.label %}
+
+                        <div class = 'model_view container' >
+
+                            <div style = 'display:grid; grid-template-rows: 1fr'>
+
+
+                                <div style = 'display:grid; grid-template-columns:30px 300px 1fr'>
+                                    
+                                    <div class = 'model_label badge'>
+                                        <h1 class = 'text_field badge small'>{{model.id}}</h1>                                        
                                     </div>
 
-                                    <h5 class = 'text_field small'> Validation Recall </h5>                   
+                                    <div style = 'display:grid; grid-template-columns:140px 140px'>
 
-                                    <h1 class = 'text_field confusion_metrics'>
-                                       tp: {{model.val_tp}} | fn: {{model.val_fn}}
-                                    </h1>
+                                        <div style ='display:grid; grid-template-rows:35px 20px 20px'>
+                                        
+                                                <div class = 'text_field large container validation'>
+                                                    <h1 class = 'text_field large'> {{model.val_recall}} </h1>                                        
+                                                </div>
 
-                            </div>
-        
-                            <div style ='display:grid; grid-template-rows:35px 20px 20px'>
-                            
-                                <div class = 'text_field large container validation'>
-                                    <h1 class = 'text_field large'> {{model.val_precision}} </h1>                                        
+                                                <h5 class = 'text_field small'> Validation Recall </h5>                   
+
+                                                <h1 class = 'text_field confusion_metrics'>
+                                                tp: {{model.val_tp}} | fn: {{model.val_fn}}
+                                                </h1>
+
+                                        </div>
+                    
+                                        <div style ='display:grid; grid-template-rows:35px 20px 20px'>
+                                        
+                                            <div class = 'text_field large container precision'>
+                                                <h1 class = 'text_field large'> {{model.val_precision}} </h1>                                        
+                                            </div>
+
+                                            <h5 class = 'text_field small'> Validation Precision </h5>                   
+
+                                            <h1 class = 'text_field confusion_metrics'>
+                                                tp: {{model.val_tp}} | fp: {{model.val_fp}}
+                                            </h1>
+
+                                    </div>
+
+                                    </div>
+
+                                    <div style = 'display:flex; flex-direction:column' >
+                                    <div style = 'display:flex'>
+                                            <h5 class = 'text_field small'>Samples:</h5>
+                                            <h1 class = 'text_field rule_title'>{{model.total_samples}}</h1>
+                                    </div>
+
+                                    <div style = 'display:flex'>
+                                        <h5 class = 'text_field small'>Validation Samples:</h5>
+                                        <h1 class = 'text_field rule_title'>{{model.val_samples}}</h1>
                                 </div>
 
-                                <h5 class = 'text_field small'> Validation Precision </h5>                   
+                                    </div>
+                                </div>    
 
-                                <h1 class = 'text_field confusion_metrics'>
-                                    tp: {{model.val_tp}} | fp: {{model.val_fp}}
-                                </h1>
+                                
+                            </div> 
 
+                        
                         </div>
+                    {% endif %}
 
-                        </div>
-
-                        <div style = 'display:flex; flex-direction:column' >
-                           <div style = 'display:flex'>
-                                <h5 class = 'text_field small'>Samples:</h5>
-                                <h1 class = 'text_field rule_title'>{{model.total_samples}}</h1>
-                           </div>
-
-                           <div style = 'display:flex'>
-                            <h5 class = 'text_field small'>Validation Samples:</h5>
-                            <h1 class = 'text_field rule_title'>{{model.val_samples}}</h1>
-                       </div>
-
-                        </div>
-                    </div>    
-
-                    
-                </div> 
-
-              
+                {% endfor %}
             </div>
+            {% endfor %}
 
-
-        {% endfor %}
+     
 
     </div>
 
