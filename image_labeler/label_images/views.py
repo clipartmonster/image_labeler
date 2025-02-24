@@ -779,6 +779,9 @@ def view_model_results(request):
     model_results['label'] = \
         model_results['task_type'].str[0].str.upper() + model_results['rule_index'].astype(str)
 
+    model_results = \
+        model_results.sort_values(by=['label', 'status'], ascending=[True, False])
+
     print('---Model Results---')
     print(model_results)
 
@@ -786,8 +789,9 @@ def view_model_results(request):
     task_type_options = model_results['task_type'].unique()
     rule_index_options = model_results['title'].unique()
     model_labels = model_results['label'].unique()
+
     model_labels = model_results \
-    .filter(['title','label']) \
+    .filter(['title','label','task_type']) \
     .drop_duplicates()
 
     print(model_type_options)

@@ -7,6 +7,10 @@ div.model_view.container{
     padding:5px;
 }
 
+div.model_view.container.production{
+    background-color: #9bb8b8;
+}
+
 h1.option.title{
     line-height: 1;
 }

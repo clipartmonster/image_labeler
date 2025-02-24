@@ -7,10 +7,6 @@
 <div style = 'display:flex; flex-direction: row;'>
 
     <div class = 'listing light container side_panel'>
-        
-        <div class = "option button rectangle model_results control_plots" >
-            <h1 class = "option title">Hide Images</h1>
-        </div>
        
         <div class = 'option panel model_results'>
             {% for model_type in model_type_options %}
@@ -30,39 +26,41 @@
             {% endfor %}
         </div>
         
+        <h1 class = 'listing_info label'>Rule Index</h1>
         <div class = 'option panel model_results'>
-            <h1 class = 'listing_info label'>Rule Index</h1>
-            {% for rule_index in rule_index_options %}
-                <div class = "option button rectangle model_results" >
-                    <h1 class = "option title">{{rule_index}}</h1>
+            {% for label in model_labels %}
+                <div style = 'display:flex; flex-direction: row; gap:5px; width:50%; margin-bottom:10px; align-items: center;'>
+                    <div class = "option button circle model_label" model_label = {{label.label}} >
+                        <h1 class = "option title">{{label.label}}</h1>
+                    </div>
+                    <h1 class = 'listing_info label'>{{label.title}}</h1>
                 </div>
             {% endfor %}
         </div>
 
     </div>
 
-    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
+    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap; ' >
             
         {% for label in model_labels%}
 
-            <div class = 'model_view group container'>
+            <div class = 'model_view group container' model_label = {{label.label}} >
 
                 <div style = 'display:flex; gap:5px'>
                     
-                    <div class = 'model_label badge small'>
+                    <div class = 'model_label badge small' model_label = {{label.label}}>
                         <h1 class = 'text_field badge label'>{{label.label}}</h1>                                        
                     </div>
                     
                     <h1 class = 'text_field badge title'>  {{label.title}}</h1>
-
-
+                   
                 </div>
 
                 {% for model in model_results%}
 
                     {% if label.label == model.label %}
 
-                        <div class = 'model_view container' >
+                        <div class = 'model_view container {{model.status}}' >
 
                             <div style = 'display:grid; grid-template-rows: 1fr'>
 
@@ -70,7 +68,7 @@
                                 <div style = 'display:grid; grid-template-columns:30px 300px 1fr'>
                                     
                                     <div class = 'model_label badge'>
-                                        <h1 class = 'text_field badge small'>{{model.id}}</h1>                                        
+                                        <h1 class = 'text_field badge small'>{{model.id}}</h1>    
                                     </div>
 
                                     <div style = 'display:grid; grid-template-columns:140px 140px'>
@@ -106,6 +104,18 @@
                                     </div>
 
                                     <div style = 'display:flex; flex-direction:column' >
+                                    
+                                    <div style = 'display:flex'>
+                                        <h5 class = 'text_field small'>Overall Score:</h5>
+                                        <h1 class = 'text_field rule_title'>{{model.score}}</h1>
+                                    </div>
+    
+                                    <div style = 'display:flex'>
+                                        <h5 class = 'text_field small'>AUC:</h5>
+                                        <h1 class = 'text_field rule_title'>{{model.val_auc}}</h1>
+                                    </div>
+
+
                                     <div style = 'display:flex'>
                                             <h5 class = 'text_field small'>Samples:</h5>
                                             <h1 class = 'text_field rule_title'>{{model.total_samples}}</h1>
@@ -114,7 +124,7 @@
                                     <div style = 'display:flex'>
                                         <h5 class = 'text_field small'>Validation Samples:</h5>
                                         <h1 class = 'text_field rule_title'>{{model.val_samples}}</h1>
-                                </div>
+                                    </div>
 
                                     </div>
                                 </div>    

@@ -7,7 +7,42 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         console.error('Button not found in the DOM');
     }
+
+    model_label_buttons = document.querySelectorAll('.option.button.circle.model_label')
+
+    model_label_buttons.forEach(button => {
+        button.addEventListener('click', ()=> filter_results(button))
+    })
+
+
 });
+
+function filter_results(element){
+
+    model_groups = document.querySelectorAll('.model_view.group.container')
+    model_label_buttons = document.querySelectorAll('.option.button.circle.model_label')
+
+    model_label_buttons.forEach(button => {
+        button.classList.remove('selected')
+    })
+
+    element.classList.add('selected')
+
+    model_groups.forEach(model_group => {
+
+        if (element.getAttribute('model_label') === model_group.getAttribute('model_label')) {
+            model_group.style.display = 'flex'
+        } else {
+            model_group.style.display = 'none'
+        }
+
+    })
+
+
+
+
+}
+
 
 function control_model_result_plots() {
 
