@@ -81,7 +81,7 @@
                                                 
                                                         <div style = 'text-align:right' >
                                                             <h3 class = 'option title' style = 'padding:5px;' >
-                                                                {{rule_stat.total_labels}} / {{rule_stat.samples}}
+                                                                {{rule_stat.completed_labels}} / {{rule_stat.samples}}
                                                             </h3>
                                                         </div>
 
@@ -121,7 +121,7 @@
                                             {% endif %}
                                     
                                                     <h1 style = 'text-align:center' class = 'listing_info label'>Batch: {{sub_batch.large_sub_batch}}</h1> 
-                                                    <h1 style = 'text-align:center' class = 'listing_info label'>{{sub_batch.total_labels}} / {{sub_batch.samples}}</h1>
+                                                    <h1 style = 'text-align:center' class = 'listing_info label'>{{sub_batch.completed_labels}} / {{sub_batch.samples}}</h1>
                 
                                                     <div style = 'display:flex; gap:5px'>
                                                         <div class = 'label_count field'>
