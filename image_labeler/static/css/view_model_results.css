@@ -44,6 +44,10 @@ div.text_field.large.container.validation{
     background-color: #ffd900;
 }
 
+div.text_field.large.container.auc{
+    background-color: #7be06b;
+}
+
 h1.text_field{
     font-family:roboto;
     font-size:20px;

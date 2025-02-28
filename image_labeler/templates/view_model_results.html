@@ -65,13 +65,13 @@
                             <div style = 'display:grid; grid-template-rows: 1fr'>
 
 
-                                <div style = 'display:grid; grid-template-columns:30px 300px 1fr'>
+                                <div style = 'display:grid; grid-template-columns:30px 450px 1fr'>
                                     
                                     <div class = 'model_label badge'>
                                         <h1 class = 'text_field badge small'>{{model.id}}</h1>    
                                     </div>
 
-                                    <div style = 'display:grid; grid-template-columns:140px 140px'>
+                                    <div style = 'display:grid; grid-template-columns:140px 140px 140px'>
 
                                         <div style ='display:grid; grid-template-rows:35px 20px 20px'>
                                         
@@ -99,7 +99,18 @@
                                                 tp: {{model.val_tp}} | fp: {{model.val_fp}}
                                             </h1>
 
-                                    </div>
+                                        </div>
+
+                                        <div style ='display:grid; grid-template-rows:35px 20px 20px'>
+                                        
+                                            <div class = 'text_field large container auc'>
+                                                <h1 class = 'text_field large'> {{model.val_auc}} </h1>                                        
+                                            </div>
+
+                                            <h5 class = 'text_field small'> Area Under the Curve </h5>                   
+
+
+                                        </div>
 
                                     </div>
 
