@@ -1,0 +1,55 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+    
+<div style = 'display:flex; flex-direction: row;'>
+
+    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
+
+        <ul style="list-style-type: none; padding: 0;">
+            
+            <li style="margin-bottom: 5px;">
+                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/setup_session/">
+                    <h1 class = "label_option intro">Setup session</h1>
+                </a>
+            </li>
+            
+            <li style="margin-bottom: 5px;">
+                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_asset/">
+                    <h1 class = "label_option intro">View Asset</h1>
+                </a>
+            </li>
+            
+            <li style="margin-bottom: 5px;">
+                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_model_results/">
+                    <h1 class = "label_option intro">View Model Results</h1>
+                </a>
+            </li>
+            
+            <li>
+                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_batch_labels/">
+                    <h1 class = "label_option intro">View Batch Labels</h1>
+                </a>
+            </li>
+
+            <li>
+                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_prediction_labels/?task_type=asset_type&rule_index=3">
+                    <h1 class = "label_option intro">Prediction Labels</h1>
+                </a>
+            </li>
+
+            <li>
+                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_labels/">
+                    <h1 class = "label_option intro">View Labels [takes a while to load]</h1>
+                </a>
+            </li>
+
+        </ul>
+
+    </div>
+
+</div>
+
+{% endblock %}

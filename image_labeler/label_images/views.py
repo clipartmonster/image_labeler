@@ -17,6 +17,12 @@ import requests
 import json
 import pandas as pd
 
+def front_page(request):
+
+    data = {}
+
+    return render(request, 'front_page.html', data)
+
 def show_images(request):
 
     api_url = 'https://backend-python-nupj.onrender.com/get_color_labels/'
@@ -491,12 +497,15 @@ def view_batch_labels(request):
 
 def view_labels(request):
 
-    task_type = request.GET.get('task_type', 'asset_type')
+    task_type = str(request.GET.get('task_type', 'asset_type')).strip()
+
+    print('-----task_type-----')
+    print(task_type)
 
     api_url = 'https://backend-python-nupj.onrender.com/get_assets_w_rule_labels/'
 
-    data = {"samples":17000,
-            "task_type":'asset_type'}
+    data = {"samples":35000,
+            "task_type":'clip_art_type'}
     # data = {}
 
     header = {
@@ -506,11 +515,11 @@ def view_labels(request):
 
     response = requests.get(api_url, json = data, headers = header)
 
-    print(response)
+    # print(response)
     labeled_assets = pd.DataFrame(json.loads(response.content))
 
-    print('-----------')
-    print(labeled_assets)
+    # print('------labeled_assets------')
+    # print(labeled_assets)
 
     task_types = pd.DataFrame(labeled_assets) \
     ['task_type'] \
@@ -537,8 +546,8 @@ def view_labels(request):
     .astype('Int8', errors = 'ignore') \
     .to_dict(orient = 'records')
 
-    print('-----------')
-    print(labeled_assets)
+    # print('------labeled_assets------')
+    # print(labeled_assets)
 
     #######################
     #get labelling rule title
@@ -555,21 +564,35 @@ def view_labels(request):
     response = requests.get(api_url, json = data, headers = header)
     labelling_rules = dict(json.loads(response.content))
 
-    temp = pd.DataFrame(labelling_rules['labelling_rules']) \
-    .query('task_type == @task_type') \
-    .filter(['rule_index','title']) 
+    # print('----task type-------')
+    # print(task_type)
+
+    # print('----labelling rules-------')
+    # print(labelling_rules)
+
+    labelling_rules = pd.DataFrame(labelling_rules['labelling_rules']) 
+    labelling_rules['task_type'] = labelling_rules['task_type'].astype(str)
+    labelling_rules = labelling_rules.loc[labelling_rules['task_type'] == 'clip_art_type']
+
+
+    # .filter(['task_type','rule_index','title']) \
+    # .query('task_type == @task_type') 
+   
+    print('----labelling rules-------')
+    print(labelling_rules)
 
     rule_options = rule_options \
-    .merge(temp, on = 'rule_index', how = 'left') \
+    .merge(labelling_rules, on = 'rule_index', how = 'left') \
     .to_dict(orient = 'records')
 
-    print(rule_options)
+    # print(rule_options)
 
     data = {"rule_options":rule_options,
             "labeled_assets":labeled_assets,
             "total_available_images":len(labeled_assets)}
 
     return render(request, 'view_labels.html', data)
+
 
 def manage_rules(request):
     
@@ -600,8 +623,7 @@ def manage_rules(request):
 def view_prediction_labels(request):
 
     task_type = request.GET.get('task_type', 'asset_type')
-    rule_index = request.GET.get('rule_index', 5)
-
+    rule_index = int(request.GET.get('rule_index', 1))
 
     api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
 
@@ -647,7 +669,7 @@ def view_prediction_labels(request):
 
 def view_asset(request):
 
-    asset_id = request.GET.get('asset_id', 'none')
+    asset_id = request.GET.get('asset_id', 158370)
 
     
     api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
