@@ -2,17 +2,18 @@ if (window.location.pathname === '/label_images/setup_session/')
 document.addEventListener('DOMContentLoaded', function(){
 
     selected_options = document.getElementById('selected_options')
-
+   
     /////////////////////
     task_type_options = document.querySelectorAll('.task_type')
 
     task_type_options.forEach(task_type_option => {
         task_type_option.addEventListener('click', ()=> filter_batch_indicator(task_type_option))
 
-
         if (task_type_option.getAttribute('task_type') == selected_options.getAttribute('task_type')){
             task_type_option.classList.add('selected')
         }
+
+        task_type_option.addEventListener('click', ()=> select_task_type(task_type_option.getAttribute('task_type'))) 
 
     })
 
@@ -36,8 +37,7 @@ document.addEventListener('DOMContentLoaded', function(){
         rule_option.addEventListener('click', ()=> filter_batch_indicator(rule_option))
 
         //display the rules associated with the task type 
-        if (rule_option.getAttribute('task_type') === selected_options.getAttribute('task_type') &&
-            rule_option.getAttribute('batch_id') === selected_options.getAttribute('batch_id')
+        if (rule_option.getAttribute('batch_id') === selected_options.getAttribute('batch_id')
         ) {
             rule_option.style.display = 'block';
         } else {
@@ -45,7 +45,6 @@ document.addEventListener('DOMContentLoaded', function(){
         }
         
         if (
-            rule_option.getAttribute('task_type') === selected_options.getAttribute('task_type') &&
             rule_option.getAttribute('batch_id') === selected_options.getAttribute('batch_id') &&
             rule_option.getAttribute('rule_index') === selected_options.getAttribute('rule_index')
         ) {
@@ -64,7 +63,6 @@ document.addEventListener('DOMContentLoaded', function(){
     batch_option_containers.forEach(batch_option_container => {
          
         if (
-            batch_option_container.getAttribute('task_type') === selected_options.getAttribute('task_type') &&
             batch_option_container.getAttribute('batch_id') === selected_options.getAttribute('batch_id') &&
             batch_option_container.getAttribute('rule_index') === selected_options.getAttribute('rule_index') 
         ) {
@@ -103,6 +101,21 @@ document.addEventListener('DOMContentLoaded', function(){
 
 })
 
+function select_task_type(task_type) {
+
+    selected_options = document.getElementById('selected_options')
+
+    href = window.location.origin  
+    + '/label_images/setup_session/?task_type='+task_type
+    + '&rule_index=' + selected_options.getAttribute('rule_index')
+    + '&batch_index=' + selected_options.getAttribute('batch_id')
+    + '&labeler_id=' + selected_options.getAttribute('labeler_id')
+   
+    window.location.href = href;
+   
+
+}
+
 
 function filter_batch_indicator(element) {
 
@@ -120,7 +133,6 @@ function filter_batch_indicator(element) {
 
     console.log(selected_options)
   
-    task_type = selected_options[0].getAttribute('task_type')
     batch_id = selected_options[1].getAttribute('batch_id')
     rule_index = selected_options[2].getAttribute('rule_index')
 
@@ -131,8 +143,7 @@ function filter_batch_indicator(element) {
     rule_options.forEach(rule_option => {
         
         //display the rules associated with the task type 
-        if (rule_option.getAttribute('task_type') === task_type &&
-            rule_option.getAttribute('batch_id') === batch_id
+        if (rule_option.getAttribute('batch_id') === batch_id
         ) {
             rule_option.style.display = 'block';
         } else {
@@ -140,7 +151,6 @@ function filter_batch_indicator(element) {
         }
         
         if (
-            rule_option.getAttribute('task_type') === task_type &&
             rule_option.getAttribute('batch_id') === batch_id &&
             rule_option.getAttribute('rule_index') === rule_index
         ) {
@@ -161,13 +171,9 @@ function filter_batch_indicator(element) {
        
         batch_option_container.style.display = 'none'
 
-        console.log((task_type == batch_option_container.getAttribute('task_type') && 
-                     batch_id == batch_option_container.getAttribute('batch_id') &&
-                     rule_index == batch_option_container.getAttribute('rule_index') ))
 
-        if (
-            batch_option_container.getAttribute('task_type') === task_type &&
-            batch_option_container.getAttribute('batch_id') === batch_id &&
+
+        if (batch_option_container.getAttribute('batch_id') === batch_id &&
             batch_option_container.getAttribute('rule_index') === rule_index 
         ) {
             batch_option_container.style.display = 'flex'
@@ -183,7 +189,7 @@ function filter_batch_indicator(element) {
 
 function go_to_view_page(view_button){
 
-    batch_index = view_button
+    batch_id = view_button
     .closest('.batch.indicator.container')
     .children[0]
     .getAttribute('batch_index')
@@ -207,12 +213,12 @@ function go_to_view_page(view_button){
 
     })
 
-    console.log(task_type, rule_index, batch_index)
+    console.log(task_type, rule_index, batch_id)
 
      href = window.location.origin  
      + '/label_images/view_batch_labels/?task_type='+task_type
      + '&rule_index=' + rule_index
-     + '&batch_index=' + batch_index
+     + '&batch_id=' + batch_id
     
      window.location.href = href;
     
@@ -274,68 +280,6 @@ function toggle_add_a_name_field(labeler_control){
     }
 
 }
-
-
-// function select_task_type_option(task_type_option) {
-
-//     //get the selected batch 
-//     selected_batch_control = document.querySelector('.option.button.rectangle.batch_option.selected')
-//     task_type_controls = document.querySelectorAll('.task_type')
-//     batch_control_containers = document.querySelectorAll('.batch_control.container')
-
-//     console.log(batch_control_containers)
-
-//     task_type_controls.forEach(task_type_control => {
-
-//         task_type_control.classList.remove('selected')
-
-//         if (task_type_control.getAttribute('task_type') == task_type_option.getAttribute('task_type')){
-//             task_type_control.classList.add('selected')
-//         }
-//     })
-
-//     batch_control_containers.forEach(batch_container => {
-
-//         batch_container.style.display = 'none'
-
-//         if (
-//             batch_container.getAttribute('task_type') === task_type_option.getAttribute('task_type') &&
-//             batch_container.getAttribute('batch_id') === selected_batch_control.getAttribute('batch_id')
-//         ) {
-//             batch_container.style.display = 'block';
-//         }
-
-//     })
-
-    
-
-// }
-
-
-// function select_rule_option(rule_option){
-
-//     batch_option_containers = document.querySelectorAll('.batch.indicator.container')
-//     rule_option_controls = document.querySelectorAll('.rule_option')
-
-//     rule_option_controls.forEach(rule_control => {
-//         rule_control.classList.remove('selected')
-//     })
-
-//     rule_option.classList.add('selected')
-
-//     batch_option_containers.forEach(batch_container => {
-
-//         batch_container.style.display = 'none'
-
-//         if (batch_container.getAttribute('rule_index') == rule_option.getAttribute('rule_index')) {
-//             batch_container.style.display = 'flex';
-//         }
-
-//     })
-
-
-// }
-
 
 
 

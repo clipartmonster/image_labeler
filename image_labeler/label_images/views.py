@@ -79,7 +79,7 @@ def setup_session(request):
 
     api_url = 'https://backend-python-nupj.onrender.com/get_session_options/'
 
-    data = {}
+    data = {"task_type":task_type}
 
     header = {
         'Content-Type': 'application/json',

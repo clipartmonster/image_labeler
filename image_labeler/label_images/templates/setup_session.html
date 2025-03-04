@@ -71,7 +71,7 @@
                
                       {% for rule_stat in session_options.rule_index_stats%}
         
-                                    <div class = 'option button rectangle rule_option' batch_id= {{rule_stat.batch_id}} task_type = {{rule_stat.task_type}}  rule_index = {{rule_stat.rule_index}}> 
+                                    <div class = 'option button rectangle rule_option' batch_id = {{rule_stat.batch_id}} rule_index = {{rule_stat.rule_index}}> 
                                         <div style="display: grid; grid-template-rows: 20px 20px 20px; justify-items: start; text-align: left;">
 
                                             <div style = 'display:grid; width:200px; grid-template-columns: 50px auto; align-items:center'>
@@ -108,7 +108,7 @@
                 {% for sub_batch in session_options.sub_batch_stats  %}
                                                           
                        
-                            <div class = 'batch indicator container' large_sub_batch = {{sub_batch.large_sub_batch}} task_type = {{sub_batch.task_type}} batch_id = {{sub_batch.batch_id}} rule_index = {{sub_batch.rule_index}} >
+                            <div class = 'batch indicator container' task_type = {{selected_options.task_type}} large_sub_batch = {{sub_batch.large_sub_batch}} batch_id = {{sub_batch.batch_id}} rule_index = {{sub_batch.rule_index}} >
                                     
                                             {% if sub_batch.percent_remaining == 0 %}
                                                 <div class = 'batch indicator completed' large_sub_batch = {{sub_batch.large_sub_batch}} >     
