@@ -109,36 +109,38 @@
                                                           
                        
                             <div class = 'batch indicator container' task_type = {{selected_options.task_type}} large_sub_batch = {{sub_batch.large_sub_batch}} batch_id = {{sub_batch.batch_id}} rule_index = {{sub_batch.rule_index}} >
-                                    
-                                            {% if sub_batch.percent_remaining == 0 %}
-                                                <div class = 'batch indicator completed' large_sub_batch = {{sub_batch.large_sub_batch}} >     
-                                            {% else %}
-                                                {% if sub_batch.percent_remaining > .25 %}
-                                                    <div class = 'batch indicator' large_sub_batch = {{sub_batch.large_sub_batch}} style= 'opacity:{{sub_batch.percent_remaining }}'>  
-                                                {% else %}
-                                                    <div class = 'batch indicator' large_sub_batch = {{sub_batch.large_sub_batch}} style= 'opacity:.35'>   
-                                                {% endif %}  
-                                            {% endif %}
-                                    
-                                                    <h1 style = 'text-align:center' class = 'listing_info label'>Batch: {{sub_batch.large_sub_batch}}</h1> 
-                                                    <h1 style = 'text-align:center' class = 'listing_info label'>{{sub_batch.completed_labels}} / {{sub_batch.samples}}</h1>
-                
-                                                    <div style = 'display:flex; gap:5px'>
-                                                        <div class = 'label_count field'>
-                                                            <h1 style = 'text-align:center' class = 'listing_info label'>No Labels: {{ sub_batch.no_labels}}</h1>
-                                                        </div>
 
-                                                        <div class = 'label_count field'>
-                                                            <h1 style = 'text-align:center' class = 'listing_info label'>One Label: {{ sub_batch.one_label}}</h1>
-                                                        </div>
-                                                    </div>
-
-                                                    <div class = view_button  >
-                                                        <h1 class = 'option title'>V</h1> 
-                                                    </div>
-                                                 
-
+                                {% if sub_batch.percent_remaining == 0 %}
+                                    <div class = 'batch indicator completed' large_sub_batch = {{sub_batch.large_sub_batch}} >     
+                                {% elif sub_batch.one_label == 0  %}            
+                                    <div class = 'batch indicator one_round_complete' large_sub_batch = {{sub_batch.large_sub_batch}} > 
+                                {% else %}
+                                    {% if sub_batch.percent_remaining > .25 %}
+                                        <div class = 'batch indicator' large_sub_batch = {{sub_batch.large_sub_batch}} style= 'opacity:{{sub_batch.percent_remaining }}'>  
+                                    {% else %}
+                                        <div class = 'batch indicator' large_sub_batch = {{sub_batch.large_sub_batch}} style= 'opacity:.35'>   
+                                    {% endif %}  
+                                {% endif %} 
+                        
+                                        <h1 style = 'text-align:center' class = 'listing_info label'>Batch: {{sub_batch.large_sub_batch}}</h1> 
+                                        <h1 style = 'text-align:center' class = 'listing_info label'>{{sub_batch.completed_labels}} / {{sub_batch.samples}}</h1>
+    
+                                        <div style = 'display:flex; gap:5px'>
+                                            <div class = 'label_count field {%if sub_batch.no_labels == 0%} empty {% endif %}' >
+                                                <h1 style = 'text-align:center' class = 'listing_info label'>No Labels: {{ sub_batch.no_labels}}</h1>
                                             </div>
+
+                                            <div class = 'label_count field'>
+                                                <h1 style = 'text-align:center' class = 'listing_info label'>One Label: {{ sub_batch.one_label}}</h1>
+                                            </div>
+                                        </div>
+
+                                        <div class = view_button  >
+                                            <h1 class = 'option title'>V</h1> 
+                                        </div>
+                                        
+
+                                </div>
         
                             </div>  
                         
@@ -160,106 +162,3 @@
 </div>
 
 {% endblock %}
-
-<!-- 
-
-{% for task_type in session_options.task_types %}
-{% for batch_option in session_options.batch_options %}
-
-    <div class = 'batch_control container' task_type = {{task_type.task_type}} batch_id = {{batch_option.batch_id}}>
-    
-        <div class = 'option_container'  style = 'display:flex; flex-wrap: wrap; flex-direction: row; gap:10px'>
-            
-            <div style = 'margin:5px; width:100%'>
-                <h1 id = 'title' class = 'listing_info label'> Select rule to label</h1>
-                <div style = 'display:flex; flex-wrap: wrap; flex-direction: row; gap:10px'> 
-                    {% for labeling_rule_option in session_options.labeling_rule_options  %}
-                        
-                        {% if labeling_rule_option.task_type == task_type.task_type %} 
-
-                                <div class = 'option button rectangle rule_option' rule_index = {{labeling_rule_option.rule_index}}> 
-                                    <div style="display: grid; grid-template-rows: 20px 20px 20px; justify-items: start; text-align: left;">
-
-                                        <div style = 'display:grid; width:200px; grid-template-columns: 50px auto; align-items:center'>
-                                            <h1 style = 'margin-left:0' class="option title">rule {{ labeling_rule_option.rule_index }}</h1>
-                                            {% for sub_batch in session_options.sub_batch_stats %}
-
-                                                {% if sub_batch.rule_index == labeling_rule_option.rule_index and sub_batch.task_type == task_type.task_type %} 
-                                                    <div style = 'text-align:right' >
-                                                        <h3 class = 'option title' style = 'padding:5px;' >
-                                                            {{sub_batch.total_labels}} / {{sub_batch.samples}}
-                                                        </h3>
-                                                    </div>
-                                                {% endif %}
-                                            {% endfor %}   
-                                        </div>
-
-                                        <h3 style = 'margin-left:0' class="option title">{{ labeling_rule_option.title }}</h3>
-
-
-                                    </div>
-                                </div>
-                            {% endif %}
-                        {% endfor %}        
-                </div>
-            </div>
-        </div>
-
-
-        <div class = 'option_container'  >
-        
-                <h1 id = 'title' class = 'listing_info label'>Select a sub batch to work on:</h1>
-
-                <div style = 'display:flex; flex-wrap:wrap; flex-direction:row; gap:10px;'>
-                    
-                    {% for sub_batch in session_options.sub_batch_stats  %}
-                                                              
-                           {% if sub_batch.task_type == task_type.task_type and sub_batch.batch_id == batch_option.batch_id %} 
-
-                                <div class = 'batch indicator container' task_type = {{sub_batch.task_type}} batch_id = {{sub_batch.batch_id}} rule_index = {{sub_batch.rule_index}} >
-                                        
-                                                {% if sub_batch.percent_remaining == 0 %}
-                                                    <div class = 'batch indicator completed' batch_index = {{sub_batch.large_sub_batch}} >     
-                                                {% else %}
-                                                    {% if sub_batch.percent_remaining > .25 %}
-                                                        <div class = 'batch indicator' batch_index = {{sub_batch.large_sub_batch}} style= 'opacity:{{sub_batch.percent_remaining }}'>  
-                                                    {% else %}
-                                                        <div class = 'batch indicator' batch_index = {{sub_batch.large_sub_batch}} style= 'opacity:.35'>   
-                                                    {% endif %}  
-                                                {% endif %}
-                                        
-                                                        <h1 style = 'text-align:center' class = 'listing_info label'>Batch: {{sub_batch.large_sub_batch}}</h1> 
-                                                        <h1 style = 'text-align:center' class = 'listing_info label'>{{sub_batch.total_labels}} / {{sub_batch.samples}}</h1>
-                    
-                                                        <div style = 'display:flex; gap:5px'>
-                                                            <div class = 'label_count field'>
-                                                                <h1 style = 'text-align:center' class = 'listing_info label'>No Labels: {{ sub_batch.no_labels}}</h1>
-                                                            </div>
-
-                                                            <div class = 'label_count field'>
-                                                                <h1 style = 'text-align:center' class = 'listing_info label'>One Label: {{ sub_batch.one_label}}</h1>
-                                                            </div>
-                                                        </div>
-
-                                                        <div class = view_button  >
-                                                            <h1 class = 'option title'>V</h1> 
-                                                        </div>
-
-                                                       
-
-                                                </div>
-            
-                                </div>  
-                            <!-- {% endif %} -->
-                            
-                    {% endfor %}
-                
-
-                </div>
-        
-        
-        </div>
-        
-    </div>
-{% endfor %}
-{% endfor %} -->

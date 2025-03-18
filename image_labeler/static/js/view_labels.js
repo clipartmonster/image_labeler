@@ -1,3 +1,6 @@
+
+
+
 document.addEventListener('DOMContentLoaded', function(){
 
         filter_controls = document.querySelectorAll('.option.button.circle.rule_index')
@@ -64,6 +67,67 @@ document.addEventListener('DOMContentLoaded', function(){
 
 })
 
+function remove_assets_wo_dark_ratio(){
+
+    image_boxes = document.querySelectorAll('.design.dark.container.asset_view.image_box')
+
+    image_boxes.forEach(image_box => {
+        
+        dark_ratio = image_box
+        .querySelector('.labeler_data')
+        .getAttribute('dark_ratio')
+        
+        if (dark_ratio == 101) {
+        
+            image_box.style.display = 'none'
+
+        }
+    })
+
+
+}
+
+
+function filter_by_dark_ratio(value) {
+
+    min_slider_value = parseInt(document.querySelector('#min_dark_ratio_slider').value)
+    max_slider_value = parseInt(document.querySelector('#max_dark_ratio_slider').value)
+    asset_wo_dark_ratio = document.querySelector('#dark_ratio_filter').checked;
+
+    document.querySelector('#min_dark_ratio_field_value').textContent = min_slider_value
+    document.querySelector('#max_dark_ratio_field_value').textContent = max_slider_value
+
+    console.log(asset_wo_dark_ratio)
+
+    image_boxes = document.querySelectorAll('.design.dark.container.asset_view.image_box')
+
+    image_boxes.forEach(image_box => {
+
+        dark_ratio = parseInt(image_box
+        .querySelector('.labeler_data')
+        .getAttribute('dark_ratio'))
+  
+        asset_id = image_box
+        .querySelector('.labeler_data')
+        .getAttribute('asset_id')
+
+        if (dark_ratio > min_slider_value & dark_ratio < max_slider_value) {
+            console.log(asset_id)
+            console.log(dark_ratio > min_slider_value)
+            console.log('dark ratio: ' + dark_ratio, 'min: ' + min_slider_value, 'max: ' + max_slider_value)
+            image_box.style.display = 'block'
+        } else {
+            image_box.style.display = 'none'
+        } 
+
+        if (dark_ratio > 100 & asset_wo_dark_ratio == true) {
+            image_box.style.display = 'none'
+        } 
+
+
+    })
+
+}
 
 function switch_filter(element){
 

@@ -15,3 +15,119 @@ div.response.no{
 img.flag_issue.yes{
     opacity:.25
 }
+
+div.option.container.task_type{
+    border:2px, solid, #d2e2e2; 
+    background-color: #a9b9b9;
+    margin:10px;
+    padding:7px;
+}
+
+div.option.container.task_type.selected{
+    border:2px, solid, #c8fafa; 
+    background-color: #7cbebe;
+    margin:10px;
+    padding:7px;
+}
+
+
+div.rule_option{
+    display:grid; 
+    grid-template-columns: 45px 1fr; 
+    align-items: center; 
+    margin-top:5px
+}
+
+div.status.container {
+    padding:25px;
+    margin:auto;
+    border: 2px solid #799494
+}
+
+div.circle.element.prediction_labels{
+    border-radius: 100%;
+    background-color: #7cbebe;
+    height:20px;
+    width:20px;
+}
+
+
+div.control.container.predicted_labels{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100px;
+    background-color: #8a9c9c;
+    border: 2px solid #d2e2e2;
+    padding:5px;
+    border-radius:45px;
+    text-align: center;
+   
+}
+
+div.control.container.predicted_labels.selected{
+    background-color: #7cbebe;
+    border: 2px solid #c8fafa;   
+}
+
+
+div.cylinder.element.prediction_labels{
+    display:flex;
+    gap:5px;
+    align-items: center;
+    border-radius: 45px;
+    height:20px;
+    padding-right:5px;
+    padding-left:5px;
+}
+
+div.cylinder.element.prediction_labels.no{
+    background-color: #bd4444;
+}
+
+div.cylinder.element.prediction_labels.yes{
+    background-color: #8eb284;
+}
+
+h2.control.text.prediction_labels{
+    font-family:'Roboto';
+    line-height:1;
+    font-size:11px;
+    color:white;
+    font-weight:300;
+    margin:auto;
+}
+
+div.control.button.prediction_labels{
+    display:flex;
+    align-items:center;
+    gap:5px;
+}
+
+input.input_slider.prediction_labels{
+    appearance: none;
+    height:15px;
+    width:30px;
+    border-radius:15px; 
+    background-color: #8a9c9c;
+    
+}
+
+input.input_slider.prediction_labels.no{
+    background-color: #bd4444;
+}
+
+input.input_slider.prediction_labels.yes{
+    background-color: #8eb284;
+}
+
+
+input.input_slider.prediction_labels::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 15px; /* Size of the circle */
+    height: 15px;
+    background: #bdc7c7;
+    border: 2px solid #8a9c9c;
+    border-radius: 50%;
+    cursor: pointer;
+    
+}

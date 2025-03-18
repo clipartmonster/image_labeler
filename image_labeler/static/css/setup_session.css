@@ -48,6 +48,11 @@ div.batch.indicator.completed{
     opacity: 1;
 }
 
+div.batch.indicator.round_one_completed{
+    background-color: #f7fbd4;
+    opacity: 1;
+}
+
 
 div.batch.container.indicator{
     background-color:#9daeae;
@@ -81,6 +86,11 @@ div.label_count.field{
     width:70px;
 
 }
+
+div.label_count.field.empty{
+    background-color: #82baba;
+}
+
 
 div#add_a_name_field{
     display:none;

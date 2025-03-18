@@ -45,34 +45,61 @@
                 {% endfor %}
             </div>
 
+            <label>
+                <input type="checkbox" id="dark_ratio_filter" onchange="remove_assets_wo_dark_ratio()"> Hide Assets without a dark ratio score
+            </label>
+
+            <div class="option container slider dark_ratio" style="display:flex; flex-direction:column; gap:5px; align-items:center">
+                <input type="range" 
+                       min="0" 
+                       max="99" 
+                       value="0" 
+                       class="option slider" 
+                       id="min_dark_ratio_slider" 
+                       onmouseup ="filter_by_dark_ratio(this.value)">
+                <span id="size_label">Min Dark Ratio</span>
+                <h1 id = min_dark_ratio_field_value class = 'slider field value'> 0 </h1>
+            </div>
            
+            <div class="option container slider dark_ratio" style="display:flex; flex-direction:column; gap:5px; align-items:center">
+                <input type="range" 
+                       min="0" 
+                       max="99" 
+                       value="99" 
+                       class="option slider" 
+                       id="max_dark_ratio_slider" 
+                       onmouseup ="filter_by_dark_ratio(this.value)">
+                <span id="size_label">Max Dark Ratio</span>
+                <h1 id = max_dark_ratio_field_value class = 'slider field value'> 99 </h1>
+            </div>
+
     </div>
 
     <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
 
+
         {% for asset in labeled_assets %}
+
 
                 <div id = container_{{asset.asset_id}} class = 'design dark container asset_view image_box' >
 
                     <div class = 'labeler_data' style = 'display:none' 
                     asset_id = {{asset.asset_id}}
-                    rule_index_1 = {{asset.rule_1}}
-                    rule_index_2 = {{asset.rule_2}}
-                    rule_index_3 = {{asset.rule_3}}
-                    rule_index_4 = {{asset.rule_4}}
-                    rule_index_5 = {{asset.rule_5}}
-                    rule_index_6 = {{asset.rule_6}}
-                    rule_index_7 = {{asset.rule_7}}    
+
+                        {% for rule_pair in asset.rule_pairs %}
+                            {{rule_pair.0}} = {{rule_pair.1|floatformat:"0"}}
+                        {% endfor %}
+
                     >
                     </div>
 
 
                     <h2 class = 'label_option label'> {{asset.asset_id}}</h2>
-                    <img id = "image_{{asset.asset_id}}" class="design view_asset_labels small" src="{{ asset.asset_link }}" crossOrigin="anonymous" >
+                    <img id = "image_{{asset.asset_id}}" class="design view_asset_labels small" src="{{ asset.image_link }}" >
                 </div>
 
-
-                            
+ 
+                
          {% endfor %}
                                  
     

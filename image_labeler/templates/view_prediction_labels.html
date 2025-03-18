@@ -7,17 +7,101 @@
 <div style = 'display:flex; flex-direction: row;'>
 
     <div class = 'listing light container side_panel'>
-           
+
+        <div style = 'margin:5px; width:100%'>
+            <h1 id = 'title' class = 'listing_info label'> Select your labeler id</h1>
+            <select id="labeler_id" class = 'title_font field_label' name="labeler_id">
+
+                {% for labeler_id in labeler_id_options %}
+                    <option value="{{ labeler_id }}">{{ labeler_id }}</option>
+                {% endfor %}
+
+            </select>
+        </div>
+
+        <div style = 'display:flex; flex-direction:column; gap:5px; margin-left:10px; margin-bottom:30px'>
+
+            <h1 class = 'label_option intro'>Inconsistent Label Type</h1>
+
+            <div class = 'control button prediction_labels' label_type = 'false positive' style = 'display:flex; align-items: center; gap:5px;'>
+                <div class = 'control container predicted_labels' >
+                    <div class = 'cylinder element prediction_labels yes'>
+                        <h2 class = 'control text prediction_labels'>model</h2>
+                    </div>
+
+                    <div class = 'cylinder element prediction_labels no'>
+                        <h2 class = 'control text prediction_labels'>manual</h2>
+                    </div>
+                </div>
+
+                    <h1 class = 'listing_info label'>False Postive</h1>
+            </div>
+
+            <div class = 'control button prediction_labels' label_type = 'false negative' style = 'display:flex; align-items: center; gap:5px;'>
+                <div class = 'control container predicted_labels' >
+                    <div class = 'cylinder element prediction_labels no'>
+                        <h2 class = 'control text prediction_labels'>model</h2>
+                    </div>
+
+                    <div class = 'cylinder element prediction_labels yes'>
+                        <h2 class = 'control text prediction_labels'>manual</h2>
+                    </div>
+                </div>
+
+                    <h1 class = 'listing_info label'>False Negative</h1>
+            </div>
+                
+        </div>
+
+        {% for task_type_option in task_type_options %}
+
+            <div class = 'option container task_type'>
+ 
+                <div  style = 'display:grid; grid-template-columns: 45px 1fr; align-items: center; padding-top:5px'>
+                    <h1 class = 'label_option intro'>
+                        {{task_type_option.task_type}}
+                    </h1>
+                </div>
+
+                {% for task_by_rule_option in task_by_rule_options %}
+            
+                    {% if task_type_option.task_type == task_by_rule_option.task_type %}
+
+                    <div class = 'rule_option' task_type = {{task_type_option.task_type}} rule_index = {{task_by_rule_option.rule_index}} >
+                        <div class = 'option button circle rule index'>
+                            <h1 class = 'option title'>{{task_by_rule_option.rule_index}}</h1>
+                        </div>
+                        <h1 class = 'listing_info label'>
+                            {{task_by_rule_option.title}}
+                        </h1>
+                    </div>
+
+                    {% endif %}
+                {% endfor %}        
+
+            </div>
+
+
+        {% endfor %}
+
+        
     </div>
 
     <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
      
+        <div class = 'status container'>
+           <h1 class = 'field_label'>Loading... please wait</h1>
+        </div>
+
         {% for asset in prediction_data %}
 
             <div id = container_{{asset.asset_id}} class = 'design dark container asset_view image_box' 
             asset_id = {{asset.asset_id}}
             task_type = {{task_type}}
-            rule_index = {{rule_index}}>
+            rule_index = {{rule_index}}
+            model_label = {{asset.model_label}}
+            manual_label = {{asset.manual_label}}
+            >
                 
                 <div style = 'display:flex; width:100%'>
                     <h2 class = 'label_option label'> {{asset.asset_id}}</h2>
@@ -34,22 +118,32 @@
                 <div style = 'display:flex; gap:5px; margin:5px'>
 
                     <h2 class = "label_option label"> Manual </h2>
-                    <div class = 'response {{asset.label}}'>
-                        <h2 class = 'label_option label'> {{asset.label}} </h2>
+                    <div class = 'response {{asset.manual_label}}'>
+                        <h2 class = 'label_option label'> {{asset.manual_label}} </h2>
                     </div>
 
                     <h2 class = "label_option label"> Model </h2>
-                    <div class = 'response {{asset.predicted_label}}'>
-                        <h2 class = 'label_option label'> {{asset.predicted_label}} </h2>
+                    <div class = 'response {{asset.model_label}}'>
+                        <h2 class = 'label_option label'> {{asset.model_label}} </h2>
                     </div>
                         
                     <h2 class = 'label_option label'>{{asset.probability}}</h2>
 
                 </div>
 
-                <img id = "image_{{asset.asset_id}}" class="design view_asset_labels large" src="{{ asset.image_link }}" crossOrigin="anonymous" >
-            
+                <img id = "image_{{asset.asset_id}}" class="design view_asset_labels large" src="{{ asset.image_link }}" >
                 
+                <div style = 'display:flex; gap:1px; align-items: center; margin:10px'>
+                    <h1 class = 'listing_info label'>No</h1>
+                    <div class="slider-container" >
+                        <input class = 'input_slider prediction_labels {{asset.manual_label}}' type="range" min="0" max="1" step="1"
+                        {% if asset.manual_label == 'no' %} value="0" {% else %} value="1" {% endif %}>
+                        <div class="slider-labels">
+                        
+                        </div>
+                    </div>
+                    <h1 class = 'listing_info label'>Yes</h1>
+                </div>
 
             </div>
 

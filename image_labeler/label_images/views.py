@@ -379,6 +379,8 @@ def reconcile_labels(request):
   
     print('-----69-69-------')
     print(assets_to_label)
+    print('size of assets to label')
+    print(len(assets_to_label))
 
 
     api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
@@ -416,6 +418,7 @@ def reconcile_labels(request):
                                                   'labeler_id':labeler_id,
                                                   'labeler_source':labeler_source,
                                                   'assets_to_label':assets_to_label,
+                                                  'assets_to_label_count':len(assets_to_label),
                                                   'labelling_rules':labelling_rules,
                                                   'collection_data':collection_data,
                                                   'assignment_id':assignment_id                                                 
@@ -502,10 +505,36 @@ def view_labels(request):
     print('-----task_type-----')
     print(task_type)
 
+    #################################
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_dark_ratios/'
+
+    data = {}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+
+    response = requests.get(api_url, json = data, headers = header)
+
+    dark_ratios = pd.DataFrame(json.loads(response.content)) \
+    .drop(['dark_label'],axis = 1) \
+    .fillna(0) \
+    .assign(dark_ratio = lambda x: (x.dark_ratio * 100).astype(int))
+    
+    dark_ratio_limits = {'min':dark_ratios['dark_ratio'].min(),
+                         'max':dark_ratios['dark_ratio'].max()}
+    
+    print('------Dark Ratios-------')
+    print(dark_ratios)
+    print(dark_ratio_limits)
+
+    #################################
+
     api_url = 'https://backend-python-nupj.onrender.com/get_assets_w_rule_labels/'
 
-    data = {"samples":35000,
-            "task_type":'clip_art_type'}
+    data = {"task_type":task_type}
     # data = {}
 
     header = {
@@ -515,11 +544,7 @@ def view_labels(request):
 
     response = requests.get(api_url, json = data, headers = header)
 
-    # print(response)
     labeled_assets = pd.DataFrame(json.loads(response.content))
-
-    # print('------labeled_assets------')
-    # print(labeled_assets)
 
     task_types = pd.DataFrame(labeled_assets) \
     ['task_type'] \
@@ -533,21 +558,42 @@ def view_labels(request):
     .reset_index(drop = True)
 
     asset_links = pd.DataFrame(labeled_assets) \
-    .filter(['asset_id', 'asset_link']) \
+    .filter(['asset_id', 'image_link']) \
     .drop_duplicates() \
 
-    labeled_assets = pd.DataFrame(labeled_assets) \
+    labeled_assets = labeled_assets \
+    .filter(['asset_id','rule_index','label']) \
+    .drop_duplicates() \
     .assign(label = lambda x: x['label'].astype(int)) \
-    .assign(rule_index = lambda x: 'rule_' + x['rule_index'].astype(str)) \
-    .filter(['asset_id', 'rule_index', 'label']) \
+    .assign(rule_index = lambda x: 'rule_index_' + x['rule_index'].astype(str)) \
     .pivot(index = 'asset_id', columns = 'rule_index', values = 'label') \
     .merge(asset_links, how = 'left', on = 'asset_id') \
     .dropna() \
-    .astype('Int8', errors = 'ignore') \
+    .astype('Int8', errors = 'ignore') 
+
+    labeled_assets = labeled_assets \
+    .merge(dark_ratios, on = 'asset_id', how = 'left')\
+    .fillna(101) \
+    .sort_values('dark_ratio', ascending=True)
+
+    print('------labeled_assets-1------')
+    print(labeled_assets)
+
+    ####################
+    #need to create a set of rule_idex, label pairs for building class attributes of each asset (These are used for filtering)
+    asset_rule_pairs = pd.DataFrame(labeled_assets) \
+    .drop('image_link', axis = 1) \
+    .melt(id_vars = 'asset_id', var_name = 'rule_index', value_name = 'label' ) \
+    .groupby('asset_id') \
+    .apply(lambda x: list(zip(x['rule_index'],x['label']))) \
+    .reset_index(name = 'rule_pairs') 
+
+    labeled_assets = labeled_assets \
+    .merge(asset_rule_pairs, on = 'asset_id', how = 'left') \
     .to_dict(orient = 'records')
 
-    # print('------labeled_assets------')
-    # print(labeled_assets)
+    print('------labeled_assets-2------')
+    print(labeled_assets)
 
     #######################
     #get labelling rule title
@@ -564,32 +610,25 @@ def view_labels(request):
     response = requests.get(api_url, json = data, headers = header)
     labelling_rules = dict(json.loads(response.content))
 
-    # print('----task type-------')
-    # print(task_type)
-
-    # print('----labelling rules-------')
-    # print(labelling_rules)
-
     labelling_rules = pd.DataFrame(labelling_rules['labelling_rules']) 
-    labelling_rules['task_type'] = labelling_rules['task_type'].astype(str)
-    labelling_rules = labelling_rules.loc[labelling_rules['task_type'] == 'clip_art_type']
 
-
-    # .filter(['task_type','rule_index','title']) \
-    # .query('task_type == @task_type') 
-   
-    print('----labelling rules-------')
-    print(labelling_rules)
+    labelling_rules = labelling_rules \
+    .filter(['task_type','rule_index','title']) \
+    .query('task_type == @task_type')  \
+    .merge(rule_options.assign(active = 'yes'), on = 'rule_index', how = 'left') \
+    .dropna() \
+    .reset_index()
 
     rule_options = rule_options \
     .merge(labelling_rules, on = 'rule_index', how = 'left') \
     .to_dict(orient = 'records')
 
-    # print(rule_options)
-
     data = {"rule_options":rule_options,
             "labeled_assets":labeled_assets,
+            "dark_ratio_limits":dark_ratio_limits,
             "total_available_images":len(labeled_assets)}
+
+    # data = {}
 
     return render(request, 'view_labels.html', data)
 
@@ -636,7 +675,15 @@ def view_prediction_labels(request):
 
     response = requests.get(api_url, json = data, headers = header)
 
+    task_by_rule_options = pd.DataFrame(dict(json.loads(response.content))['labelling_rules']) \
+    .filter(['task_type', 'rule_index','title'])
+
+    task_type_options = task_by_rule_options \
+    .filter(['task_type']) \
+    .drop_duplicates() 
+
     labelling_rules = pd.DataFrame(dict(json.loads(response.content))['labelling_rules'])
+
     labelling_rules = labelling_rules \
     .query('task_type == @task_type') \
     .query('rule_index == @rule_index') 
@@ -654,13 +701,27 @@ def view_prediction_labels(request):
     response = requests.get(api_url, json = data, headers = header)
     prediction_data = pd.DataFrame(dict(json.loads(response.content))['prediction_data'])
 
+    print(prediction_data)
+
     prediction_data = prediction_data \
-    .query('predicted_label == "no"') \
     .sort_values('probability', ascending=False)
 
+    # .query('model_label == "yes"') \
+
+    print('-----prediction data-------')
+    print(prediction_data.columns)
+    print(prediction_data)
+
+    label_types = ['model','manual']
+    labeler_id_options = ['Steve','Noah']
+
     data = {'prediction_data':prediction_data.to_dict(orient = 'records'),
+            'labeler_id_options':labeler_id_options,
+            'task_type_options':task_type_options.to_dict(orient = 'records'),
+            'task_by_rule_options':task_by_rule_options.to_dict(orient = 'records'),
             'task_type':task_type,
             'rule_index':rule_index,
+            'label_types':label_types,
             'label_title':labelling_rules['title'].values[0]}
     
     return render(request, 'view_prediction_labels.html', data)

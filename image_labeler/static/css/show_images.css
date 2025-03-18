@@ -49,10 +49,10 @@ div.light.container{
 }
 
 div.listing.container {
-    width:1000px;
     height:auto;    
     padding:10px;
-    margin:20px
+    margin:20px;
+    width:100%
 }
 
 div.listing_info.container{

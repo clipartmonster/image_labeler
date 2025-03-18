@@ -27,16 +27,27 @@
         </div>
         
         <h1 class = 'listing_info label'>Rule Index</h1>
-        <div class = 'option panel model_results'>
-            {% for label in model_labels %}
-                <div style = 'display:flex; flex-direction: row; gap:5px; width:50%; margin-bottom:10px; align-items: center;'>
-                    <div class = "option button circle model_label" model_label = {{label.label}} >
-                        <h1 class = "option title">{{label.label}}</h1>
-                    </div>
-                    <h1 class = 'listing_info label'>{{label.title}}</h1>
+
+            {% for task_type in task_type_options %}
+
+                <h1 class = 'listing_info label' style = 'margin-top:10px'>{{task_type}} </h1>
+
+                <div class = 'option panel model_results'>
+                    {% for label in model_labels %}
+
+                        {% if label.task_type == task_type %}
+                            <div style = 'display:flex; flex-direction: row; gap:5px; width:50%; margin-bottom:10px; align-items: center;'>
+                                <div class = "option button circle model_label" model_label = {{label.label}} >
+                                    <h1 class = "option title">{{label.label}}</h1>
+                                </div>
+                                <h1 class = 'listing_info label'>{{label.title}}</h1>
+                            </div>
+                        {% endif %}
+                        
+                    {% endfor %}
                 </div>
+
             {% endfor %}
-        </div>
 
     </div>
 
