@@ -79,7 +79,7 @@
                                 <div style = 'display:grid; grid-template-columns:30px 450px 1fr'>
                                     
                                     <div class = 'model_label badge'>
-                                        <h1 class = 'text_field badge small'>{{model.id}}</h1>    
+                                        <h1 class = 'text_field badge small'>{{model.index_column}}</h1>    
                                     </div>
 
                                     <div style = 'display:grid; grid-template-columns:140px 140px 140px'>
@@ -131,12 +131,6 @@
                                         <h5 class = 'text_field small'>Overall Score:</h5>
                                         <h1 class = 'text_field rule_title'>{{model.score}}</h1>
                                     </div>
-    
-                                    <div style = 'display:flex'>
-                                        <h5 class = 'text_field small'>AUC:</h5>
-                                        <h1 class = 'text_field rule_title'>{{model.val_auc}}</h1>
-                                    </div>
-
 
                                     <div style = 'display:flex'>
                                             <h5 class = 'text_field small'>Samples:</h5>
@@ -146,6 +140,11 @@
                                     <div style = 'display:flex'>
                                         <h5 class = 'text_field small'>Validation Samples:</h5>
                                         <h1 class = 'text_field rule_title'>{{model.val_samples}}</h1>
+                                    </div>
+
+                                    <div style = 'display:flex'>
+                                        <h5 class = 'text_field small'>Date: </h5>
+                                        <h1 class = 'text_field rule_title'> {{model.date}}</h1>
                                     </div>
 
                                     </div>

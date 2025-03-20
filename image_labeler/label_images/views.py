@@ -865,8 +865,17 @@ def view_model_results(request):
     model_results = \
         model_results.sort_values(by=['label', 'status'], ascending=[True, False])
 
+    model_result = \
+        model_results['date'] = pd.to_datetime(model_results['created_at']).dt.date
+
+    model_results = model_results \
+    .groupby(['task_type', 'rule_index']) \
+    .apply(lambda x: x.sort_values(by='created_at').assign(index_column=range(1, len(x) + 1))) \
+    .reset_index(drop=True)
+
     print('---Model Results---')
     print(model_results)
+    print(model_results.columns)
 
     model_type_options = model_results['model_type'].unique()
     task_type_options = model_results['task_type'].unique()
@@ -877,6 +886,10 @@ def view_model_results(request):
     .filter(['title','label','task_type']) \
     .drop_duplicates()
 
+ 
+
+
+    print(model_results)
     print(model_type_options)
     print(model_labels)
 
