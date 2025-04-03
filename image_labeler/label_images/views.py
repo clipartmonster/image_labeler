@@ -870,7 +870,9 @@ def view_model_results(request):
 
     model_results = model_results \
     .groupby(['task_type', 'rule_index']) \
-    .apply(lambda x: x.sort_values(by='created_at').assign(index_column=range(1, len(x) + 1))) \
+    .tail(5) \
+    .sort_values(by=['task_type', 'rule_index', 'created_at']) \
+    .assign(index_column=lambda x: x.groupby(['task_type', 'rule_index']).cumcount() + 1) \
     .reset_index(drop=True)
 
     print('---Model Results---')
