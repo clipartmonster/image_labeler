@@ -10,22 +10,29 @@ document.addEventListener('DOMContentLoaded', function () {
 
         image_element.onload = function () {
             const originalWidth = image_element.width;
-            const originalHeight = image_element.height - 100;  // Crop out the last 100 pixels
-
-            // Set the canvas size to the cropped image size (1/4 of the width and height)
-            canvas.width = parseInt(originalWidth / 4);
-            canvas.height = parseInt(originalHeight / 4);
-
-            // Draw the cropped image
+            const originalHeight = image_element.height; // Use full height or crop if needed
+        
+            // Set the desired canvas height
+            const targetWidth = 500;
+        
+            // Calculate the aspect ratio and corresponding width
+            const aspectRatio = originalHeight / originalWidth ;
+            const targetHeight = targetWidth * aspectRatio;
+        
+            // Set the canvas size
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+        
+            // Draw the image scaled to new dimensions
             canvas_context.drawImage(
-                image_element, 
-                0, 0, originalWidth, originalHeight,  // Crop the image
-                0, 0, canvas.width, canvas.height    // Scale to canvas
+                image_element,
+                0, 0, originalWidth, originalHeight,   // Source image
+                0, 0, targetWidth, targetHeight        // Destination on canvas
             );
-
-            // Apply the blur filter and redraw the image
+        
+            // Optionally apply blur and redraw (though this might not visibly do anything)
             // canvas_context.filter = "blur(1px)";
-            canvas_context.drawImage(canvas, 0, 0);
+            // canvas_context.drawImage(canvas, 0, 0);
         };
     });
 });

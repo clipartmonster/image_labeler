@@ -23,11 +23,41 @@ def front_page(request):
 
     return render(request, 'front_page.html', data)
 
+
+def select_primary_colors(request):
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
+
+    data = {'batch_type':'large_sub_batch',
+            'large_sub_batch':15,
+            'batch_id':1,
+            'task_type':'select_primary_colors',
+            'rule_index':1}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+ 
+    response = requests.get(api_url, json = data, headers = header)
+
+    print('hello')
+
+    assets_to_label = json.loads(response.content)['asset_batch']
+    # total_in_full_set_to_label = json.loads(response.content)['total_in_full_set_to_label']
+    # total_in_set_to_label = json.loads(response.content)['total_in_set_to_label']
+
+    print(assets_to_label)
+
+    data = {'assets_to_label':assets_to_label}
+
+    return render(request, 'select_primary_colors.html', data)
+
 def show_images(request):
 
     api_url = 'https://backend-python-nupj.onrender.com/get_color_labels/'
 
-    data = {'source':request.session['selected_source'],
+    data = {'source':'initial_training_set',
             'samples':50}
 
     header = {
@@ -65,7 +95,7 @@ def show_images(request):
                                                 'reference_panels':range(9),
                                                 'color_labels':color_labels,
                                                 'spread_values':spread_values,
-                                                'labeler_id':request.session['labeler_id']
+                                                'labeler_id':'Steve'
                                                 })
 
 
@@ -745,8 +775,11 @@ def view_asset(request):
     response = requests.get(api_url, json = data, headers = header)
     labelling_rules = dict(json.loads(response.content))['labelling_rules']
 
+    print('-------------')
+    print(labelling_rules)
 
     task_types = pd.DataFrame(labelling_rules) \
+    .query('task_type != "select_primary_colors"') \
     .filter(['task_type']) \
     .drop_duplicates() \
     .squeeze() \
@@ -762,21 +795,31 @@ def view_asset(request):
     }
 
     response = requests.get(api_url, json = data, headers = header)
-    asset_labels = json.loads(response.content)
 
-    print(asset_labels)
-    # print(asset_labels['asset_data'])
+    print("--------statust code---------")
+    print(response.status_code)
 
-    print('-----------------s--------------------')
-    print(asset_labels['rule_labels'])
+    if response.status_code != 500: 
+        asset_labels = json.loads(response.content)
 
+        asset_metadata = asset_labels['asset_metadata'][0]
+        asset = asset_labels['asset_data'][0]
+        prompt_response = asset_labels['prompt_responses']
+        labels = asset_labels['rule_labels']
+
+    else:
+        asset_labels = []
+        asset_metadata = []
+        asset = []
+        prompt_response = []
+        labels = []
 
     data = {"task_types":task_types,
             "labelling_rules":labelling_rules,
-            "asset_metadata":asset_labels['asset_metadata'][0],
-            "asset":asset_labels['asset_data'][0],
-            "prompt_responses":asset_labels['prompt_responses'],
-            "labels":asset_labels['rule_labels']}
+            "asset_metadata":asset_labels,
+            "asset":asset,
+            "prompt_responses":prompt_response,
+            "labels":labels}
 
     return render(request, 'view_asset.html', data)
 
@@ -870,7 +913,7 @@ def view_model_results(request):
 
     model_results = model_results \
     .groupby(['task_type', 'rule_index']) \
-    .tail(5) \
+    .tail(10) \
     .sort_values(by=['task_type', 'rule_index', 'created_at']) \
     .assign(index_column=lambda x: x.groupby(['task_type', 'rule_index']).cumcount() + 1) \
     .reset_index(drop=True)
@@ -903,3 +946,33 @@ def view_model_results(request):
             }
 
     return render(request, 'view_model_results.html', data)
+
+
+
+def view_primary_colors(request):
+
+    
+    api_url = 'https://backend-python-nupj.onrender.com/get_primary_colors/'
+
+    data = {}
+
+    header = {
+    'Content-Type': 'application/json',
+    'Authorization': settings.API_ACCESS_KEY
+    }
+
+    response = requests.get(api_url, json = data, headers = header)
+    primary_colors = json.loads(response.content)
+
+    primary_colors = pd.DataFrame(primary_colors['primary_colors'])
+
+    assets = primary_colors[['asset_id','image_link']] \
+    .drop_duplicates()
+
+    print(assets)
+
+    # data = {}
+    data = {'assets':assets.to_dict(orient ='records'),
+            'primary_colors':primary_colors.to_dict(orient = 'records')}
+
+    return render(request, 'view_primary_colors.html', data)

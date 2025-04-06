@@ -82,9 +82,11 @@ function api_update_color_labels(labels) {
             'mask_rgb_values':labels.mask_rgb_values,
             'layer_type':labels.layer_type,
             'color_map_link':labels.color_map_link,
-            'labeler_id':labels.labeler_id,
+            'labeler_id':1,
         }]
     }
+
+    console.log(data)
 
     return fetch(api_url, {
     method:'POST',

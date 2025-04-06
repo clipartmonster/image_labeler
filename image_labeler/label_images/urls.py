@@ -18,8 +18,9 @@ urlpatterns = [
     path('view_asset/', views.view_asset, name = 'view_asset'),
     path('view_label_issues/', views.view_label_issues, name = 'view_label_issues'),
     path('view_model_results/', views.view_model_results, name = 'view_model_results'),
+    path('view_primary_colors/', views.view_primary_colors, name = 'view_primary_colors'),
     path('label_testing/', views.label_testing, name = 'label_testing'),
-
+    path('select_primary_colors/', views.select_primary_colors, name = 'select_primary_colors'),
 
     path('manage_rules/', views.manage_rules, name = 'manage_rules'),
 
