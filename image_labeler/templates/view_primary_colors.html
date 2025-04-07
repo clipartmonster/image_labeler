@@ -27,69 +27,61 @@
 
         <h1 class = 'label_option intro'>Rule Index</h1>
 
-            <div class = 'option container view_assets_labels' style = 'display:flex; gap:5px'>
-                {% for rule_option in rule_options%}
-                    <div style = 'display:flex; flex-direction: column; gap:4px; align-items:center'>
-                        <div class = 'option button circle rule_index' filter_type = 'rule_index_{{rule_option.rule_index}}' filter_value = "1">
-                            <h1 class = 'option title'> {{rule_option.rule_index}} </h1>
-                        </div>
-                            <h2 class = 'label_option view_labels'> {{rule_option.title}} </h2>
+        <div style = 'margin:50px'>
+            <label for="colorPicker">Pick a color:</label>
+            <input type="color" id="color_picker" value="#3498db">
+        </div>
 
-                        <div class = 'triple_switch container' filter_type = 'rule_index_{{rule_option.rule_index}}'>
-                            <div class = 'option triple_switch_state yes' filter_type = 'rule_index_{{rule_option.rule_index}}' filter_value = 'yes'></div>
-                            <div class = 'option triple_switch_state off' filter_type = 'rule_index_{{rule_option.rule_index}}' filter_value = 'off'></div>
-                            <div class = 'option triple_switch_state no'  filter_type = 'rule_index_{{rule_option.rule_index}}' filter_value = 'no'></div>
-                        </div>
+        <h1 class = 'label_option intro'> Color Variability </h1>
 
-                    </div>
-                {% endfor %}
-            </div>
+        <div class="slider-container view_primary_colors">
+            <input type="range" id="min_slider_color_distance" min="0" max="255" value="20">
+            <input type="range" id="max_slider_color_distance" min="0" max="255" value="80">
+        </div>
 
-            <label>
-                <input type="checkbox" id="dark_ratio_filter" onchange="remove_assets_wo_dark_ratio()"> Hide Assets without a dark ratio score
-            </label>
+        <div class="values " style = 'margin-top:100px'>
+            Min: <span id="min_distance">20</span> — Max: <span id="max_distance">80</span>
+        </div>
 
-            <div class="option container slider dark_ratio" style="display:flex; flex-direction:column; gap:5px; align-items:center">
-                <input type="range" 
-                       min="0" 
-                       max="99" 
-                       value="0" 
-                       class="option slider" 
-                       id="min_dark_ratio_slider" 
-                       onmouseup ="filter_by_dark_ratio(this.value)">
-                <span id="size_label">Min Dark Ratio</span>
-                <h1 id = min_dark_ratio_field_value class = 'slider field value'> 0 </h1>
-            </div>
-           
-            <div class="option container slider dark_ratio" style="display:flex; flex-direction:column; gap:5px; align-items:center">
-                <input type="range" 
-                       min="0" 
-                       max="99" 
-                       value="99" 
-                       class="option slider" 
-                       id="max_dark_ratio_slider" 
-                       onmouseup ="filter_by_dark_ratio(this.value)">
-                <span id="size_label">Max Dark Ratio</span>
-                <h1 id = max_dark_ratio_field_value class = 'slider field value'> 99 </h1>
-            </div>
+
+        <h1 class = 'label_option intro'> Color Extent </h1>
+
+        <div class="slider-container view_primary_colors">
+            <input type="range" id="min_slider_score" min="0.0" max="1.0" value=".2" step = ".01">
+            <input type="range" id="max_slider_score" min="0.0" max="1.0" value=".8" step = ".01">
+        </div>
+
+        <div class="values " style = 'margin-top:100px'>
+            Min: <span id="min_score">.2</span> — Max: <span id="max_score">.8</span>
+        </div>
+
+
 
     </div>
 
     <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
 
 
-        {% for asset in assets %}
-           
-    
-            <div id="container_{{ asset.asset_id }}" class="design dark container asset_view image_box">
+        {% for asset in asset_primary_colors %}
+            
+        
+            <div id="container_{{asset.assets.asset_id}}" class="design dark container asset_view image_box">
 
-                <div class="labeler_data" style="display:none" asset_id="{{ asset.asset_id }}"></div>
+                <div class="labeler_data" style="display:none" asset_id="{{asset.assets.asset_id}}">
+                </div>
 
-                <h2 class="label_option label">{{ asset.asset_id }}</h2>
-                <img id="image_{{ asset.asset_id }}" class="design view_asset_labels small" src="{{ asset.image_link }}">
+                <h2 class="label_option label">{{asset.assets.asset_id}}</h2>
+                <img id="image_{{asset.assets.asset_id}}" class="design view_asset_labels small" src="{{ asset.assets.image_link }}">
 
-                {% for primary_color in primary_colors %}
+
+                {% for primary_color in asset.assets.primary_colors %}
                     {% if primary_color.asset_id == asset.asset_id %}
+                        <div class = primary_color_data 
+                            score = "{{primary_color.normalized_score}}" 
+                            proportion_prominent_color = "{{primary_color.proportion_prominent_color}}"
+                            proportion_to_all_pixels = "{{primary_color.proportion_to_all_pixels}}"
+                        >
+                        </div>
                         <div class="color_swatch" style="background-color: rgb({{ primary_color.r }}, {{ primary_color.g }}, {{ primary_color.b }});"></div>
                     {% endif %}
                 {% endfor %}

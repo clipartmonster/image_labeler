@@ -964,15 +964,11 @@ def view_primary_colors(request):
     response = requests.get(api_url, json = data, headers = header)
     primary_colors = json.loads(response.content)
 
-    primary_colors = pd.DataFrame(primary_colors['primary_colors'])
+    print(primary_colors)
 
-    assets = primary_colors[['asset_id','image_link']] \
-    .drop_duplicates()
-
-    print(assets)
+    asset_primary_colors = pd.DataFrame(primary_colors)
 
     # data = {}
-    data = {'assets':assets.to_dict(orient ='records'),
-            'primary_colors':primary_colors.to_dict(orient = 'records')}
+    data = {'asset_primary_colors':asset_primary_colors.to_dict(orient = 'records')}
 
     return render(request, 'view_primary_colors.html', data)
