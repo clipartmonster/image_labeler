@@ -5,7 +5,10 @@ div.label_field{
 }
 
 div.label_field.header{
-    background-color: #98aeae;
+    background-color: #9bc3c3;
+    padding:2px;
+    width:120px;
+    height:40px;
 }
 
 div.label_field.official{
@@ -34,4 +37,174 @@ h2.label_field.label.header{
     font-size:14px;
     line-height: 0px;
     color:#717979
+}
+
+div.column.header{
+    display:flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    background-color: #9bb8b8;
+}
+
+h1.column.header{
+    text-align:center;
+    font-family: Roboto;
+    font-weight: 600;
+    font-size:14px;
+    color:#717979;
+}
+
+h1.column.cell{
+    text-align:center;
+    font-family: Roboto;
+    font-weight: 600;
+    font-size:14px;
+    color:white;
+
+}
+
+div.column.cell{
+    display:flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    background-color: #b7d1d1;
+    height:30px;
+    gap:10px;
+}
+
+div.column.cell.yes{
+    background-color: #8eb284;
+ }
+
+ div.column.cell.no{
+   background-color: #bd4444;
+}
+
+
+
+div.labels.container{
+    display:grid;
+    grid-template-rows: 85px 85px;
+    height:auto;
+    background-color: #799494;
+    padding:5px;
+}
+
+div.label.container.view_issues{
+    display:grid;
+    grid-template-columns: 40px 120px 520px;
+    gap:5px;
+    background-color: #80aaaa;
+    align-items: center;
+    margin-bottom:5px;
+ 
+}
+
+div.label.badge {
+    display:grid; 
+    grid-template-rows: 15px 20px;
+    justify-content: left;
+    align-items:center;
+    padding:5px;
+    border-radius:10px;
+
+    height:35px;
+}
+
+div.label_method.badge{
+    display:flex;
+    justify-content: center;
+    align-items: center;    
+    background-color: #3e6868;
+    border-radius:100%;
+    height:40px;
+    width:40px
+}
+
+div.label_method.badge.model{
+    background-color: #70b9e1;
+}
+div.label_method.badge.manual{
+    background-color: #ea9637;
+}
+
+h5.text_field.task_type{
+    font-family: roboto;
+    font-size: 11px;
+    color: #364a4a;
+    font-weight:300;
+    text-align:left
+}
+
+h1.text_field.label {
+    font-family: roboto;
+    font-size: 18px;
+    color: #ffffff;
+    font-weight:400;
+}
+
+h1.text_field.source {
+    font-family: roboto;
+    font-size: 10px;
+    color: #d2e2e2;
+    align-self:auto;
+    font-weight:400;
+
+}
+
+div.small.badge.label_source{
+    height:15px;
+    width:15px;
+    border-radius: 100%;
+    background-color:yellow
+}
+
+div.small.badge.label_source.model{
+    background-color: #70b9e1;    
+}
+
+div.small.badge.label_source.manual{
+    background-color: #ea9637;    
+}
+
+div.slider-container.view_issues{
+    width:40px; 
+    height:10px;
+    margin:0px;
+}
+
+div.slider-container.view_issues.yes{
+    background-color: #8eb284;
+}
+
+div.slider-container.view_issues.no{
+    background-color: #bd4444;
+}
+
+
+
+.input_slider.view_issues::-webkit-slider-thumb {
+    width: 20px;       /* Set desired width */
+    height: 20px;      /* Set desired height */
+    background: #7cbebe; /* Optional: color */
+    border-radius: 50%; /* Make it a circle */
+    cursor: pointer;
+}
+
+.input_slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: #4CAF50;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.input_slider::-ms-thumb {
+    width: 20px;
+    height: 20px;
+    background: #4CAF50;
+    border-radius: 50%;
+    cursor: pointer;
 }

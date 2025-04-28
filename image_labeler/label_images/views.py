@@ -29,8 +29,8 @@ def select_primary_colors(request):
     api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
 
     data = {'batch_type':'large_sub_batch',
-            'large_sub_batch':15,
-            'batch_id':1,
+            'large_sub_batch':1,
+            'batch_id':2,
             'task_type':'select_primary_colors',
             'rule_index':1}
 
@@ -481,7 +481,8 @@ def view_batch_labels(request):
     response = requests.get(api_url, json = data, headers = header)
     batch_of_assets = json.loads(response.content)
 
-    batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) 
+    batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
+    .sample(1000)
 
     # batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
     # .query('color_type == "multi-color"')
@@ -826,11 +827,43 @@ def view_asset(request):
 
 
 def view_label_issues(request):
-
     
-    api_url = 'https://backend-python-nupj.onrender.com/get_assets_w_label_issues/'
+    task_type = request.GET.get('task_type', 'color_fill_type')
+    rule_index = int(request.GET.get('rule_index', 1))
+
+    print('------------------')
+    print(task_type)
+    print(rule_index)
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
 
     data = {}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+
+    response = requests.get(api_url, json = data, headers = header)
+
+    task_by_rule_options = pd.DataFrame(dict(json.loads(response.content))['labelling_rules']) \
+    .filter(['task_type', 'rule_index','title'])
+
+    task_type_options = task_by_rule_options \
+    .filter(['task_type']) \
+    .drop_duplicates() 
+
+    labelling_rules = pd.DataFrame(dict(json.loads(response.content))['labelling_rules'])
+
+    labelling_rules = labelling_rules \
+    .query('task_type == @task_type') \
+    .query('rule_index == @rule_index') 
+
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_assets_w_label_issues/'
+
+    data = {'task_type':task_type,
+            'rule_index':rule_index}
 
     header = {
     'Content-Type': 'application/json',
@@ -838,11 +871,26 @@ def view_label_issues(request):
     }
 
     response = requests.get(api_url, json = data, headers = header)
-    assets_w_label_issues = json.loads(response.content)['issue_table']
+    assets_w_label_issues = json.loads(response.content)
 
+    assets_w_label_issues = pd.DataFrame(assets_w_label_issues) 
+        
+    print('--------assets_w_label_issues---------')
     print(assets_w_label_issues)
 
-    data = {'assets':assets_w_label_issues}
+    label_types = ['model','manual']
+    labeler_id_options = ['Steve','Noah']
+
+    # data = {'assets':assets_w_label_issues}
+
+    data = {'assets':assets_w_label_issues,
+            'labeler_id_options':labeler_id_options,
+            'task_type_options':task_type_options.to_dict(orient = 'records'),
+            'task_by_rule_options':task_by_rule_options.to_dict(orient = 'records'),
+            'task_type':task_type,
+            'rule_index':rule_index,
+            'label_types':label_types,
+            'label_title':labelling_rules['title'].values[0]}
 
     return render(request, 'view_label_issues.html', data)
 
@@ -903,7 +951,9 @@ def view_model_results(request):
     .merge(label_rules, on = ['rule_index','task_type'], how = 'left')
 
     model_results['label'] = \
-        model_results['task_type'].str[0].str.upper() + model_results['rule_index'].astype(str)
+        model_results['task_type'].str[0:2].str.upper() + model_results['rule_index'].astype(str)
+
+    print(model_results)
 
     model_results = \
         model_results.sort_values(by=['label', 'status'], ascending=[True, False])

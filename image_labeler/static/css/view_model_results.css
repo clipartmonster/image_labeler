@@ -116,7 +116,7 @@ h1.text_field.confusion_metrics{
 
 h1.text_field.badge.label{
     font-family:roboto;
-    font-size:25px;
+    font-size:20px;
     color:#d2e2e2;
     margin:0px; 
 }
@@ -131,5 +131,12 @@ h1.text_field.badge.title{
 }
 
 h1.text_field.badge.small{
-    font-size:15px;
+    font-size:18px;
+}
+
+div.option.button.circle.model_label.view_model_results{
+
+    width:40px;
+    height: 40px;
+
 }
