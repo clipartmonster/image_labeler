@@ -981,8 +981,6 @@ def view_model_results(request):
     .filter(['title','label','task_type']) \
     .drop_duplicates()
 
- 
-
 
     print(model_results)
     print(model_type_options)

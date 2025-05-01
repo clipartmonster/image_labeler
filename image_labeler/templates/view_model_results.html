@@ -76,10 +76,16 @@
                             <div style = 'display:grid; grid-template-rows: 1fr'>
 
 
-                                <div style = 'display:grid; grid-template-columns:30px 450px 1fr'>
-                                    
-                                    <div class = 'model_label badge'>
-                                        <h1 class = 'text_field badge small'>{{model.index_column}}</h1>    
+                                <div style = 'display:grid; grid-template-columns:40px 450px 1fr'>
+                                  
+                                    <div>
+
+                                        <div class = 'model_label badge'>
+                                            <h1 class = 'text_field badge small'>{{model.index_column}}</h1>    
+                                        </div>
+
+                                        <div class = 'model_type badge {{model.model_type}}'></div>
+
                                     </div>
 
                                     <div style = 'display:grid; grid-template-columns:140px 140px 140px'>
@@ -127,25 +133,31 @@
 
                                     <div style = 'display:flex; flex-direction:column' >
                                     
-                                    <div style = 'display:flex'>
-                                        <h5 class = 'text_field small'>Overall Score:</h5>
-                                        <h1 class = 'text_field rule_title'>{{model.score}}</h1>
-                                    </div>
+                                        <div style = 'display:flex'>
+                                            <h5 class = 'text_field small'>Overall Score:</h5>
+                                            <h1 class = 'text_field rule_title'>{{model.score}}</h1>
+                                        </div>
 
-                                    <div style = 'display:flex'>
-                                            <h5 class = 'text_field small'>Samples:</h5>
-                                            <h1 class = 'text_field rule_title'>{{model.total_samples}}</h1>
-                                    </div>
+                                        <div style = 'display:flex'>
+                                                <h5 class = 'text_field small'>Samples:</h5>
+                                                <h1 class = 'text_field rule_title'>{{model.total_samples}}</h1>
+                                        </div>
 
-                                    <div style = 'display:flex'>
-                                        <h5 class = 'text_field small'>Validation Samples:</h5>
-                                        <h1 class = 'text_field rule_title'>{{model.val_samples}}</h1>
-                                    </div>
+                                        <div style = 'display:flex'>
+                                            <h5 class = 'text_field small'>Validation Samples:</h5>
+                                            <h1 class = 'text_field rule_title'>{{model.val_samples}}</h1>
+                                        </div>
 
-                                    <div style = 'display:flex'>
-                                        <h5 class = 'text_field small'>Date: </h5>
-                                        <h1 class = 'text_field rule_title'> {{model.date}}</h1>
-                                    </div>
+                                        <div style = 'display:flex'>
+                                            <h5 class = 'text_field small'>Date: </h5>
+                                            <h1 class = 'text_field rule_title'> {{model.date}}</h1>
+                                        </div>
+
+                                        <div style = 'display:flex'>
+                                            <h5 class = 'text_field small'>Model Type: </h5>
+                                            <h1 class = 'text_field rule_title'> {{model.model_type}}</h1>
+                                        </div>
+
 
                                     </div>
                                 </div>    

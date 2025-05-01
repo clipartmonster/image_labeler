@@ -140,3 +140,29 @@ div.option.button.circle.model_label.view_model_results{
     height: 40px;
 
 }
+
+div.model_type.badge{
+    width:30px;
+    height:10px;
+    border-radius: 5px;
+    background-color: #3e6868;
+    margin:auto;
+    margin-top:5px;
+
+}
+
+div.model_type.badge.simple_classifier{
+    background-color: #efa34c;
+}
+
+div.model_type.badge.EfficientNetVB20{
+    background-color: #c58d89;
+}
+
+div.model_type.badge.EfficientNetV2L{
+    background-color: #b6645b;
+}
+
+div.model_type.badge.EfficientNetV2S{
+    background-color: #a44136;
+}
