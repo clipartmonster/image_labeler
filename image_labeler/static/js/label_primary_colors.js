@@ -10,19 +10,20 @@ var full_fill_threshold = 100
 var flood_fill_threshold = 100
 var brush_threshold = 25
 
+if (window.location.pathname === '/label_images/select_primary_colors/') {
+    document.addEventListener('DOMContentLoaded', function () {
+        // Initialize canvases
+    
+        const empty_swatches = Array.from(document.getElementsByClassName('color_swatch empty'));
 
-document.addEventListener('DOMContentLoaded', function () {
-    // Initialize canvases
-   
-    const empty_swatches = Array.from(document.getElementsByClassName('color_swatch empty'));
+        empty_swatches.forEach(swatch => {
 
-    empty_swatches.forEach(swatch => {
+            swatch.onclick = open_color_selector
 
-        swatch.onclick = open_color_selector
+        })
 
     })
-
-})
+}
 
 function remove_layer(event) {
 

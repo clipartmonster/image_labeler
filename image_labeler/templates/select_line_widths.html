@@ -1,0 +1,67 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+        {% block content %}
+
+        {% include 'line_width_palette.html'%}
+
+        {% for asset in assets_to_label %}
+
+        <div id = 'labeler_id' labeler_id = "{{labeler_id}}"></div>
+
+        <div class = 'listing light container' asset_id = {{asset.asset_id}} style = 'display:grid; grid-template-columns: 1fr 1fr;'>
+
+ 
+
+            <div class = 'design dark container' >
+                {{asset.asset_id}}
+                <canvas id="canvas_{{asset.asset_id}}" class="design active" asset_id = {{asset.asset_id}} ></canvas>
+                <div class = 'layer_container'></div>
+                <img id = "image_{{asset.asset_id}}" class="design" src="{{ asset.image_link }}" crossOrigin="anonymous" style ='display:none'>
+               
+             </div>
+            
+            <div class = 'listing_info container'>
+
+                <div class = 'listing_info header'>
+                    <h1 class = 'listing_info label'>Session {{ forloop.counter }} / {{total_in_set_to_label}} </h1>
+                    <h1 class = 'listing_info label'>Left to label: {{total_in_full_set_to_label}} </h1>
+
+                </div>
+                
+                <div class = 'feature_element container'>
+                                       
+                    <div class = 'label container primary_color'> 
+                        <h1 id = primary_colors class = 'listing_info label'>Line Width</h1>
+
+                        <div class = 'color_option_container'>
+                            <div class = 'add_color container'>
+
+                                <div class ="color_swatch line_width empty" asset_id = {{asset.asset_id}}>
+                                    <h1 class = 'field add_color'>+</h1>
+                                </div>
+                        
+                            </div>                            
+
+                            <div class = 'add_color container'>
+
+                                <div class ="color_swatch invalid" onclick ='add_color_label(event)'>
+                                    <img src = "{% static 'images/invalid_icon.png' %}">
+                                </div>
+
+                            </div>
+
+                            
+                        </div>
+                    
+                    </div>
+   
+                </div>
+
+
+            </div>
+
+        </div>
+        {% endfor %}
+
+{% endblock %}

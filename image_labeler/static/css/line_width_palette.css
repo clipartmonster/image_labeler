@@ -1,0 +1,43 @@
+div.sample.container{
+    display: flex;
+    flex-direction: column;
+}
+
+div.sample.panel{
+    background-color: #a9b9b9;
+    border-radius:5px;
+    display:flex;
+    flex-direction: row;
+    gap:5px;
+    margin:1px;
+    padding:1px;
+    padding-left:10px;
+    padding-right:10px;
+    width:50px;
+    height:35px;
+    align-items:center
+}
+
+div.sample.number{
+    display:grid;
+    align-items: center;
+    justify-items: center;
+    width:25px;
+    height:25px;
+    border-radius: 100%;
+    background-color:#a9b9b9
+    
+}
+
+h3.sample.number{
+    font-family:'Roboto';
+    font-size:14px;
+    font-weight: 400;
+    line-height: 0;
+    margin:auto;
+}
+
+canvas{
+    cursor:none;
+    position:relative;
+}

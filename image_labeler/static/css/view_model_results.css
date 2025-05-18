@@ -163,6 +163,33 @@ div.model_type.badge.EfficientNetV2L{
     background-color: #b6645b;
 }
 
+div.model_type.badge.EfficientNetVB10{
+    background-color: #b6645b;
+}
+
 div.model_type.badge.EfficientNetV2S{
     background-color: #a44136;
+}
+
+div.model_type.badge.transformer_w_MobileNetV2{
+    background-color: #c444c4;
+}
+
+div.performant_status.view_model_results{
+    width:10px;
+    height:20px;
+    border-radius: 3px;
+    background-color: #d2e2e2;
+}
+
+div.performant_status.view_model_results.no{
+    background-color: #bd4444;
+}
+
+div.performant_status.view_model_results.yes{
+    background-color: #8eb284;
+}
+
+div.performant_status.view_model_results.close{
+    background-color: #d5d68f;
 }

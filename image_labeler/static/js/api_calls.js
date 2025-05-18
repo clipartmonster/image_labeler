@@ -404,3 +404,46 @@ function api_collect_modified_prompt(data){
 
 }
 
+
+function api_collect_line_width_sample(data){
+
+    console.log(data)
+
+    api_url = 'https://backend-python-nupj.onrender.com/collect_line_width_sample/'
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    return fetch(api_url, {
+        method:'POST',
+        headers : headers,
+        mode:'cors',
+        body: JSON.stringify(data)})
+        .then(response => { return response.json() })
+        .then(data => { return console.log(data) })
+
+}
+
+
+function api_remove_line_width_sample(data){
+
+    console.log(data)
+
+    api_url = 'https://backend-python-nupj.onrender.com/remove_line_width_sample/'
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    return fetch(api_url, {
+        method:'POST',
+        headers : headers,
+        mode:'cors',
+        body: JSON.stringify(data)})
+        .then(response => { return response.json() })
+        .then(data => { return console.log(data) })
+
+}

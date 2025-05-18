@@ -16,12 +16,44 @@ import string
 import requests
 import json
 import pandas as pd
+import numpy as np
 
 def front_page(request):
 
     data = {}
 
     return render(request, 'front_page.html', data)
+
+def select_line_widths(request):
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
+
+    data = {'batch_type':'large_sub_batch',
+            'large_sub_batch':11,
+            'batch_id':2,
+            'task_type':'line_width_type',
+            'rule_index':1}
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+ 
+    response = requests.get(api_url, json = data, headers = header)
+
+    print('hello')
+
+    assets_to_label = json.loads(response.content)['asset_batch']
+
+    print(assets_to_label)
+
+    sampling_array = [[1 + col + row * 3 for col in range(3)] for row in range(3)]
+
+    data = {'sampling_array':sampling_array,
+            'assets_to_label':assets_to_label,
+            'labeler_id':'Steve'}
+
+    return render(request, 'select_line_widths.html', data)
 
 
 def select_primary_colors(request):
@@ -953,13 +985,25 @@ def view_model_results(request):
     model_results['label'] = \
         model_results['task_type'].str[0:2].str.upper() + model_results['rule_index'].astype(str)
 
-    print(model_results)
-
     model_results = \
         model_results.sort_values(by=['label', 'status'], ascending=[True, False])
 
     model_result = \
         model_results['date'] = pd.to_datetime(model_results['created_at']).dt.date
+
+    best_models = model_results \
+    .assign(   performant=lambda x: np.where((x.val_recall > 0.88) & (x.val_precision > 0.88), 'close', 'no')) \
+    .assign(   performant=lambda x: np.where((x.val_recall > 0.9) & (x.val_precision > 0.9), 'yes', x.performant)) \
+    .sort_values(['task_type','rule_index', 'score'], ascending = False) \
+    .groupby(['task_type','rule_index']) \
+    .head(1) \
+    .reset_index() \
+    .filter(['task_type','label', 'val_recall', 'val_precision','performant'])
+
+
+    print('-----best_models------')
+    print(best_models)
+    print(best_models.columns)
 
     model_results = model_results \
     .groupby(['task_type', 'rule_index']) \
@@ -968,10 +1012,6 @@ def view_model_results(request):
     .assign(index_column=lambda x: x.groupby(['task_type', 'rule_index']).cumcount() + 1) \
     .reset_index(drop=True)
 
-    print('---Model Results---')
-    print(model_results)
-    print(model_results.columns)
-
     model_type_options = model_results['model_type'].unique()
     task_type_options = model_results['task_type'].unique()
     rule_index_options = model_results['title'].unique()
@@ -979,12 +1019,12 @@ def view_model_results(request):
 
     model_labels = model_results \
     .filter(['title','label','task_type']) \
-    .drop_duplicates()
+    .drop_duplicates() \
+    .merge(best_models, on = ['label','task_type'], how = 'left')
 
-
-    print(model_results)
-    print(model_type_options)
+    print('-----model_labels------')
     print(model_labels)
+
 
     data = {'model_results':model_results.to_dict(orient = 'records'),
             'model_labels':model_labels.to_dict(orient = 'records'),

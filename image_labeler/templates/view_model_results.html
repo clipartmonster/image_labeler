@@ -9,8 +9,8 @@
     <div class = 'listing light container side_panel'>
        
         <div class = 'option panel model_results'>
+            <h1 class = 'listing_info label'>Model Type</h1>
             {% for model_type in model_type_options %}
-                <h1 class = 'listing_info label'>Model Type</h1>
                 <div class = "option button rectangle model_results" >
                     <h1 class = "option title">{{model_type}}</h1>
                 </div>
@@ -37,6 +37,7 @@
 
                         {% if label.task_type == task_type %}
                             <div style = 'display:flex; flex-direction: row; gap:5px; width:50%; margin-bottom:10px; align-items: center;'>
+                                <div class = "performant_status view_model_results {{label.performant}}"></div>
                                 <div class = "option button circle model_label view_model_results" model_label = {{label.label}} >
                                     <h1 class = "option title">{{label.label}}</h1>
                                 </div>
@@ -58,7 +59,7 @@
             <div class = 'model_view group container' model_label = {{label.label}} >
 
                 <div style = 'display:flex; gap:5px'>
-                    
+
                     <div class = 'model_label badge small' model_label = {{label.label}}>
                         <h1 class = 'text_field badge label'>{{label.label}}</h1>                                        
                     </div>
@@ -158,6 +159,10 @@
                                             <h1 class = 'text_field rule_title'> {{model.model_type}}</h1>
                                         </div>
 
+                                        <div style = 'display:flex'>
+                                            <h5 class = 'text_field small'>Image Size: </h5>
+                                            <h1 class = 'text_field rule_title'> {{model.image_size_width}} x {{model.image_size_height}} </h1>
+                                        </div>
 
                                     </div>
                                 </div>    

@@ -1,0 +1,25 @@
+{% load static %}
+
+<div id ="line_width_palette_template">
+
+    <div id = 'line_width_value_selector'>
+
+        
+    </div>
+
+    <div class="sample container">
+        
+        {% for sample_row in sampling_array %}
+            <div style = 'display:flex; flex-direction: row; gap:5px; padding-top:5px'>
+            {% for sample in sample_row %}
+                <div class="sample panel">
+                    <h3 class="sample number">14px</h3>
+                </div>
+            {% endfor %}
+            </div>                
+        {% endfor %}
+
+    </div>
+
+</div>
+
