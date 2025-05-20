@@ -101,6 +101,33 @@ function collect_prompt(element, reponse){
 
 }
 
+function collect_mismatch_prompt(element, reponse){
+    
+    collection_data = element
+    .closest('.listing.light.container')
+    .querySelector('.collection_data')
+
+    data = {task_type:collection_data.getAttribute('task_type'),
+            rule_index:parseInt(element.getAttribute('rule_index')),
+            asset_id:parseInt(collection_data.getAttribute('asset_id'))
+    }
+
+    api_collect_mismatch_prompt(data)
+
+    data = {task_type:collection_data.getAttribute('task_type'),
+            rule_index:parseInt(element.getAttribute('rule_index')),
+            asset_id:parseInt(collection_data.getAttribute('asset_id')),
+            labeler_source:collection_data.getAttribute('labeler_source'),
+            labeler_id:collection_data.getAttribute('labeler_id'),
+            modified_prompt_response:reponse
+        }
+
+
+    api_collect_modified_prompt(data)
+
+}
+
+
 function direct_hotkey_action(hotkey) {
 
         //get list of active elements 
@@ -113,8 +140,13 @@ function direct_hotkey_action(hotkey) {
 
         if (priority_element.type === 'prompt') {
 
-            collect_prompt(priority_element.element, response)
-            update_prompt(hotkey,priority_element.element, response)
+            if (priority_element.element.getAttribute('prompt_type') == 'mismatch') {
+                collect_mismatch_prompt(priority_element.element, response)
+                update_prompt(hotkey,priority_element.element, response)
+            }else{
+                collect_prompt(priority_element.element, response)
+                update_prompt(hotkey,priority_element.element, response)
+            }
 
         } else if (priority_element.type === 'button_container'){
 
@@ -157,6 +189,7 @@ document.addEventListener('keydown', function(event) {
 
     if (hotkey === '1' || hotkey === '2') {
 
+        console.log('hello')
         direct_hotkey_action(hotkey)
        
     }
@@ -399,23 +432,35 @@ function reset_responses(event){
 
     })
 
-
     activate_listing_container(listing_container)
-
-    document.querySelector('.submit.button.container').style.display = 'none'
 
     //hit api to remove entries in database
     listing_data = listing_container.querySelector('.collection_data')
 
-    console.log(listing_data)
-    console.log(active_prompt)
+    if (active_prompt.getAttribute('prompt_type') == 'mismatch') {
 
-    api_remove_prompt_responses(listing_data.getAttribute('asset_id'),
-                                listing_data.getAttribute('labeler_id'),
-                                listing_data.getAttribute('labeler_source'),
-                                listing_data.getAttribute('task_type'),
-                                active_prompt.getAttribute('rule_index'))
+        console.log("reset mismatch")
+        
+        data = {asset_id:listing_data.getAttribute('asset_id'), 
+                task_type:listing_data.getAttribute('task_type'),
+                rule_index:active_prompt.getAttribute('rule_index')
+        }
 
+        api_remove_modified_prompt(data)
+        api_reset_mismatch_prompt(data)
+
+
+    }else{
+
+        console.log("just remove prompt")
+
+        api_remove_prompt_responses(listing_data.getAttribute('asset_id'),
+                                    listing_data.getAttribute('labeler_id'),
+                                    listing_data.getAttribute('labeler_source'),
+                                    listing_data.getAttribute('task_type'),
+                                    active_prompt.getAttribute('rule_index'))
+
+    }
 
 }
 

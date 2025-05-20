@@ -1038,7 +1038,6 @@ def view_model_results(request):
 
 
 def view_primary_colors(request):
-
     
     api_url = 'https://backend-python-nupj.onrender.com/get_primary_colors/'
 
@@ -1060,3 +1059,66 @@ def view_primary_colors(request):
     data = {'asset_primary_colors':asset_primary_colors.to_dict(orient = 'records')}
 
     return render(request, 'view_primary_colors.html', data)
+
+
+def correct_mismatch_labels(request):
+
+    task_type = request.GET.get('task_type', 'multi_color_type')
+    rule_index = int(request.GET.get('rule_index', 1))
+    labeler_id = request.GET.get('labeler_id', 'Steve')
+
+    ##############################
+
+    header = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY
+        }
+
+    ##############################
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
+
+    data = {'task_type':'multi_color_type',
+            'rule_indexes':[1]
+            }
+
+    response = requests.get(api_url, json = data, headers = header)
+    print(response)
+    label_rules = json.loads(response.content)['labelling_rules']
+
+    prompt = label_rules[0]['prompt']
+
+    print('-----label_rules-------')
+    print(label_rules)
+
+    ##############################
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_mismatched_labels/'
+
+    data = {'task_type':'multi_color_type',
+            'rule_index':1}
+
+    header = {
+    'Content-Type': 'application/json',
+    'Authorization': settings.API_ACCESS_KEY
+    }
+
+    response = requests.get(api_url, json = data, headers = header)
+    mismatched_labels = json.loads(response.content)['mistmatched_labels']
+
+    mismatched_labels = pd.DataFrame(mismatched_labels) \
+    .query('status == "active"')
+
+    print('-----mismatched_labels-------')
+    print(mismatched_labels)
+
+    collection_data = {'task_type':task_type,
+                       'labeler_source':'mismatch',
+                       'labeler_id':labeler_id}
+
+    data = {'mismatched_labels':mismatched_labels.to_dict(orient = 'records'),
+            'collection_data':collection_data,
+            'label_rules':label_rules,
+            'prompt':prompt}
+
+    return render(request, 'correct_mismatch_labels.html', data)
