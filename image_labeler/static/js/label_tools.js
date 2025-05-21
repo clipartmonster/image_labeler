@@ -330,67 +330,68 @@ function close_listing_container(element){
     }
 
     
-    if (is_test_question == 'yes'){
-        result = check_responses(prompts)
-    }    
+    // if (is_test_question == 'yes'){
+    //     result = check_responses(prompts)
+    // } 
 
-
-    if (result == 'incorrect') {
+    // if (result == 'incorrect') {
         
-        feedback_container.style.display = 'grid'
+    //     console.log('here')
 
-        console.log(element.closest('.listing.light.container.active'))
+    //     feedback_container.style.display = 'grid'
 
-        element
-        .closest('.listing.light.container.closed')
-        .querySelector('.label_option.reset.button')
-        .click()
+    //     console.log(element.closest('.listing.light.container.active'))
+
+    //     element
+    //     .closest('.listing.light.container.closed')
+    //     .querySelector('.label_option.reset.button')
+    //     .click()
     
-    } else {
+    // } else {
 
-        if (feedback_container != null){
-            feedback_container.style.display = 'none'
-        }
+    //     if (feedback_container != null){
+    //         feedback_container.style.display = 'none'
+    //     }
         
-        // element
-        // .closest('.label_option.prompt.container.active')
-        // .nextElementSibling
-        // .className = 'label_option button container active'
+    //     // element
+    //     // .closest('.label_option.prompt.container.active')
+    //     // .nextElementSibling
+    //     // .className = 'label_option button container active'
 
-        prompt_container = element
-        .closest('.label_option.prompt.container.active')
+    //     prompt_container = element
+    //     .closest('.label_option.prompt.container.active')
 
 
-        prompt_container.className = 'label_option prompt container closed'
-        prompt_container.style.opacity = .35        
+    //     prompt_container.className = 'label_option prompt container closed'
+    //     prompt_container.style.opacity = .35        
 
-        // element
-        // .closest('.label_option.prompt.container.active')
-        // .style.opacity = .25
+    //     // element
+    //     // .closest('.label_option.prompt.container.active')
+    //     // .style.opacity = .25
 
-        element
-        .closest('.listing.light.container.active')
-        .className = 'listing light container closed'
+    //     element
+    //     .closest('.listing.light.container.active')
+    //     .className = 'listing light container closed'
 
-        // element
-        // .className = 'label_option button container'
+    //     // element
+    //     // .className = 'label_option button container'
 
-        open_listing_containers = document
-        .querySelectorAll('.listing.light.container.open, .listing.light.container.test_question')
+    //     open_listing_containers = document
+    //     .querySelectorAll('.listing.light.container.open, .listing.light.container.test_question')
 
-        if (open_listing_containers.length > 0) {
+    //     if (open_listing_containers.length > 0) {
 
-            open_listing_container = open_listing_containers[0]
-            activate_listing_container(open_listing_container)
+    //         open_listing_container = open_listing_containers[0]
+    //         activate_listing_container(open_listing_container)
 
-        } else {
+    //     } else {
 
-            //wiht no more open listing containers show the sumbit button for leaving page
-            document.querySelector('.submit.button.container').style.display = 'grid'
-            document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    //         //wiht no more open listing containers show the sumbit button for leaving page
+    //         document.querySelector('.submit.button.container').style.display = 'grid'
+    //         document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-        }
-    }
+    //     }
+    // }
 
 
 }
