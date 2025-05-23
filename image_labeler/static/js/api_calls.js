@@ -509,3 +509,27 @@ function api_reset_mismatch_prompt(data){
 
 }
 
+    // def label_line_width_as_invalid(request):
+    // asset_id = request.data.get('asset_id')
+    // labeler_id = request.data.get('labeler_id')
+
+    function api_label_line_width_as_invalid(data){
+
+        console.log(data)
+    
+        api_url = 'https://backend-python-nupj.onrender.com/label_line_width_as_invalid/'
+    
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': API_ACCESS_KEY,
+        }
+    
+        return fetch(api_url, {
+            method:'POST',
+            headers : headers,
+            mode:'cors',
+            body: JSON.stringify(data)})
+            .then(response => { return response.json() })
+            .then(data => { return console.log(data) })
+    
+    }

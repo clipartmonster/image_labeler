@@ -18,12 +18,13 @@
 
             <div style = 'margin:5px; width:100%'>
                 <h1 id = 'title' class = 'listing_info label'> Select your labeler id</h1>
+                
                 <select id="labeler_id" class = 'title_font field_label' name="labeler_id">
 
                     {% for labeler_id in session_options.labeler_ids %}
-                        <option value="{{ labeler_id.labeler_id }}">{{ labeler_id.labeler_id }}</option>
+                        <option value="{{ labeler_id.display_name }}">{{ labeler_id.display_name }}</option>
                     {% endfor %}
-                        <option value="add_a_labeler">add labeler</option>
+                        <!-- <option value="add_a_labeler">add labeler</option> -->
 
                 </select>
             </div>

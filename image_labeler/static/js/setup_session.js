@@ -295,8 +295,16 @@ function show_images_wo_labels(){
 
     console.log(task_type,batch_id,rule_index,large_sub_batch)
 
-     href = window.location.origin  
-     + '/label_images/mturk_redirect/?task_type='+task_type
+    if (task_type == 'line_width_type') {
+        link_stem = '/label_images/select_line_widths/'
+    } else {
+        link_stem = '/label_images/mturk_redirect/'
+    }
+
+
+     href = window.location.origin
+     + link_stem  
+     + '?task_type='+task_type
      + '&label_source=Internal'  
      + '&labeler_id=' + document.getElementById('labeler_id').value 
      + '&rule_indexes=%5B'+ rule_index +'%5D'

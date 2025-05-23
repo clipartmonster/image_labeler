@@ -17,8 +17,25 @@
                 {{asset.asset_id}}
                 <canvas id="canvas_{{asset.asset_id}}" class="design active" asset_id = {{asset.asset_id}} ></canvas>
                 <div class = 'layer_container'></div>
-                <img id = "image_{{asset.asset_id}}" class="design" src="{{ asset.image_link }}" crossOrigin="anonymous" style ='display:none'>
-               
+
+                <!-- wrap in images.weserv.nl to get around cors issues on free clip art site -->
+                <!-- <img id = "image_{{asset.asset_id}}" class="design" src="https://images.weserv.nl/?url={{ asset.image_link|slice:'8:'|urlencode }}" crossOrigin="anonymous" style ='display:none'> -->
+                <!-- <img id = "image_{{asset.asset_id}}" class="design" src = "{{ asset.image_link}}" crossOrigin="anonymous" style ='display:none'> -->
+                
+                <!-- {{asset.image_link}} -->
+                {% if "clipart-library.com" in asset.image_link %}
+                    <img id="image_{{ asset.asset_id }}" class="design"
+                    src="https://images.weserv.nl/?url={{ asset.image_link|slice:'8:'|urlencode }}"
+                    crossOrigin="anonymous"
+                    style="display:none">
+                {% else %}
+                    <img id="image_{{ asset.asset_id }}" class="design"
+                    src="{{ asset.image_link }}"
+                    crossOrigin="anonymous"
+                    style="display:none">
+                {% endif %}
+
+                
              </div>
             
             <div class = 'listing_info container'>
@@ -45,7 +62,7 @@
 
                             <div class = 'add_color container'>
 
-                                <div class ="color_swatch invalid" onclick ='add_color_label(event)'>
+                                <div class ="color_swatch invalid" onclick ='label_line_width_invalid(event)'>
                                     <img src = "{% static 'images/invalid_icon.png' %}">
                                 </div>
 

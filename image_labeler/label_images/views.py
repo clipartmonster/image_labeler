@@ -26,13 +26,19 @@ def front_page(request):
 
 def select_line_widths(request):
 
+    labeler_id = request.GET.get('labeler_id','Steve')
+    task_type = request.GET.get('task_type','asset_type')
+    rule_index = request.GET.get('rule_index',1)
+    batch_id = request.GET.get('batch_id',1)
+    large_sub_batch = request.GET.get('large_sub_batch',1)
+
     api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
 
     data = {'batch_type':'large_sub_batch',
-            'large_sub_batch':11,
-            'batch_id':2,
+            'large_sub_batch':large_sub_batch,
+            'batch_id':batch_id,
             'task_type':'line_width_type',
-            'rule_index':1}
+            'rule_index':rule_index}
 
     header = {
         'Content-Type': 'application/json',
@@ -51,7 +57,7 @@ def select_line_widths(request):
 
     data = {'sampling_array':sampling_array,
             'assets_to_label':assets_to_label,
-            'labeler_id':'Steve'}
+            'labeler_id':labeler_id}
 
     return render(request, 'select_line_widths.html', data)
 
@@ -154,7 +160,7 @@ def setup_session(request):
     print(response)
     session_options = json.loads(response.content)
 
-    print(session_options['rule_index_stats'])
+    print(session_options)
 
     selected_options = {'labeler_id':labeler_id,
                         'task_type':task_type,
@@ -992,8 +998,8 @@ def view_model_results(request):
         model_results['date'] = pd.to_datetime(model_results['created_at']).dt.date
 
     best_models = model_results \
-    .assign(   performant=lambda x: np.where((x.val_recall > 0.88) & (x.val_precision > 0.88), 'close', 'no')) \
-    .assign(   performant=lambda x: np.where((x.val_recall > 0.9) & (x.val_precision > 0.9), 'yes', x.performant)) \
+    .assign( performant=lambda x: np.where((x.val_recall > 0.88) & (x.val_precision > 0.88), 'close', 'no')) \
+    .assign( performant=lambda x: np.where((x.val_recall > 0.9) & (x.val_precision > 0.9), 'yes', x.performant)) \
     .sort_values(['task_type','rule_index', 'score'], ascending = False) \
     .groupby(['task_type','rule_index']) \
     .head(1) \
@@ -1006,11 +1012,15 @@ def view_model_results(request):
     print(best_models.columns)
 
     model_results = model_results \
-    .groupby(['task_type', 'rule_index']) \
-    .tail(10) \
-    .sort_values(by=['task_type', 'rule_index', 'created_at']) \
+    .assign( sample_size = lambda x:np.where(x.total_samples < 7000, 0,1)) \
+    .dropna( subset = ['total_samples']) \
+    .query('total_samples > 1000') \
+    .groupby(['task_type', 'rule_index','sample_size']) \
+    .head(20) \
+    .sort_values(by=['task_type', 'rule_index', 'sample_size', 'score'], ascending=[True, True, True, False]) \
     .assign(index_column=lambda x: x.groupby(['task_type', 'rule_index']).cumcount() + 1) \
     .reset_index(drop=True)
+  
 
     model_type_options = model_results['model_type'].unique()
     task_type_options = model_results['task_type'].unique()
@@ -1063,9 +1073,12 @@ def view_primary_colors(request):
 
 def correct_mismatch_labels(request):
 
-    task_type = request.GET.get('task_type', 'multi_color_type')
-    rule_index = int(request.GET.get('rule_index', 1))
+    task_type = request.GET.get('task_type', 'color_fill_type')
+    rule_index = int(request.GET.get('rule_index', 2))
     labeler_id = request.GET.get('labeler_id', 'Steve')
+
+    print(task_type)
+    print(rule_index)
 
     ##############################
 
@@ -1078,8 +1091,8 @@ def correct_mismatch_labels(request):
 
     api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
 
-    data = {'task_type':'multi_color_type',
-            'rule_indexes':[1]
+    data = {'task_type':task_type,
+            'rule_indexes':[rule_index]
             }
 
     response = requests.get(api_url, json = data, headers = header)
@@ -1095,8 +1108,8 @@ def correct_mismatch_labels(request):
 
     api_url = 'https://backend-python-nupj.onrender.com/get_mismatched_labels/'
 
-    data = {'task_type':'multi_color_type',
-            'rule_index':1}
+    data = {'task_type':task_type,
+            'rule_index':rule_index}
 
     header = {
     'Content-Type': 'application/json',

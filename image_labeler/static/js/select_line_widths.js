@@ -202,3 +202,19 @@ function remove_line_width_sample(canvas, sample_index){
     api_remove_line_width_sample(data)
 
 }
+
+
+function label_line_width_invalid(event){
+
+    console.log(event)
+    asset_container = event.target.closest('.listing.light.container')
+
+    data  = {
+        asset_id:asset_container.getAttribute('asset_id'),
+        labler_id:document.getElementById('labeler_id').getAttribute('labeler_id')
+    }
+
+    api_label_line_width_as_invalid(data)
+
+
+}

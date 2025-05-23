@@ -175,6 +175,10 @@ div.model_type.badge.transformer_w_MobileNetV2{
     background-color: #c444c4;
 }
 
+div.model_type.badge.transformer_w_EfficientNet{
+    background-color: #e82be8;
+}
+
 div.performant_status.view_model_results{
     width:10px;
     height:20px;
