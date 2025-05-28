@@ -19,6 +19,47 @@
             </select>
         </div>
 
+        <div>
+
+            <h1 id = 'title' class = 'listing_info label'> Select a batch</h1>
+            {% for batch in batch_counts %}
+
+
+                <div class = 'control container batch_option predicted_labels' batch_index = {{batch.batch_id}}>
+                    <h1 class = 'listing_info label'>{{batch.batch_id}}</h1>
+   
+
+                            <div class = 'cylinder element prediction_labels yes'>
+                                <h2 class = 'control text prediction_labels'>{{batch.yes}}</h2>
+                            </div>
+
+                            <div class = 'cylinder element prediction_labels no'>
+                                <h2 class = 'control text prediction_labels'>{{batch.no}}</h2>
+                            </div>
+
+
+                </div>
+
+            {% endfor %}
+
+        </div>
+
+        <div>
+
+            <h1 id = 'title' class = 'listing_info label'> Select a label type filter</h1>
+            {% for label_type_filter in label_type_filters %}
+
+                <div class = 'control container label_filter_option predicted_labels' label_type_filter = {{label_type_filter}}>
+                    
+                    <h1 class = 'option title label_filter_option'>{{label_type_filter}}</h1>
+   
+                </div>
+
+            {% endfor %}
+
+        </div>
+
+
         <div style = 'display:flex; flex-direction:column; gap:5px; margin-left:10px; margin-bottom:30px'>
 
             <h1 class = 'label_option intro'>Inconsistent Label Type</h1>
@@ -33,8 +74,7 @@
                         <h2 class = 'control text prediction_labels'>manual</h2>
                     </div>
                 </div>
-
-                    <h1 class = 'listing_info label'>False Postive</h1>
+                    <h1 class = 'listing_info label'>False Postive({{mismatch.false_positive}})</h1>
             </div>
 
             <div class = 'control button prediction_labels' label_type = 'false negative' style = 'display:flex; align-items: center; gap:5px;'>
@@ -48,7 +88,7 @@
                     </div>
                 </div>
 
-                    <h1 class = 'listing_info label'>False Negative</h1>
+                    <h1 class = 'listing_info label'>False Negative({{mismatch.false_negative}})</h1>
             </div>
                 
         </div>
@@ -95,7 +135,7 @@
 
         {% for asset in prediction_data %}
 
-            <div id = container_{{asset.asset_id}} class = 'design dark container asset_view image_box' 
+            <div id = container_{{asset.asset_id}} class = 'design dark container view_predictions image_box' 
             asset_id = {{asset.asset_id}}
             task_type = {{task_type}}
             rule_index = {{rule_index}}
@@ -113,29 +153,43 @@
     
                 </div>
                 
-                <h2 class = 'label_option label'>  {{label_title}} </h2>
-                    
-                <div style = 'display:flex; gap:5px; margin:5px'>
+                <div style = 'display:flex; flex-direction:row; gap:5px; align-items: center;'>
+                 <h2 class = 'label_option label'>  {{label_title}} </h2>
+                 <div class = 'correction_status badge view_predictions {{asset.correction_status}}'></div>
+                
+                </div>    
 
-                    <h2 class = "label_option label"> Manual </h2>
-                    <div class = 'response {{asset.manual_label}}'>
-                        <h2 class = 'label_option label'> {{asset.manual_label}} </h2>
+                <div style = 'display:flex; gap:20px; margin:5px'>
+
+                    <div style = 'display:grid; grid-template-rows: 1fr 1fr;'>
+                        <h2 class = "label_option label"> Manual </h2>
+                        <div class = 'response prediction_labels {{asset.manual_label}}'>
+                            <h2 class = 'label_option label'> {{asset.manual_label}} </h2>
+                        </div>
                     </div>
 
-                    <h2 class = "label_option label"> Model </h2>
-                    <div class = 'response {{asset.model_label}}'>
-                        <h2 class = 'label_option label'> {{asset.model_label}} </h2>
+                    <div style = 'display:grid; grid-template-rows: 1fr 1fr;'>
+                        <h2 class = "label_option label"> Model </h2>
+                        <div class = 'response prediction_labels {{asset.model_label}}'>
+                            <h2 class = 'label_option label'> {{asset.model_label}} </h2>
+                        </div>
                     </div>
                         
-                    <h2 class = 'label_option label'>{{asset.probability}}</h2>
+                    <div style = 'display:grid; grid-template-rows: 1fr 1fr;'>
+                        <h2 class = "label_option label"> Probability </h2>
+                        <div class = 'response prediction_labels probability'>
+                            <h2 class = 'label_option label'> {{asset.probability}} </h2>
+                        </div>
+                    </div>
 
                 </div>
 
                 <img id = "image_{{asset.asset_id}}" class="design view_asset_labels large" src="{{ asset.image_link }}" >
-                
+       
+
                 <div style = 'display:flex; gap:1px; align-items: center; margin:10px'>
                     <h1 class = 'listing_info label'>No</h1>
-                    <div class="slider-container" >
+                    <div class="slider-container prediction_labels" >
                         <input class = 'input_slider prediction_labels {{asset.manual_label}}' type="range" min="0" max="1" step="1"
                         {% if asset.manual_label == 'no' %} value="0" {% else %} value="1" {% endif %}>
                         <div class="slider-labels">

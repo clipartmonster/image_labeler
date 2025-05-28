@@ -1,7 +1,29 @@
-div.response {
+div.design.dark.container.view_predictions.image_box{
+    grid-template-rows: 20px 10px 60px 275px 50px ;
+    align-items: start;
+    gap:25px;
+}
+
+div.correction_status.badge.view_predictions{
+    background-color: #c8fafa;
+    border-radius: 100%;
+    width:15px;
+    height:15px
+
+}
+
+div.correction_status.badge.view_predictions.not_corrected{
+    background-color: #c476ce;
+}
+
+div.correction_status.badge.view_predictions.potentially_corrected{
+    background-color: #f6f6ae;
+}
+
+div.response.prediction_labels {
     border-radius: 7px;
-    width:40px;
-    height:25px
+    width:60px;
+    height:30px
 }
 
 div.response.yes{
@@ -10,6 +32,10 @@ div.response.yes{
 
 div.response.no{
     background-color: #bd4444;
+}
+
+div.response.probability{
+    background-color: #5d93cd;
 }
 
 img.flag_issue.yes{
@@ -64,6 +90,26 @@ div.control.container.predicted_labels{
    
 }
 
+h1.option.title.label_filter_option{
+    font-size:14px;
+    font-weight:500;
+
+
+}
+
+div.control.container.batch_option.predicted_labels{
+    grid-template-columns: 1fr 1fr 1fr;
+    margin:5px;
+}
+
+div.control.container.label_filter_option.predicted_labels {
+    display:block;
+    align-content: center;
+    justify-content: center; /* horizontal centering */
+    margin-bottom: 5px;
+}
+
+
 div.control.container.predicted_labels.selected{
     background-color: #7cbebe;
     border: 2px solid #c8fafa;   
@@ -112,6 +158,8 @@ input.input_slider.prediction_labels{
     
 }
 
+
+
 input.input_slider.prediction_labels.no{
     background-color: #bd4444;
 }
@@ -120,6 +168,10 @@ input.input_slider.prediction_labels.yes{
     background-color: #8eb284;
 }
 
+.slider-container.prediction_labels{
+    width:70px;
+    margin:0px;
+}
 
 input.input_slider.prediction_labels::-webkit-slider-thumb {
     -webkit-appearance: none;

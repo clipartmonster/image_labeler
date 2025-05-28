@@ -520,7 +520,12 @@ def view_batch_labels(request):
     batch_of_assets = json.loads(response.content)
 
     batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
-    .sample(1000)
+    .query('label=="yes"')
+
+    # batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
+    # .sample(1000)
+
+    print(batch_of_assets)
 
     # batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
     # .query('color_type == "multi-color"')
@@ -732,6 +737,16 @@ def view_prediction_labels(request):
 
     task_type = request.GET.get('task_type', 'asset_type')
     rule_index = int(request.GET.get('rule_index', 1))
+    batch_index = request.GET.get('batch_index',None)
+    label_type = request.GET.get("label_type",'mismatch')
+
+    #################
+
+    if batch_index is not None:
+        batch_index = int(batch_index)
+
+    #################
+
 
     api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
 
@@ -760,7 +775,9 @@ def view_prediction_labels(request):
     api_url = 'https://backend-python-nupj.onrender.com/get_predictions/'
 
     data = {"rule_index":rule_index,
-            "task_type":task_type}
+            "task_type":task_type,
+            "batch_index":batch_index,
+            "label_type":label_type}
 
     header = {
         'Content-Type': 'application/json',
@@ -768,30 +785,47 @@ def view_prediction_labels(request):
         }
 
     response = requests.get(api_url, json = data, headers = header)
+    print('----response-----')
+    print(response.content)
+
     prediction_data = pd.DataFrame(dict(json.loads(response.content))['prediction_data'])
+    batch_counts = pd.DataFrame(dict(json.loads(response.content))['batch_counts'])
 
-    print(prediction_data)
+    if len(prediction_data) > 0:
 
-    prediction_data = prediction_data \
-    .sort_values('probability', ascending=False)
+        #round probability for formatting
+        prediction_data = prediction_data \
+        .sort_values('probability', ascending=False) \
+        .assign(probability = lambda x: np.round(x['probability'],3))
 
-    # .query('model_label == "yes"') \
+        mismatch_counts = prediction_data \
+            .assign(status = lambda x: np.where(x['manual_label'] == 'yes', 'false_negative','false_positive')) \
+            .groupby('status') \
+            .agg(count = ('asset_id','count')) \
+            .to_dict()['count']
+        
+    else:
+        prediction_data = pd.DataFrame()
+        mismatch_counts = pd.DataFrame()
 
-    print('-----prediction data-------')
-    print(prediction_data.columns)
-    print(prediction_data)
+    if label_type == 'only_no':
+        prediction_data = prediction_data.iloc[1:3000]
 
     label_types = ['model','manual']
     labeler_id_options = ['Steve','Noah']
+    label_type_filters = ['only_yes','only_no','mismatch']
 
     data = {'prediction_data':prediction_data.to_dict(orient = 'records'),
+            'batch_counts':batch_counts.to_dict(orient = 'records'),
+            'mismatch_counts':mismatch_counts,
             'labeler_id_options':labeler_id_options,
             'task_type_options':task_type_options.to_dict(orient = 'records'),
             'task_by_rule_options':task_by_rule_options.to_dict(orient = 'records'),
             'task_type':task_type,
             'rule_index':rule_index,
             'label_types':label_types,
-            'label_title':labelling_rules['title'].values[0]}
+            'label_title':labelling_rules['title'].values[0],
+            'label_type_filters':label_type_filters}
     
     return render(request, 'view_prediction_labels.html', data)
 
@@ -1017,7 +1051,7 @@ def view_model_results(request):
     .query('total_samples > 1000') \
     .groupby(['task_type', 'rule_index','sample_size']) \
     .head(20) \
-    .sort_values(by=['task_type', 'rule_index', 'sample_size', 'score'], ascending=[True, True, True, False]) \
+    .sort_values(by=['task_type', 'rule_index', 'sample_size', 'score'], ascending=[True, True, False, False]) \
     .assign(index_column=lambda x: x.groupby(['task_type', 'rule_index']).cumcount() + 1) \
     .reset_index(drop=True)
   
