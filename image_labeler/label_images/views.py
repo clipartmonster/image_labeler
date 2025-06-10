@@ -1283,10 +1283,12 @@ def view_line_widths(request):
     .assign(line_width_bin=lambda x: pd.cut(  x['line_width'].clip(lower=2),
                                             bins=np.arange(-2, 22, 2).tolist() + [np.inf], 
                                             include_lowest=True,
-                                            labels = False))
+                                            labels = False)) \
+    .assign(prominence = lambda x: np.round(x['prominence']*100,0))
 
-    # rough_fill_scores = rough_fill_scores \
-    # .sample(2000)
+
+
+
 
     print('-------rough_fill_scores------')
     print(line_widths)
@@ -1311,6 +1313,9 @@ def view_line_widths(request):
         },
 
     ]
+
+    line_widths = line_widths \
+    .query('prominence > 85')
 
     print('------rough_metrics-------')
     print(line_width_options)
