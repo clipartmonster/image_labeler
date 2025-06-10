@@ -78,7 +78,6 @@
 
                             <div style = 'display:grid; grid-template-rows: 1fr'>
 
-
                                 <div style = 'display:grid; grid-template-columns:40px 450px 1fr'>
                                 
                                     <div>
@@ -138,13 +137,15 @@
                                         </div>
 
                                     </div>
+
                                 </div>    
+                            </div>
+                        </div>
 
                         {% else %}
                             <div class = 'model_view container {{model.status}}' >
 
                                 <div style = 'display:grid; grid-template-rows: 1fr'>
-
 
                                     <div style = 'display:grid; grid-template-columns:40px 450px 1fr'>
                                     
@@ -241,7 +242,8 @@
 
                             
                             </div>
-                            {% endif %}
+                        {% endif %}
+                    
                     {% endif %}
 
                 {% endfor %}
