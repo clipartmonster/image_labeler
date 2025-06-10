@@ -20,6 +20,8 @@ urlpatterns = [
     path('view_model_results/', views.view_model_results, name = 'view_model_results'),
     path('view_primary_colors/', views.view_primary_colors, name = 'view_primary_colors'),
     path('view_rough_fill/', views.view_rough_fill, name = 'view_rough_fill'),
+    path('view_line_widths/', views.view_line_widths, name = 'view_line_widths'),
+
     path('label_testing/', views.label_testing, name = 'label_testing'),
     path('select_primary_colors/', views.select_primary_colors, name = 'select_primary_colors'),
     path('select_line_widths/', views.select_line_widths, name = 'select_line_widths'),

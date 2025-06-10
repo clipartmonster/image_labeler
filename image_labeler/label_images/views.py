@@ -1258,3 +1258,66 @@ def view_rough_fill(request):
             'rough_fill_scores':rough_fill_scores.to_dict(orient = 'records')}
 
     return render(request, 'view_rough_fill.html', data)
+
+
+
+
+def view_line_widths(request):
+    
+    api_url = 'https://backend-python-nupj.onrender.com/get_line_widths/'
+
+    data = {}
+
+    header = {
+    'Content-Type': 'application/json',
+    'Authorization': settings.API_ACCESS_KEY
+    }
+
+    response = requests.get(api_url, json = data, headers = header)
+
+    print(response.content)
+
+    line_widths = pd.DataFrame(json.loads(response.content))
+
+    line_widths = line_widths \
+    .assign(line_width_bin=lambda x: pd.cut(  x['line_width'].clip(lower=2),
+                                            bins=np.arange(-2, 22, 2).tolist() + [np.inf], 
+                                            include_lowest=True,
+                                            labels = False))
+
+    # rough_fill_scores = rough_fill_scores \
+    # .sample(2000)
+
+    print('-------rough_fill_scores------')
+    print(line_widths)
+    print(line_widths.columns)
+    print(np.min(line_widths['line_width_bin']))
+    print(np.max(line_widths['line_width_bin']))
+
+    line_width_options = [ 
+
+        {
+        'metric_name':'line_width',
+        'min': np.min(line_widths['line_width_bin']),
+        'max': np.max(line_widths['line_width_bin']),
+        'step':'1'
+        },
+   
+        {
+        'metric_name':'prominence',
+        'min': np.min(line_widths['prominence']),
+        'max': np.max(line_widths['prominence']),
+        'step':'.05'
+        },
+
+    ]
+
+    print('------rough_metrics-------')
+    print(line_width_options)
+
+
+
+    data = {'line_width_options':line_width_options, 
+            'line_widths':line_widths.to_dict(orient = 'records')}
+
+    return render(request, 'view_line_widths.html', data)
