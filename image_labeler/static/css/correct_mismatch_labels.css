@@ -1,6 +1,6 @@
 div.label.container.mismatch{
     display:grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     width:200px;
     height:80px;
     border-radius: 5px;
@@ -21,6 +21,11 @@ div.label.container.label_type.manual{
 
 div.label.container.label_type.model{
     background-color:#70b9e1;
+    margin:0px;
+}
+
+div.label.container.label_type.modified{
+    background-color:#e6d478;
     margin:0px;
 }
 

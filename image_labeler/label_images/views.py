@@ -519,13 +519,16 @@ def view_batch_labels(request):
     response = requests.get(api_url, json = data, headers = header)
     batch_of_assets = json.loads(response.content)
 
+    print('-----------batch_of_assets--------------')
+    print(batch_of_assets)
+
     batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
     .query('label=="yes"')
 
     # batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
     # .sample(1000)
 
-    print(batch_of_assets)
+
 
     # batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
     # .query('color_type == "multi-color"')
@@ -740,6 +743,9 @@ def view_prediction_labels(request):
     batch_index = request.GET.get('batch_index',None)
     label_type = request.GET.get("label_type",'mismatch')
 
+    print('--------variables---------')
+    print(task_type, rule_index, batch_index, label_type)
+
     #################
 
     if batch_index is not None:
@@ -785,8 +791,6 @@ def view_prediction_labels(request):
         }
 
     response = requests.get(api_url, json = data, headers = header)
-    print('----response-----')
-    print(response.content)
 
     prediction_data = pd.DataFrame(dict(json.loads(response.content))['prediction_data'])
     batch_counts = pd.DataFrame(dict(json.loads(response.content))['batch_counts'])
@@ -1007,6 +1011,8 @@ def view_model_results(request):
     label_rules = [{'rule_index': entry['rule_index'], 'task_type': entry['task_type'], 'title': entry['title']} for entry in label_rules]
     label_rules = pd.DataFrame(label_rules)
     
+    print('------label_rules-------')
+    print(label_rules)
     
 
     api_url = 'https://backend-python-nupj.onrender.com/get_model_results/'
@@ -1021,6 +1027,9 @@ def view_model_results(request):
 
     model_results = pd.DataFrame(model_results['model_results']) \
     .merge(label_rules, on = ['rule_index','task_type'], how = 'left')
+
+    print('------model_results------')
+    print(model_results)
 
     model_results['label'] = \
         model_results['task_type'].str[0:2].str.upper() + model_results['rule_index'].astype(str)
@@ -1038,7 +1047,7 @@ def view_model_results(request):
     .groupby(['task_type','rule_index']) \
     .head(1) \
     .reset_index() \
-    .filter(['task_type','label', 'val_recall', 'val_precision','performant'])
+    .filter(['task_type','label', 'val_recall', 'val_precision','performant','val_mae'])
 
 
     print('-----best_models------')
@@ -1046,20 +1055,19 @@ def view_model_results(request):
     print(best_models.columns)
 
     model_results = model_results \
-    .assign( sample_size = lambda x:np.where(x.total_samples < 7000, 0,1)) \
-    .dropna( subset = ['total_samples']) \
-    .query('total_samples > 1000') \
-    .groupby(['task_type', 'rule_index','sample_size']) \
+    .groupby(['task_type', 'rule_index']) \
     .head(20) \
-    .sort_values(by=['task_type', 'rule_index', 'sample_size', 'score'], ascending=[True, True, False, False]) \
+    .sort_values(by=['task_type', 'rule_index', 'score'], ascending=[True, True, False]) \
     .assign(index_column=lambda x: x.groupby(['task_type', 'rule_index']).cumcount() + 1) \
     .reset_index(drop=True)
-  
+
 
     model_type_options = model_results['model_type'].unique()
     task_type_options = model_results['task_type'].unique()
     rule_index_options = model_results['title'].unique()
     model_labels = model_results['label'].unique()
+
+    print(model_results)
 
     model_labels = model_results \
     .filter(['title','label','task_type']) \
@@ -1169,3 +1177,84 @@ def correct_mismatch_labels(request):
             'prompt':prompt}
 
     return render(request, 'correct_mismatch_labels.html', data)
+
+
+
+
+def view_rough_fill(request):
+    
+    api_url = 'https://backend-python-nupj.onrender.com/get_rough_fill_scores/'
+
+    data = {}
+
+    header = {
+    'Content-Type': 'application/json',
+    'Authorization': settings.API_ACCESS_KEY
+    }
+
+    response = requests.get(api_url, json = data, headers = header)
+
+
+    rough_fill_scores = pd.DataFrame(json.loads(response.content)['rough_fill_scores'])
+
+    rough_fill_scores = rough_fill_scores \
+    .sample(2000)
+
+    print('-------rough_fill_scores------')
+    print(rough_fill_scores)
+    print(rough_fill_scores.columns)
+
+    rough_options = [ 
+        {
+        'metric_name':'roughness',
+        'min': round(float(np.min(rough_fill_scores['roughness'])), 2),
+        'max': round(float(np.max(rough_fill_scores['roughness'])), 2),
+        'step':'0.01'
+        },
+    
+        {
+        'metric_name':'identical_count',
+        'min': float(np.min(rough_fill_scores['identical_count'])),
+        'max': float(np.max(rough_fill_scores['identical_count'])),
+        'step':'.25'
+        },
+
+        {
+        'metric_name':'estimated_peak_count',
+        'min': float(np.min(rough_fill_scores['estimated_peak_count'])),
+        'max': float(np.max(rough_fill_scores['estimated_peak_count'])),
+        'step':'1'
+        },
+
+        {
+        'metric_name':'score',
+        'min': float(np.min(rough_fill_scores['score'])),
+        'max': float(np.max(rough_fill_scores['score'])),
+        'step':'0.01'
+        },
+
+        {
+        'metric_name':'percent_rough',
+        'min': float(np.min(rough_fill_scores['percent_rough'])),
+        'max': float(np.max(rough_fill_scores['percent_rough'])),
+        'step':'0.01'
+        },
+
+        {
+        'metric_name':'histogram_group',
+        'min': float(np.min(rough_fill_scores['histogram_group'])),
+        'max': float(np.max(rough_fill_scores['histogram_group'])),
+        'step':'1'
+        }
+
+    ]
+
+    print('------rough_metrics-------')
+    print(rough_options)
+
+
+
+    data = {'rough_options':rough_options, 
+            'rough_fill_scores':rough_fill_scores.to_dict(orient = 'records')}
+
+    return render(request, 'view_rough_fill.html', data)

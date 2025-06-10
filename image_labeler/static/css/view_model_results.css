@@ -179,6 +179,10 @@ div.model_type.badge.transformer_w_EfficientNet{
     background-color: #e82be8;
 }
 
+div.model_type.badge.tf_EfficientNetV2S{
+    background-color: #e82be8;
+}
+
 div.performant_status.view_model_results{
     width:10px;
     height:20px;

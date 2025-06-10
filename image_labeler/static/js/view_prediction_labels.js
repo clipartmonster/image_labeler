@@ -38,9 +38,9 @@ if (window.location.pathname === '/label_images/view_prediction_labels/') {
         let rule_options = document.querySelectorAll('.rule_option');
 
         rule_options.forEach(rule_option => {
-            
+           
             rule_option.addEventListener('click', function () {
-                load_assets(rule_option.getAttribute('rule_index'), null, null);                
+                load_assets(rule_option.getAttribute('rule_index'), null, null, rule_option);                
             });
 
             //Remove rule options not in the selected task type container
@@ -63,7 +63,7 @@ if (window.location.pathname === '/label_images/view_prediction_labels/') {
         batch_options.forEach(batch_option => {
 
             batch_option.addEventListener('click', function () {
-                load_assets(null,null, batch_option.getAttribute('batch_index'));                
+                load_assets(null,null, batch_option.getAttribute('batch_index'),batch_option);                
             });
 
             if (batch_option.getAttribute('batch_index') == batch_index){
@@ -78,7 +78,7 @@ if (window.location.pathname === '/label_images/view_prediction_labels/') {
         label_filter_options.forEach(label_filter_option => {
 
             label_filter_option.addEventListener('click', function () {
-                load_assets(null, label_filter_option.getAttribute('label_type_filter', null));                
+                load_assets(null, label_filter_option.getAttribute('label_type_filter', null,label_filter_option));                
             });
 
             if (label_filter_option.getAttribute('label_type_filter') == label_type_filter){
@@ -177,16 +177,33 @@ function filter_by_label_type(label_type) {
 }
 
 
-function load_assets(rule_index, label_type_filter, batch_index) {
+function load_assets(rule_index, label_type_filter, batch_index, selected_element) {
 
-    console.log(rule_index,label_type_filter, batch_index)
+    console.log('hello')
+    console.log(selected_element)
 
- 
     rule_option = document.querySelector('.option.button.circle.rule.index.selected')
     .closest('.rule_option')
 
     task_type = rule_option.getAttribute('task_type')
 
+    if (rule_index != null){
+
+        task_type = selected_element.getAttribute('task_type')
+
+        selected_element
+        .querySelector('.option.button.circle.rule.index')
+        .classList.add('selected')
+        
+    } else if (batch_index != null){
+        selected_element        
+        .classList.add('selected')
+    } else if (label_type_filter != null){
+        selected_element        
+        .classList.add('selected')
+    }
+
+    
     if (batch_index == null){
         batch_option = document.querySelector('.control.container.batch_option.predicted_labels.selected')
         batch_index = batch_option.getAttribute('batch_index')    
@@ -261,7 +278,9 @@ function load_assets(rule_index, label_type_filter, batch_index) {
     + '&batch_index=' + batch_index
     + '&label_type=' + label_type_filter
    
-    window.location.href = href;
+    setTimeout(() => {
+        window.location.href = href;
+    }, 500);
 
 
 

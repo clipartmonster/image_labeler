@@ -8,7 +8,7 @@
 
     <div class = 'listing light container side_panel'>
        
-        <div class = 'option panel model_results'>
+        <!-- <div class = 'option panel model_results'>
             <h1 class = 'listing_info label'>Model Type</h1>
             {% for model_type in model_type_options %}
                 <div class = "option button rectangle model_results" >
@@ -24,7 +24,7 @@
                     <h1 class = "option title">{{task_type}}</h1>
                 </div>
             {% endfor %}
-        </div>
+        </div> -->
         
         <h1 class = 'listing_info label'>Rule Index</h1>
 
@@ -72,13 +72,15 @@
 
                     {% if label.label == model.label %}
 
+                        {% if label.label == 'LI1' %}
+
                         <div class = 'model_view container {{model.status}}' >
 
                             <div style = 'display:grid; grid-template-rows: 1fr'>
 
 
                                 <div style = 'display:grid; grid-template-columns:40px 450px 1fr'>
-                                  
+                                
                                     <div>
 
                                         <div class = 'model_label badge'>
@@ -94,39 +96,10 @@
                                         <div style ='display:grid; grid-template-rows:35px 20px 20px'>
                                         
                                                 <div class = 'text_field large container validation'>
-                                                    <h1 class = 'text_field large'> {{model.val_recall}} </h1>                                        
+                                                    <h1 class = 'text_field large'> {{model.val_mae}} </h1>                                        
                                                 </div>
 
-                                                <h5 class = 'text_field small'> Validation Recall </h5>                   
-
-                                                <h1 class = 'text_field confusion_metrics'>
-                                                tp: {{model.val_tp}} | fn: {{model.val_fn}}
-                                                </h1>
-
-                                        </div>
-                    
-                                        <div style ='display:grid; grid-template-rows:35px 20px 20px'>
-                                        
-                                            <div class = 'text_field large container precision'>
-                                                <h1 class = 'text_field large'> {{model.val_precision}} </h1>                                        
-                                            </div>
-
-                                            <h5 class = 'text_field small'> Validation Precision </h5>                   
-
-                                            <h1 class = 'text_field confusion_metrics'>
-                                                tp: {{model.val_tp}} | fp: {{model.val_fp}}
-                                            </h1>
-
-                                        </div>
-
-                                        <div style ='display:grid; grid-template-rows:35px 20px 20px'>
-                                        
-                                            <div class = 'text_field large container auc'>
-                                                <h1 class = 'text_field large'> {{model.val_auc}} </h1>                                        
-                                            </div>
-
-                                            <h5 class = 'text_field small'> Area Under the Curve </h5>                   
-
+                                                <h5 class = 'text_field small'> Mean Absolute Error </h5>                   
 
                                         </div>
 
@@ -167,11 +140,108 @@
                                     </div>
                                 </div>    
 
-                                
-                            </div> 
+                        {% else %}
+                            <div class = 'model_view container {{model.status}}' >
 
+                                <div style = 'display:grid; grid-template-rows: 1fr'>
+
+
+                                    <div style = 'display:grid; grid-template-columns:40px 450px 1fr'>
+                                    
+                                        <div>
+
+                                            <div class = 'model_label badge'>
+                                                <h1 class = 'text_field badge small'>{{model.index_column}}</h1>    
+                                            </div>
+
+                                            <div class = 'model_type badge {{model.model_type}}'></div>
+
+                                        </div>
+
+                                        <div style = 'display:grid; grid-template-columns:140px 140px 140px'>
+
+                                            <div style ='display:grid; grid-template-rows:35px 20px 20px'>
+                                            
+                                                    <div class = 'text_field large container validation'>
+                                                        <h1 class = 'text_field large'> {{model.val_recall}} </h1>                                        
+                                                    </div>
+
+                                                    <h5 class = 'text_field small'> Validation Recall </h5>                   
+
+                                                    <h1 class = 'text_field confusion_metrics'>
+                                                    tp: {{model.val_tp}} | fn: {{model.val_fn}}
+                                                    </h1>
+
+                                            </div>
                         
-                        </div>
+                                            <div style ='display:grid; grid-template-rows:35px 20px 20px'>
+                                            
+                                                <div class = 'text_field large container precision'>
+                                                    <h1 class = 'text_field large'> {{model.val_precision}} </h1>                                        
+                                                </div>
+
+                                                <h5 class = 'text_field small'> Validation Precision </h5>                   
+
+                                                <h1 class = 'text_field confusion_metrics'>
+                                                    tp: {{model.val_tp}} | fp: {{model.val_fp}}
+                                                </h1>
+
+                                            </div>
+
+                                            <div style ='display:grid; grid-template-rows:35px 20px 20px'>
+                                            
+                                                <div class = 'text_field large container auc'>
+                                                    <h1 class = 'text_field large'> {{model.val_auc}} </h1>                                        
+                                                </div>
+
+                                                <h5 class = 'text_field small'> Area Under the Curve </h5>                   
+
+
+                                            </div>
+
+                                        </div>
+
+                                        <div style = 'display:flex; flex-direction:column' >
+                                        
+                                            <div style = 'display:flex'>
+                                                <h5 class = 'text_field small'>Overall Score:</h5>
+                                                <h1 class = 'text_field rule_title'>{{model.score}}</h1>
+                                            </div>
+
+                                            <div style = 'display:flex'>
+                                                    <h5 class = 'text_field small'>Samples:</h5>
+                                                    <h1 class = 'text_field rule_title'>{{model.total_samples}}</h1>
+                                            </div>
+
+                                            <div style = 'display:flex'>
+                                                <h5 class = 'text_field small'>Validation Samples:</h5>
+                                                <h1 class = 'text_field rule_title'>{{model.val_samples}}</h1>
+                                            </div>
+
+                                            <div style = 'display:flex'>
+                                                <h5 class = 'text_field small'>Date: </h5>
+                                                <h1 class = 'text_field rule_title'> {{model.date}}</h1>
+                                            </div>
+
+                                            <div style = 'display:flex'>
+                                                <h5 class = 'text_field small'>Model Type: </h5>
+                                                <h1 class = 'text_field rule_title'> {{model.model_type}}</h1>
+                                            </div>
+
+                                            <div style = 'display:flex'>
+                                                <h5 class = 'text_field small'>Image Size: </h5>
+                                                <h1 class = 'text_field rule_title'> {{model.image_size_width}} x {{model.image_size_height}} </h1>
+                                            </div>
+
+                                        </div>
+                                    </div>    
+
+                                    
+                                </div> 
+
+                            
+                            </div>
+                            {% endif %}
                     {% endif %}
 
                 {% endfor %}
@@ -186,143 +256,3 @@
 
 
 {% endblock %}
-
-
-  <!-- <div style = 'display:grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr; gap:3px'>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> Epochs </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> Batch Size </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> Image Size </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> Optimizer </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> Learning Rate </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> Weight Decay </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type official'>
-                        <h2 class = 'label_field label asset_type'> {{model.epochs}} </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type manual'>
-                        <h2 class = 'label_field label asset_type'> {{model.batch_size}} </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type model'>
-                        <h2 class = 'label_field label asset_type'> {{model.image_size_width}}, {{model.image_size_height}}  </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type official'>
-                        <h2 class = 'label_field label asset_type'> {{model.optimizer}} </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type manual'>
-                        <h2 class = 'label_field label asset_type'> {{model.learning_rate}} </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type model'>
-                        <h2 class = 'label_field label asset_type'> {{model.weight_decay}} </h2>
-                    </div>
-
-                </div>
-
-               <img class = 'model_results plot visible'src = {{model.image_link}} style = 'width:600px'>
-
-                        
-                <div style = 'display:grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap:3px'>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> Validation Loss </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> Validation Accuracy </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> Validation AUC </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> Validation Precision </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> Validation Recall </h2>
-                    </div>
-
-
-
-                    <div class = 'label_field asset_type manual'>
-                        <h2 class = 'label_field label asset_type'> {{model.val_loss}} </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type model'>
-                        <h2 class = 'label_field label asset_type'> {{model.val_accuracy}}</h2>
-                    </div>
-
-                    <div class = 'label_field asset_type official'>
-                        <h2 class = 'label_field label asset_type'> {{model.val_auc}} </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type manual'>
-                        <h2 class = 'label_field label asset_type'> {{model.val_precision}} </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type model'>
-                        <h2 class = 'label_field label asset_type'> {{model.val_recall}} </h2>
-                    </div>
-                    
-                </div>
-           
-                <div style = 'display:grid; grid-template-columns: 1fr 1fr 1fr 1fr ; gap:3px'>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> True Positive </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> False Positive </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> True Negative </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type header'>
-                        <h2 class = 'label_field label asset_type header'> False Negative </h2>
-                    </div>
-
-
-                    <div class = 'label_field asset_type manual'>
-                        <h2 class = 'label_field label asset_type'> {{model.val_tp}} </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type model'>
-                        <h2 class = 'label_field label asset_type'> {{model.val_fp}}</h2>
-                    </div>
-
-                    <div class = 'label_field asset_type official'>
-                        <h2 class = 'label_field label asset_type'> {{model.val_tn}} </h2>
-                    </div>
-
-                    <div class = 'label_field asset_type manual'>
-                        <h2 class = 'label_field label asset_type'> {{model.val_fn}} </h2>
-                    </div>
-
-                    
-                </div> -->

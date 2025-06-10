@@ -1,0 +1,98 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+    
+<div style = 'display:flex; flex-direction: row;'>
+
+    <div class = 'listing light container side_panel'>
+
+        <div style = 'display:flex'>
+            <h2 id = image_count class = 'label_option label'> {{total_available_images}} </h2>
+            <h2 class = 'label_option label'>/</h2>            
+            <h2 class = 'label_option label'>{{total_available_images}}</h2>
+        </div>
+
+        <h1 class = 'label_option intro'>Image Size</h1>
+
+        <div class = 'option container' style = 'display:flex; gap: 15px'>
+
+            <div class = 'option button circle image_size selected' size = 'small'>  <h1 class = 'option title'> S </h1></div>
+            <div class = 'option button circle image_size' size = 'medium'>   <h1 class = 'option title'> M </h1></div>
+            <div class = 'option button circle image_size' size = 'large'>  <h1 class = 'option title'> L </h1></div>
+            <div class = 'option button circle image_size' size = 'extra_large'>  <h1 class = 'option title'> XL </h1></div>
+
+        </div>
+
+        <h1 class = 'label_option intro'>Rule Index</h1>
+
+        {% for rough_option in rough_options%}
+
+            <h1 class = 'label_option intro'> {{rough_option.metric_name}} </h1>
+
+            <div class="slider-container view_rough_fills">
+                
+                <div class="dual-range-slider">
+                    
+                    <div class="slider-range" id="sliderRange"></div>
+                    
+                    <input type="range" 
+                    class="slider-input min" 
+                    id="slider {{rough_option.metric_name}} min" 
+                    min="{{rough_option.min}}" 
+                    max="{{rough_option.max}}" 
+                    value="{{rough_option.min}}"
+                    step="{{rough_option.step}}">
+                    
+                    <input type="range" 
+                    class="slider-input max" 
+                    id="slider {{rough_option.metric_name}} max" 
+                    min="{{rough_option.min}}" 
+                    max="{{rough_option.max}}" 
+                    value="{{rough_option.max}}"
+                    step="{{rough_option.step}}">
+
+                </div>
+       
+
+            </div>
+
+        {% endfor %}
+      
+  
+
+    </div>
+
+    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
+
+
+        {% for asset in rough_fill_scores %}
+        
+            <div id="container_{{asset.assets.asset_id}}" class="design dark container asset_view image_box" 
+                roughness = {{asset.roughness}}
+                identical_count = {{asset.identical_count}}
+                estimated_peak_count = {{asset.estimated_peak_count}}
+                score = {{asset.score}}
+                percent_rough = {{asset.percent_rough}}
+                histogram_group = {{asset.histogram_group}}
+                >
+                <div class="labeler_data" style="display:none" asset_id="{{asset.asset_id}}"></div>
+
+                <h2 class="label_option label">{{asset.assets.asset_id}}</h2>
+
+                <img id="image_{{ asset.asset_id }}"
+                class="design view_asset_labels small"
+                src="{{ asset.image_link }}"
+                onerror="handleImageError('{{ asset.asset_id }}')">
+
+
+            </div>
+
+        {% endfor %}                          
+    </div>
+
+</div>
+
+
+{% endblock %}
