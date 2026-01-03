@@ -144,8 +144,7 @@
 
         <div class = 'design dark container' >
             <h1 class = 'label_option rule' >{{asset.asset_id}}</h1>                                             
-            <!-- <img id = "image_{{asset.asset_id}}" class="design" src="https://backend-python-nupj.onrender.com/proxy_image/?url={{asset.image_link}}"  > -->
-            <img id = "image_{{asset.asset_id}}" class="design" src="{{asset.image_link}}"  >
+            <img id = "image_{{asset.asset_id}}" class="design" data-src="{{asset.image_link}}" src="{% static 'images/empty_icon.png' %}" >
         </div>
         
     <div class = 'listing_info container'>

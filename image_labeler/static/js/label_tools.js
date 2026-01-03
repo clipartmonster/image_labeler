@@ -229,6 +229,30 @@ function select_element(elements) {
 
 function activate_listing_container(listing_container) {
 
+    // === OPTIMIZATION: Lazy Load Images ===
+    // 1. Load image for current container
+    let img = listing_container.querySelector('img.design');
+    if (img && img.dataset.src) {
+        img.src = img.dataset.src;
+        img.removeAttribute('data-src');
+    }
+
+    // 2. Preload image for the NEXT container (to reduce waiting time)
+    // Find the next sibling that is a listing container
+    let nextContainer = listing_container.nextElementSibling;
+    while (nextContainer && !nextContainer.classList.contains('listing')) {
+        nextContainer = nextContainer.nextElementSibling;
+    }
+    
+    if (nextContainer) {
+        let nextImg = nextContainer.querySelector('img.design');
+        if (nextImg && nextImg.dataset.src) {
+            nextImg.src = nextImg.dataset.src;
+            nextImg.removeAttribute('data-src');
+        }
+    }
+    // === END OPTIMIZATION ===
+
     if (window.matchMedia('(max-width: 768px)').matches) {
         mobile_keyboard = document.querySelector('#mobile_keyboard')
         mobile_keyboard.style.display = 'flex'

@@ -17,6 +17,7 @@ import requests
 import json
 import pandas as pd
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 
 def front_page(request):
 
@@ -269,43 +270,51 @@ def mturk_redirect(request):
     print('-----------varaibles-----------')
     print(batch_id, task_type, rule_index,labeler_id)
 
- 
-
-    api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
     
-    data = {'batch_type':'large_sub_batch',
-            'large_sub_batch':large_sub_batch,
-            'batch_id':batch_id,
-            'task_type':task_type,
-            'rule_index':rule_index}
-
     header = {
         'Content-Type': 'application/json',
         'Authorization': settings.API_ACCESS_KEY
-        }
+    }
 
-    response = requests.get(api_url, json = data, headers = header)
-    print('|-------response.content----------|')
-    print(json.loads(response.content))
-    assets_to_label = json.loads(response.content)['asset_batch']
+    def fetch_assets():
+        api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
+        data = {'batch_type':'large_sub_batch',
+                'large_sub_batch':large_sub_batch,
+                'batch_id':batch_id,
+                'task_type':task_type,
+                'rule_index':rule_index}
+        response = requests.get(api_url, json=data, headers=header)
+        return json.loads(response.content)
+
+    def fetch_rules():
+        api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
+        data = {'task_type':task_type, 'rule_indexes':rule_indexes}
+        response = requests.get(api_url, json=data, headers=header)
+        return dict(json.loads(response.content))['labelling_rules']
+
+    def fetch_test_questions():
+        if bool(test_the_labeler) == True:
+            print('preparing test questions')
+            api_url = 'https://backend-python-nupj.onrender.com/get_test_questions/'
+            data = {'samples':2}
+            response = requests.get(api_url, json=data, headers=header)
+            return dict(json.loads(response.content))
+        return []
+
+    # Execute requests in parallel
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        future_assets = executor.submit(fetch_assets)
+        future_rules = executor.submit(fetch_rules)
+        future_test = executor.submit(fetch_test_questions)
+
+        assets_content = future_assets.result()
+        labelling_rules = future_rules.result()
+        test_questions = future_test.result()
+
+    assets_to_label = assets_content['asset_batch']
 
     print('|-------assets to label----------|')
     print(pd.DataFrame(assets_to_label))
-
-
-    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
-
-    data = {'task_type':task_type,
-            'rule_indexes':rule_indexes
-            }
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-    labelling_rules = dict(json.loads(response.content))['labelling_rules']
 
     collection_data = {
         "task_type":task_type,
@@ -318,27 +327,8 @@ def mturk_redirect(request):
         "rule_index":rule_indexes[0]
     }
 
-    #Get test examples 
-
-    if bool(test_the_labeler) == True:
-        print('preparing test questions')
-        api_url = 'https://backend-python-nupj.onrender.com/get_test_questions/'
-
-        data = {'samples':2}
-
-        header = {
-            'Content-Type': 'application/json',
-            'Authorization': settings.API_ACCESS_KEY
-            }
-
-        response = requests.get(api_url, json = data, headers = header)
-        test_questions = dict(json.loads(response.content))
-        
-    else:
-        test_questions = []    
-
-
-
+    # Test questions are already fetched in parallel above
+    
     return render(request, 'label_content.html', {'task_type':task_type,
                                                   'label':label_type,                                                  
                                                   'assets_to_label':assets_to_label,
