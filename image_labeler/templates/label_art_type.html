@@ -144,7 +144,7 @@
 
         <div class = 'design dark container' >
             <h1 class = 'label_option rule' >{{asset.asset_id}}</h1>                                             
-            <img id = "image_{{asset.asset_id}}" class="design" data-src="{{asset.image_link}}" src="{% static 'images/empty_icon.png' %}" >
+            <img id = "image_{{asset.asset_id}}" class="design" data-src="{{asset.image_link}}" src="{{ asset.image_link }}" >
         </div>
         
     <div class = 'listing_info container'>
