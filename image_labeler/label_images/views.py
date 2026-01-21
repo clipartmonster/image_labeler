@@ -583,7 +583,13 @@ def view_batch_labels(request):
             "labeler_id_options":labeler_id_options,
             "batch_of_assets":batch_of_assets.to_dict(orient = 'records')}
 
-    return render(request, 'view_batch_labels.html', data)
+    try:
+        return render(request, 'view_batch_labels.html', data)
+    except Exception as e:
+        print(f"Error rendering view_batch_labels: {e}")
+        import traceback
+        traceback.print_exc()
+        raise e
 
 
 
