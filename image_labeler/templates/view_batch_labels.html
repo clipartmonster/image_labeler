@@ -3,122 +3,130 @@
 
 {% block content %}
 
-<div style = 'display:flex; flex-direction: row;'>
+<div style='display:flex; flex-direction: row;'>
 
-    <div class = 'listing light container side_panel'>
+    <div class='listing light container side_panel'>
 
-        <div style = 'margin:5px; width:100%'>
-            <h1 id = 'title' class = 'listing_info label'> Select your labeler id</h1>
-            <select id="labeler_id" class = 'title_font field_label' name="labeler_id">
+        <div style='margin:5px; width:100%'>
+            <h1 id='title' class='listing_info label'> Select your labeler id</h1>
+            <select id="labeler_id" class='title_font field_label' name="labeler_id">
 
                 {% for labeler_id in labeler_id_options %}
-                    <option value="{{ labeler_id }}">{{ labeler_id }}</option>
+                <option value="{{ labeler_id }}">{{ labeler_id }}</option>
                 {% endfor %}
 
             </select>
         </div>
 
-        <div style = 'display:flex; gap:10px'>
-            <h2 id = image_count class = 'label_option label'>total: {{total_assets}} </h2>
+        <div style='display:flex; gap:10px'>
+            <h2 id=image_count class='label_option label'>total: {{total_assets}} </h2>
             {% for label_count in label_counts %}
-                <h2 class="label_option label"> {{ label_count.label }}: {{ label_count.count }} </h2>
+            <h2 class="label_option label"> {{ label_count.label }}: {{ label_count.count }} </h2>
             {% endfor %}
         </div>
 
         <div>
-            <h1 class = 'label_option intro'>{{rule_entry.title}}</h1>
-            <h3 class = 'title view_batch'>{{rule_entry.prompt}}</h3>
+            <h1 class='label_option intro'>{{rule_entry.title}}</h1>
+            <h3 class='title view_batch'>{{rule_entry.prompt}}</h3>
         </div>
 
-        <h1 class = 'label_option intro'>Image Size</h1>
+        <h1 class='label_option intro'>Image Size</h1>
 
-        <div class = 'option container' style = 'display:flex; gap: 15px'>
+        <div class='option container' style='display:flex; gap: 15px'>
 
-            <div class = 'option button circle image_size selected' size = 'small'>  <h1 class = 'option title'> S </h1></div>
-            <div class = 'option button circle image_size' size = 'medium'>   <h1 class = 'option title'> M </h1></div>
-            <div class = 'option button circle image_size' size = 'large'>  <h1 class = 'option title'> L </h1></div>
-            <div class = 'option button circle image_size' size = 'extra_large'>  <h1 class = 'option title'> XL </h1></div>
+            <div class='option button circle image_size selected' size='small'>
+                <h1 class='option title'> S </h1>
+            </div>
+            <div class='option button circle image_size' size='medium'>
+                <h1 class='option title'> M </h1>
+            </div>
+            <div class='option button circle image_size' size='large'>
+                <h1 class='option title'> L </h1>
+            </div>
+            <div class='option button circle image_size' size='extra_large'>
+                <h1 class='option title'> XL </h1>
+            </div>
 
         </div>
 
-           
+
     </div>
 
-    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
+    <div class='listing light container' style='display:flex; flex-wrap:wrap'>
 
-        <div class = 'asset container no'>
+        <div class='asset container no'>
 
             {% for asset in batch_of_assets %}
 
-                {% if asset.label == 'no' %}
+            {% if asset.label == 'no' %}
 
-                    <div id = container_{{asset.asset_id}} class = 'design dark container asset_view image_box'
-                    task_type = {{rule_entry.task_type}},
-                    rule_index = {{rule_entry.rule_index}},
-                    asset_id = {{asset.asset_id}} >
+            <div id=container_{{asset.asset_id}} class='design dark container asset_view image_box'
+                task_type={{rule_entry.task_type}} rule_index={{rule_entry.rule_index}} asset_id={{asset.asset_id}}>
 
-                        <div style = 'display:flex; margin-left:auto'>
-                            <img class = 'info' style = 'margin-left:auto' src = "{% static 'images/info_icon.png' %}">
-                            <img class = 'flag_issue {{asset.label_issue}}' style = 'margin-left:auto' src = "{% static 'images/flag_icon.png' %}">
-                        </div>
+                <div style='display:flex; margin-left:auto'>
+                    <img class='info' style='margin-left:auto' src="{% static 'images/info_icon.png' %}">
+                    <img class='flag_issue {{asset.label_issue}}' style='margin-left:auto'
+                        src="{% static 'images/flag_icon.png' %}">
+                </div>
 
-                        <h2 class = 'label_option label'> {{asset.asset_id}}</h2>
-                        <img id = "image_{{asset.asset_id}}" class="design view_asset_labels large" src="{{ asset.image_link }}" crossOrigin="anonymous" >
-                        <h2 class = 'label_option label'> {{asset.agree_status}}</h2>
+                <h2 class='label_option label'> {{asset.asset_id}}</h2>
+                <img id="image_{{asset.asset_id}}" class="design view_asset_labels large" src="{{ asset.image_link }}"
+                    crossOrigin="anonymous">
+                <h2 class='label_option label'> {{asset.agree_status}}</h2>
 
-                        <div style = 'display:flex; gap:1px; align-items: center; margin:10px'>
-                            <h1 class = 'listing_info label'>No</h1>
-                            <div class="slider-container prediction_labels" >
-                                <input class = 'input_slider prediction_labels {{asset.label}}' type="range" min="0" max="1" step="1"
-                                {% if asset.label == 'no' %} value="0" {% else %} value="1" {% endif %}>
-                                <div class="slider-labels">
-                                
-                                </div>
-                            </div>
-                            <h1 class = 'listing_info label'>Yes</h1>
+                <div style='display:flex; gap:1px; align-items: center; margin:10px'>
+                    <h1 class='listing_info label'>No</h1>
+                    <div class="slider-container prediction_labels">
+                        <input class='input_slider prediction_labels {{asset.label}}' type="range" min="0" max="1"
+                            step="1" {% if asset.label=='no' %} value="0" {% else %} value="1" {% endif %}>
+                        <div class="slider-labels">
+
                         </div>
                     </div>
+                    <h1 class='listing_info label'>Yes</h1>
+                </div>
+            </div>
 
-                {% endif %}
+            {% endif %}
 
             {% endfor %}
 
         </div>
 
-        <div class = 'asset container yes'>
+        <div class='asset container yes'>
 
             {% for asset in batch_of_assets %}
 
-                {% if asset.label == 'yes' %}
+            {% if asset.label == 'yes' %}
 
-                    <div id = container_{{asset.asset_id}} class = 'design dark container asset_view image_box'
-                    task_type = {{rule_entry.task_type}},
-                    rule_index = {{rule_entry.rule_index}},
-                    asset_id = {{asset.asset_id}} >
+            <div id=container_{{asset.asset_id}} class='design dark container asset_view image_box'
+                task_type={{rule_entry.task_type}} rule_index={{rule_entry.rule_index}} asset_id={{asset.asset_id}}>
 
-                        <div style = 'display:flex; margin-left:auto'>
-                            <img class = 'info' style = 'margin-left:auto' src = "{% static 'images/info_icon.png' %}">
-                            <img class = 'flag_issue {{asset.label_issue}}' style = 'margin-left:auto' src = "{% static 'images/flag_icon.png' %}">
-                        </div>
+                <div style='display:flex; margin-left:auto'>
+                    <img class='info' style='margin-left:auto' src="{% static 'images/info_icon.png' %}">
+                    <img class='flag_issue {{asset.label_issue}}' style='margin-left:auto'
+                        src="{% static 'images/flag_icon.png' %}">
+                </div>
 
-                        <h2 class = 'label_option label'> {{asset.asset_id}}</h2>
-                        <img id = "image_{{asset.asset_id}}" class="design view_asset_labels large" src="{{ asset.image_link }}" crossOrigin="anonymous" >
-                        <h2 class = 'label_option label'> {{asset.agree_status}}</h2>
+                <h2 class='label_option label'> {{asset.asset_id}}</h2>
+                <img id="image_{{asset.asset_id}}" class="design view_asset_labels large" src="{{ asset.image_link }}"
+                    crossOrigin="anonymous">
+                <h2 class='label_option label'> {{asset.agree_status}}</h2>
 
-                        <div style = 'display:flex; gap:1px; align-items: center; margin:10px'>
-                            <h1 class = 'listing_info label'>No</h1>
-                            <div class="slider-container prediction_labels" >
-                                <input class = 'input_slider prediction_labels {{asset.label}}' type="range" min="0" max="1" step="1"
-                                {% if asset.label == 'no' %} value="0" {% else %} value="1" {% endif %}>
-                                <div class="slider-labels">
-                                
-                                </div>
-                            </div>
-                            <h1 class = 'listing_info label'>Yes</h1>
+                <div style='display:flex; gap:1px; align-items: center; margin:10px'>
+                    <h1 class='listing_info label'>No</h1>
+                    <div class="slider-container prediction_labels">
+                        <input class='input_slider prediction_labels {{asset.label}}' type="range" min="0" max="1"
+                            step="1" {% if asset.label=='no' %} value="0" {% else %} value="1" {% endif %}>
+                        <div class="slider-labels">
+
                         </div>
                     </div>
+                    <h1 class='listing_info label'>Yes</h1>
+                </div>
+            </div>
 
-                {% endif %}
+            {% endif %}
 
             {% endfor %}
 
