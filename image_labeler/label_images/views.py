@@ -507,13 +507,20 @@ def view_batch_labels(request):
     }
 
     response = requests.get(api_url, json = data, headers = header)
-    batch_of_assets = json.loads(response.content)
+    batch_of_assets_response = json.loads(response.content)
 
     # print('-----------batch_of_assets--------------')
     # print(batch_of_assets)
 
-    batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
-    .query('label=="yes"')
+    if 'assets_w_labels' in batch_of_assets_response and batch_of_assets_response['assets_w_labels']:
+        batch_of_assets = pd.DataFrame(batch_of_assets_response['assets_w_labels'])
+        
+        if 'label' in batch_of_assets.columns:
+            batch_of_assets = batch_of_assets.query('label=="yes"')
+        else:
+            batch_of_assets = pd.DataFrame()
+    else:
+        batch_of_assets = pd.DataFrame()
 
     # batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
     # .sample(1000)
@@ -524,11 +531,14 @@ def view_batch_labels(request):
     # .query('color_type == "multi-color"')
 
 
-    label_counts = batch_of_assets \
-    .groupby('label') \
-    .agg(count = ('asset_id','count')) \
-    .reset_index() \
-    .to_dict(orient = 'records')
+    if not batch_of_assets.empty:
+        label_counts = batch_of_assets \
+        .groupby('label') \
+        .agg(count = ('asset_id','count')) \
+        .reset_index() \
+        .to_dict(orient = 'records')
+    else:
+        label_counts = []
 
     ###############################
     #get labelling rules
@@ -544,10 +554,14 @@ def view_batch_labels(request):
     response = requests.get(api_url, json = data, headers = header)
     labelling_rules = dict(json.loads(response.content))
 
-    rule_entry = pd.DataFrame(labelling_rules['labelling_rules']) \
-    .query("task_type == @task_type") \
-    .query("rule_index == @rule_index") \
-    .to_dict(orient = 'records')
+    rule_entry = []
+    if 'labelling_rules' in labelling_rules:
+        rules_df = pd.DataFrame(labelling_rules['labelling_rules'])
+        if not rules_df.empty and 'task_type' in rules_df.columns and 'rule_index' in rules_df.columns:
+            rule_entry = rules_df \
+            .query("task_type == @task_type") \
+            .query("rule_index == @rule_index") \
+            .to_dict(orient = 'records')
 
     print('------------')
     print(rule_entry)
