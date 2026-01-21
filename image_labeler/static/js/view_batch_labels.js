@@ -22,11 +22,11 @@ function toggle_slider_control(slider_control){
     if (slider_control.value == 0) {
         slider_control.classList.remove('yes')
         slider_control.classList.add('no')
-        modified_prompt_response = 'no'
+        modified_prompt_response = 0
     }else{
         slider_control.classList.remove('no')
         slider_control.classList.add('yes')
-        modified_prompt_response = 'yes'
+        modified_prompt_response = 1
     }
     
     image_box_container = slider_control.closest('.image_box')
