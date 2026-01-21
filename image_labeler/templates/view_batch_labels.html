@@ -26,6 +26,15 @@
         </div>
 
         <div>
+            <h1 id='title' class='listing_info label'> Select a label type filter</h1>
+            {% for filter_option in label_type_filters %}
+            <div class='control container label_filter_option batch_labels' label_filter='{{filter_option}}'>
+                <h1 class='option title label_filter_option'>{{filter_option}}</h1>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div>
             <h1 class='label_option intro'>{{rule_entry.title}}</h1>
             <h3 class='title view_batch'>{{rule_entry.prompt}}</h3>
         </div>

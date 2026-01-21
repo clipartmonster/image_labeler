@@ -11,6 +11,23 @@ if (window.location.pathname === '/label_images/view_batch_labels/') {
             })
         })
 
+        let label_filter_options = document.querySelectorAll('.label_filter_option.batch_labels')
+
+        label_filter_options.forEach(option => {
+            option.addEventListener('click', function() {
+                let filter = this.getAttribute('label_filter');
+                let url = new URL(window.location.href);
+                url.searchParams.set('label_filter', filter);
+                window.location.href = url.toString();
+            })
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const current_filter = urlParams.get('label_filter') || 'only_yes';
+            if (option.getAttribute('label_filter') == current_filter) {
+                option.classList.add('selected');
+            }
+        })
+
     });
 
 }

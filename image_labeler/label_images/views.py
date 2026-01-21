@@ -487,6 +487,7 @@ def view_batch_labels(request):
     task_type = request.GET.get('task_type', 'asset_type')
     rule_index = int(request.GET.get('rule_index', 1))
     batch_index = int(request.GET.get('batch_index', 1))
+    label_filter = request.GET.get('label_filter', 'only_yes')
 
     print(task_type,rule_index,batch_index)
 
@@ -516,7 +517,10 @@ def view_batch_labels(request):
         batch_of_assets = pd.DataFrame(batch_of_assets_response['assets_w_labels'])
         
         if 'label' in batch_of_assets.columns:
-            batch_of_assets = batch_of_assets.query('label=="yes"')
+            if label_filter == 'only_yes':
+                batch_of_assets = batch_of_assets.query('label=="yes"')
+            elif label_filter == 'only_no':
+                batch_of_assets = batch_of_assets.query('label=="no"')
         else:
             batch_of_assets = pd.DataFrame()
     else:
@@ -571,6 +575,7 @@ def view_batch_labels(request):
     total_assets = len(batch_of_assets)
 
     labeler_id_options = ['Steve','Noah']
+    label_type_filters = ['only_yes', 'only_no']
 
     if len(rule_entry) > 0:
         rule_entry = rule_entry[0]
@@ -581,6 +586,8 @@ def view_batch_labels(request):
             "label_counts":label_counts,
             "total_assets": total_assets,
             "labeler_id_options":labeler_id_options,
+            "label_type_filters":label_type_filters,
+            "label_filter":label_filter,
             "batch_of_assets":batch_of_assets.to_dict(orient = 'records')}
 
     try:
