@@ -35,7 +35,7 @@ function toggle_slider_control(slider_control){
     data = {asset_id:image_box_container.getAttribute('asset_id'), 
             task_type:image_box_container.getAttribute('task_type'),
             rule_index:image_box_container.getAttribute('rule_index'),
-            labeler_source:'view_batch_labels',
+            labeler_source:'view_prediction_labels',
             labeler_id:labeler_id,
             modified_prompt_response:modified_prompt_response
             }
