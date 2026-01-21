@@ -558,7 +558,12 @@ def view_batch_labels(request):
 
     labeler_id_options = ['Steve','Noah']
 
-    data = {"rule_entry":rule_entry[0],
+    if len(rule_entry) > 0:
+        rule_entry = rule_entry[0]
+    else:
+        rule_entry = {'title':'No Rule Found', 'prompt':'', 'task_type':task_type, 'rule_index':rule_index}
+
+    data = {"rule_entry":rule_entry,
             "label_counts":label_counts,
             "total_assets": total_assets,
             "labeler_id_options":labeler_id_options,
