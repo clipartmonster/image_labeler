@@ -1,0 +1,117 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+<link rel="stylesheet" href="{% static 'css/label_search_results.css' %}">
+<script src="{% static 'js/api_calls.js' %}"></script>
+<script src="{% static 'js/label_search_result.js' %}"></script>
+
+<div style = 'display:flex; flex-direction: row;'>
+
+    <div class = 'listing light container side_panel'>
+
+        <div class="get_search_term_container">
+            <div style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px;">
+                <label for="labeler_id" style="font-family: 'Roboto'; font-size: 14px; color: #d2e2e2;">Labeler:</label>
+                <select id="labeler_id" name="labeler_id" style="padding: 8px; border-radius: 5px; border: 1px solid #5d6565; background-color: #5d6565; color: #d2e2e2; font-family: 'Roboto'; font-size: 14px;">
+                    <option value="Steve" selected>Steve</option>
+                    <option value="Noah">Noah</option>
+                </select>
+            </div>
+            <button type="button" id="get_search_term_btn" style="width: 100%; padding: 10px; border-radius: 5px; border: none; background-color: #5d6565; color: #d2e2e2; cursor: pointer; font-family: 'Roboto'; font-size: 14px; font-weight: 500;">Get Search Term</button>
+            <button type="button" id="invalid_image_btn" style="width: 100%; padding: 10px; border-radius: 5px; border: none; background-color: #5d6565; color: #d2e2e2; cursor: pointer; font-family: 'Roboto'; font-size: 14px; font-weight: 500; margin-top: 10px;">Invalid Image</button>
+            <button type="submit" id="submit_btn" style="width: 100%; padding: 10px; border-radius: 5px; border: none; background-color: #5d6565; color: #d2e2e2; cursor: pointer; font-family: 'Roboto'; font-size: 14px; font-weight: 500; margin-top: 10px;">Submit</button>
+        </div>
+
+        <div class="search_form_container">
+            <form method="get" action="{% url 'label_search_results' %}" style="display: flex; flex-direction: column; gap: 10px; margin: 20px;">
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <label for="search_string" style="font-family: 'Roboto'; font-size: 14px; color: #d2e2e2;">Search String:</label>
+                    <input type="text" id="search_string" name="search_string" value="{{ search_string }}" style="padding: 8px; border-radius: 5px; border: 1px solid #5d6565; background-color: #5d6565; color: #d2e2e2;">
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <label for="selected_result_index" style="font-family: 'Roboto'; font-size: 14px; color: #d2e2e2;">Selected Result Index:</label>
+                    <input type="number" id="selected_result_index" name="selected_result_index" value="{{ selected_result_index }}" style="padding: 8px; border-radius: 5px; border: 1px solid #5d6565; background-color: #5d6565; color: #d2e2e2;">
+                </div>
+                <button type="submit" style="padding: 10px; border-radius: 5px; border: none; background-color: #5d6565; color: #d2e2e2; cursor: pointer; font-family: 'Roboto'; font-size: 14px; font-weight: 500;">Search</button>
+            </form>
+        </div>
+
+        <div class="sticky_image_and_controls">
+            {% if selected_image and selected_image.image_link %}
+            <div class="selected_image container">
+                <h2 class="selected_image label">Selected Image</h2>
+               
+                    {% if "clipart-library.com" in selected_image.image_link %}
+                        <img src="https://images.weserv.nl/?url={{ selected_image.image_link|slice:'8:'|urlencode }}" alt="Selected Image" crossOrigin="anonymous">
+                    {% else %}
+                        <img src="{{ selected_image.image_link }}" alt="Selected Image" crossOrigin="anonymous">
+                    {% endif %}
+
+
+            </div>
+            {% endif %}
+
+            <div class="sticky_controls">
+                <h1 class = 'label_option intro'>Image Size</h1>
+
+                <div class = 'option container' style = 'display:flex; gap: 15px'>
+
+                    <div class = 'option button circle image_size selected' size = 'small'>  <h1 class = 'option title'> S </h1></div>
+                    <div class = 'option button circle image_size' size = 'medium'>   <h1 class = 'option title'> M </h1></div>
+                    <div class = 'option button circle image_size' size = 'large'>  <h1 class = 'option title'> L </h1></div>
+                    <div class = 'option button circle image_size' size = 'extra_large'>  <h1 class = 'option title'> XL </h1></div>
+
+                </div>
+            </div>
+        </div>
+
+        <div style = 'display:flex; gap:10px'>
+            <h2 id = image_count class = 'label_option label'>total: {{total_assets}} </h2>
+            {% for label_count in label_counts %}
+                <h2 class="label_option label"> {{ label_count.label }}: {{ label_count.count }} </h2>
+            {% endfor %}
+        </div>
+
+        <div>
+            <h1 class = 'label_option intro'>{{rule_entry.title}}</h1>
+            <h3 class = 'title view_batch'>{{rule_entry.prompt}}</h3>
+        </div>
+
+           
+    </div>
+
+    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
+
+        <div class = 'asset container'>
+            <button type="button" id="select_all_btn" style="width: 100%; padding: 10px; border-radius: 5px; border: none; background-color: #5d6565; color: #d2e2e2; cursor: pointer; font-family: 'Roboto'; font-size: 14px; font-weight: 500; margin-bottom: 10px;">Select All</button>
+
+            {% for asset in search_results %}
+
+                    <div id = container_{{asset.asset_id}} class = 'design dark container asset_view image_box'
+                    task_type = {{rule_entry.task_type}},
+                    rule_index = {{rule_entry.rule_index}},
+                    asset_id = {{asset.asset_id}} >
+
+                        <h2 class = 'label_option label'> {{asset.asset_id}}</h2>
+                        {% if asset.image_link %}
+                            {% if "clipart-library.com" in asset.image_link %}
+                                <img id = "image_{{asset.asset_id}}" class="design view_asset_labels large" src="https://images.weserv.nl/?url={{ asset.image_link|slice:'8:'|urlencode }}" crossOrigin="anonymous" >
+                            {% else %}
+                                <img id = "image_{{asset.asset_id}}" class="design view_asset_labels large" src="{{ asset.image_link }}" crossOrigin="anonymous" >
+                            {% endif %}
+                        {% endif %}
+                        <h2 class = 'label_option label'> {{asset.agree_status}}</h2>
+                        <button type="button" class="identical_btn" style="padding: 5px 10px; border-radius: 3px; border: none; background-color: #5d6565; color: #d2e2e2; cursor: pointer; font-family: 'Roboto'; font-size: 12px; font-weight: 500; margin-top: 10px;">Identical</button>
+                    </div>
+
+            {% endfor %}
+
+        </div>
+
+    </div>
+</div>
+
+
+{% endblock%}

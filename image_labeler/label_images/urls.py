@@ -9,6 +9,7 @@ urlpatterns = [
 
     path('mturk_redirect/', views.mturk_redirect, name= 'mturk_redirect'),
     path('view_mturk_responses/', views.view_mturk_responses, name = 'view_mturk_responses'),
+    path('label_search_results/', views.label_search_results, name = 'label_search_results'),
 
     path('view_asset_labels/', views.view_asset_labels, name = 'view_asset_labels'),
     path('reconcile_labels/', views.reconcile_labels, name = 'reconcile_labels'),

@@ -1316,3 +1316,129 @@ def view_line_widths(request):
             'line_widths':line_widths.to_dict(orient = 'records')}
 
     return render(request, 'view_line_widths.html', data)
+
+
+def label_search_results(request):
+
+    api_url = 'https://backend-python-nupj.onrender.com/get_search_results/'
+
+    # Get parameters from request, with defaults
+    search_string = request.GET.get('search_string', 'hawk')
+    selected_result_index = request.GET.get('selected_result_index', '5')
+    
+    # Convert selected_result_index to int if it's a string
+    try:
+        selected_result_index = int(selected_result_index)
+    except (ValueError, TypeError):
+        selected_result_index = 5
+
+    data = {'search_string': search_string,
+            'selected_result_index': selected_result_index}
+
+    header = {
+    'Content-Type': 'application/json',
+    'Authorization': settings.API_ACCESS_KEY
+    }
+
+    response = requests.get(api_url, json = data, headers = header)
+ 
+    # Initialize default values
+    selected_image = None
+    search_results = []
+    
+    # Check if response is successful
+    if response.status_code != 200:
+        print(f"Error: API returned status code {response.status_code}")
+        print(f"Response content: {response.content}")
+        print(f"Response text: {response.text}")
+    else:
+        # Check if response has content
+        if not response.text or not response.text.strip():
+            print(f"Error: API returned empty response")
+            print(f"Response status code: {response.status_code}")
+        else:
+            # Try to parse JSON response
+            try:
+                # Handle potential NaN values in JSON by replacing them with null
+                response_text = response.text.strip()
+                cleaned_text = response_text.replace(': NaN', ': null').replace(':NaN', ':null')
+                response_json = json.loads(cleaned_text)
+                
+                # Extract selected_image and search_results from the response
+                selected_image = response_json.get('selected_image')
+                # If selected_image is a list, get the first item
+                if isinstance(selected_image, list) and len(selected_image) > 0:
+                    selected_image = selected_image[0]
+                search_results = response_json.get('search_results', [])
+                
+                # Remove the first listing if it matches the selected_image asset_id
+                if selected_image and selected_image.get('asset_id') and search_results:
+                    selected_asset_id = selected_image.get('asset_id')
+                    # Check if first result matches selected image
+                    if search_results[0].get('asset_id') == selected_asset_id:
+                        search_results = search_results[1:]  # Remove first item
+                
+                # If search results are empty, get a new search term
+                if not search_results or len(search_results) == 0:
+                    print("Search results are empty. Fetching new search term...")
+                    from django.urls import reverse
+                    # Call get_search_term API to get a new search term
+                    get_search_term_url = 'https://backend-python-nupj.onrender.com/get_search_term/'
+                    get_search_term_response = requests.get(get_search_term_url, headers=header)
+                    
+                    if get_search_term_response.status_code == 200:
+                        try:
+                            get_search_term_text = get_search_term_response.text.strip()
+                            cleaned_text = get_search_term_text.replace(': NaN', ': null').replace(':NaN', ':null')
+                            get_search_term_data = json.loads(cleaned_text)
+                            
+                            if get_search_term_data and not get_search_term_data.get('error'):
+                                search_topic = get_search_term_data.get('search_topic', '')
+                                asset_type = get_search_term_data.get('asset_type', '')
+                                selected_index = get_search_term_data.get('selected_index', 0)
+                                
+                                if search_topic and asset_type:
+                                    # Redirect to the same page with new search parameters
+                                    combined_string = f"{search_topic} {asset_type}"
+                                    redirect_url = reverse('label_search_results')
+                                    return redirect(f"{redirect_url}?search_string={combined_string}&selected_result_index={selected_index}")
+                        except json.JSONDecodeError as e:
+                            print(f"Error parsing get_search_term response: {e}")
+                    # If we can't get a new search term, continue with empty results
+            except json.JSONDecodeError as e:
+                print(f"Error parsing JSON response: {e}")
+                print(f"Response status code: {response.status_code}")
+                print(f"Response content: {response.content}")
+                print(f"Response text: {response.text}")
+
+    print(selected_image)
+
+    # Convert search_results to DataFrame for processing
+    search_results_df = pd.DataFrame(search_results)    
+
+    # Only filter by platform_name if DataFrame is not empty and has the column
+    if not search_results_df.empty and 'platform_name' in search_results_df.columns:
+        invalid_platforms = ['clipart library', 'vectorstock','pngegg','pixabay', 'clipart.com', 'freepik']
+        invalid_platforms = []
+      
+        search_results_df = search_results_df \
+        .query('platform_name not in @invalid_platforms')
+    
+    # Get all results for replacement pool (before limiting)
+    all_results = search_results_df.to_dict(orient='records')
+    
+    # Limit to first 20 for display (we already removed the first one if it matched selected_image)
+    # So we'll show 20 unique listings (not including the reference image)
+    search_results_df = search_results_df.head(20)
+
+    data = {
+        "selected_image": selected_image,
+        "search_results": search_results_df.to_dict(orient='records'),
+        "all_search_results": all_results,
+        "search_string": search_string,
+        "selected_result_index": selected_result_index
+    }
+
+    # print(data)
+
+    return render(request, 'label_search_results.html', data )
