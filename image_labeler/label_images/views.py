@@ -155,13 +155,13 @@ def setup_session(request):
         'Authorization': settings.API_ACCESS_KEY
         }
 
-    print('--------------')    
-    print('sending request')
+    # print('--------------')    
+    # print('sending request')
     response = requests.get(api_url, json = data, headers = header )
-    print(response)
+    # print(response)
     session_options = json.loads(response.content)
 
-    print(session_options)
+    # print(session_options)
 
     selected_options = {'labeler_id':labeler_id,
                         'task_type':task_type,
@@ -257,18 +257,18 @@ def mturk_redirect(request):
     central_time = datetime.now(central_time_zone)
 
     print('----------------------------------------------------')
-    print(central_time.strftime("%Y-%m-%d %I:%M:%S %p"))
-    print('assignment id:' + assignment_id)
-    print('worker id:' + worker_id)
-    print('----------------------------------------------------')
+    # print(central_time.strftime("%Y-%m-%d %I:%M:%S %p"))
+    # print('assignment id:' + assignment_id)
+    # print('worker id:' + worker_id)
+    # print('----------------------------------------------------')
 
 
     if labeler_source == 'MTurk':
         labeler_id = worker_id 
 
 
-    print('-----------varaibles-----------')
-    print(batch_id, task_type, rule_index,labeler_id)
+    # print('-----------varaibles-----------')
+    # print(batch_id, task_type, rule_index,labeler_id)
 
     
     header = {
@@ -294,7 +294,7 @@ def mturk_redirect(request):
 
     def fetch_test_questions():
         if bool(test_the_labeler) == True:
-            print('preparing test questions')
+            # print('preparing test questions')
             api_url = 'https://backend-python-nupj.onrender.com/get_test_questions/'
             data = {'samples':2}
             response = requests.get(api_url, json=data, headers=header)
@@ -313,8 +313,8 @@ def mturk_redirect(request):
 
     assets_to_label = assets_content['asset_batch']
 
-    print('|-------assets to label----------|')
-    print(pd.DataFrame(assets_to_label))
+    # print('|-------assets to label----------|')
+    # print(pd.DataFrame(assets_to_label))
 
     collection_data = {
         "task_type":task_type,
@@ -374,8 +374,8 @@ def view_mturk_responses(request):
     response = requests.get(api_url, headers = header)
     assets_w_responses = json.loads(response.content)
    
-    print('----------------------------------')
-    print(assets_w_responses)
+    # print('----------------------------------')
+    # print(assets_w_responses)
     # print(labelling_rules)
 
     return render(request, 'view_mturk_responses.html', {'assets_w_responses':assets_w_responses,
@@ -435,10 +435,10 @@ def reconcile_labels(request):
     response = requests.get(api_url, json = data, headers = header)
     assets_to_label = json.loads(response.content)
   
-    print('-----69-69-------')
-    print(assets_to_label)
-    print('size of assets to label')
-    print(len(assets_to_label))
+    # print('-----69-69-------')
+    # print(assets_to_label)
+    # print('size of assets to label')
+    # print(len(assets_to_label))
 
 
     api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
@@ -487,6 +487,7 @@ def view_batch_labels(request):
     task_type = request.GET.get('task_type', 'asset_type')
     rule_index = int(request.GET.get('rule_index', 1))
     batch_index = int(request.GET.get('batch_index', 1))
+    label_filter = request.GET.get('label_filter', 'only_yes')
 
     print(task_type,rule_index,batch_index)
 
@@ -499,7 +500,7 @@ def view_batch_labels(request):
             "rule_index":rule_index,
             "batch_index":batch_index}
 
-    print(data)
+    # print(data)
 
     header = {
     'Content-Type': 'application/json',
@@ -507,13 +508,23 @@ def view_batch_labels(request):
     }
 
     response = requests.get(api_url, json = data, headers = header)
-    batch_of_assets = json.loads(response.content)
+    batch_of_assets_response = json.loads(response.content)
 
-    print('-----------batch_of_assets--------------')
-    print(batch_of_assets)
+    # print('-----------batch_of_assets--------------')
+    # print(batch_of_assets)
 
-    batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
-    .query('label=="yes"')
+    if 'assets_w_labels' in batch_of_assets_response and batch_of_assets_response['assets_w_labels']:
+        batch_of_assets = pd.DataFrame(batch_of_assets_response['assets_w_labels'])
+        
+        if 'label' in batch_of_assets.columns:
+            if label_filter == 'only_yes':
+                batch_of_assets = batch_of_assets.query('label=="yes"')
+            elif label_filter == 'only_no':
+                batch_of_assets = batch_of_assets.query('label=="no"')
+        else:
+            batch_of_assets = pd.DataFrame()
+    else:
+        batch_of_assets = pd.DataFrame()
 
     # batch_of_assets = pd.DataFrame(batch_of_assets['assets_w_labels']) \
     # .sample(1000)
@@ -524,11 +535,14 @@ def view_batch_labels(request):
     # .query('color_type == "multi-color"')
 
 
-    label_counts = batch_of_assets \
-    .groupby('label') \
-    .agg(count = ('asset_id','count')) \
-    .reset_index() \
-    .to_dict(orient = 'records')
+    if not batch_of_assets.empty:
+        label_counts = batch_of_assets \
+        .groupby('label') \
+        .agg(count = ('asset_id','count')) \
+        .reset_index() \
+        .to_dict(orient = 'records')
+    else:
+        label_counts = []
 
     ###############################
     #get labelling rules
@@ -544,10 +558,14 @@ def view_batch_labels(request):
     response = requests.get(api_url, json = data, headers = header)
     labelling_rules = dict(json.loads(response.content))
 
-    rule_entry = pd.DataFrame(labelling_rules['labelling_rules']) \
-    .query("task_type == @task_type") \
-    .query("rule_index == @rule_index") \
-    .to_dict(orient = 'records')
+    rule_entry = []
+    if 'labelling_rules' in labelling_rules:
+        rules_df = pd.DataFrame(labelling_rules['labelling_rules'])
+        if not rules_df.empty and 'task_type' in rules_df.columns and 'rule_index' in rules_df.columns:
+            rule_entry = rules_df \
+            .query("task_type == @task_type") \
+            .query("rule_index == @rule_index") \
+            .to_dict(orient = 'records')
 
     print('------------')
     print(rule_entry)
@@ -556,12 +574,29 @@ def view_batch_labels(request):
 
     total_assets = len(batch_of_assets)
 
-    data = {"rule_entry":rule_entry[0],
+    labeler_id_options = ['Steve','Noah']
+    label_type_filters = ['only_yes', 'only_no']
+
+    if len(rule_entry) > 0:
+        rule_entry = rule_entry[0]
+    else:
+        rule_entry = {'title':'No Rule Found', 'prompt':'', 'task_type':task_type, 'rule_index':rule_index}
+
+    data = {"rule_entry":rule_entry,
             "label_counts":label_counts,
             "total_assets": total_assets,
+            "labeler_id_options":labeler_id_options,
+            "label_type_filters":label_type_filters,
+            "label_filter":label_filter,
             "batch_of_assets":batch_of_assets.to_dict(orient = 'records')}
 
-    return render(request, 'view_batch_labels.html', data)
+    try:
+        return render(request, 'view_batch_labels.html', data)
+    except Exception as e:
+        print(f"Error rendering view_batch_labels: {e}")
+        import traceback
+        traceback.print_exc()
+        raise e
 
 
 
@@ -593,9 +628,9 @@ def view_labels(request):
     dark_ratio_limits = {'min':dark_ratios['dark_ratio'].min(),
                          'max':dark_ratios['dark_ratio'].max()}
     
-    print('------Dark Ratios-------')
-    print(dark_ratios)
-    print(dark_ratio_limits)
+    # print('------Dark Ratios-------')
+    # print(dark_ratios)
+    # print(dark_ratio_limits)
 
     #################################
 
@@ -643,8 +678,8 @@ def view_labels(request):
     .fillna(101) \
     .sort_values('dark_ratio', ascending=True)
 
-    print('------labeled_assets-1------')
-    print(labeled_assets)
+    # print('------labeled_assets-1------')
+    # print(labeled_assets)
 
     ####################
     #need to create a set of rule_idex, label pairs for building class attributes of each asset (These are used for filtering)
@@ -659,8 +694,8 @@ def view_labels(request):
     .merge(asset_rule_pairs, on = 'asset_id', how = 'left') \
     .to_dict(orient = 'records')
 
-    print('------labeled_assets-2------')
-    print(labeled_assets)
+    # print('------labeled_assets-2------')
+    # print(labeled_assets)
 
     #######################
     #get labelling rule title
@@ -733,7 +768,6 @@ def view_prediction_labels(request):
     batch_index = request.GET.get('batch_index',None)
     label_type = request.GET.get("label_type",'mismatch')
 
-    print('--------variables---------')
     print(task_type, rule_index, batch_index, label_type)
 
     #################
@@ -842,8 +876,8 @@ def view_asset(request):
     response = requests.get(api_url, json = data, headers = header)
     labelling_rules = dict(json.loads(response.content))['labelling_rules']
 
-    print('-------------')
-    print(labelling_rules)
+    # print('-------------')
+    # print(labelling_rules)
 
     task_types = pd.DataFrame(labelling_rules) \
     .query('task_type != "select_primary_colors"') \
@@ -1001,8 +1035,8 @@ def view_model_results(request):
     label_rules = [{'rule_index': entry['rule_index'], 'task_type': entry['task_type'], 'title': entry['title']} for entry in label_rules]
     label_rules = pd.DataFrame(label_rules)
     
-    print('------label_rules-------')
-    print(label_rules)
+    # print('------label_rules-------')
+    # print(label_rules)
     
 
     api_url = 'https://backend-python-nupj.onrender.com/get_model_results/'
@@ -1018,8 +1052,8 @@ def view_model_results(request):
     model_results = pd.DataFrame(model_results['model_results']) \
     .merge(label_rules, on = ['rule_index','task_type'], how = 'left')
 
-    print('------model_results------')
-    print(model_results)
+    # print('------model_results------')
+    # print(model_results)
 
     model_results['label'] = \
         model_results['task_type'].str[0:2].str.upper() + model_results['rule_index'].astype(str)
@@ -1040,9 +1074,9 @@ def view_model_results(request):
     .filter(['task_type','label', 'val_recall', 'val_precision','performant','val_mae'])
 
 
-    print('-----best_models------')
-    print(best_models)
-    print(best_models.columns)
+    # print('-----best_models------')
+    # print(best_models)
+    # print(best_models.columns)
 
     model_results = model_results \
     .groupby(['task_type', 'rule_index']) \
@@ -1057,15 +1091,15 @@ def view_model_results(request):
     rule_index_options = model_results['title'].unique()
     model_labels = model_results['label'].unique()
 
-    print(model_results)
+    # print(model_results)
 
     model_labels = model_results \
     .filter(['title','label','task_type']) \
     .drop_duplicates() \
     .merge(best_models, on = ['label','task_type'], how = 'left')
 
-    print('-----model_labels------')
-    print(model_labels)
+    # print('-----model_labels------')
+    # print(model_labels)
 
 
     data = {'model_results':model_results.to_dict(orient = 'records'),
@@ -1093,7 +1127,7 @@ def view_primary_colors(request):
     response = requests.get(api_url, json = data, headers = header)
     primary_colors = json.loads(response.content)
 
-    print(primary_colors)
+    # print(primary_colors)
 
     asset_primary_colors = pd.DataFrame(primary_colors)
 
@@ -1109,8 +1143,8 @@ def correct_mismatch_labels(request):
     rule_index = int(request.GET.get('rule_index', 2))
     labeler_id = request.GET.get('labeler_id', 'Steve')
 
-    print(task_type)
-    print(rule_index)
+    # print(task_type)
+    # print(rule_index)
 
     ##############################
 
@@ -1128,13 +1162,13 @@ def correct_mismatch_labels(request):
             }
 
     response = requests.get(api_url, json = data, headers = header)
-    print(response)
+    # print(response)
     label_rules = json.loads(response.content)['labelling_rules']
 
     prompt = label_rules[0]['prompt']
 
-    print('-----label_rules-------')
-    print(label_rules)
+    # print('-----label_rules-------')
+    # print(label_rules)
 
     ##############################
 
@@ -1154,8 +1188,8 @@ def correct_mismatch_labels(request):
     mismatched_labels = pd.DataFrame(mismatched_labels) \
     .query('status == "active"')
 
-    print('-----mismatched_labels-------')
-    print(mismatched_labels)
+    # print('-----mismatched_labels-------')
+    # print(mismatched_labels)
 
     collection_data = {'task_type':task_type,
                        'labeler_source':'mismatch',
@@ -1190,9 +1224,9 @@ def view_rough_fill(request):
     rough_fill_scores = rough_fill_scores \
     .sample(2000)
 
-    print('-------rough_fill_scores------')
-    print(rough_fill_scores)
-    print(rough_fill_scores.columns)
+    # print('-------rough_fill_scores------')
+    # print(rough_fill_scores)
+    # print(rough_fill_scores.columns)
 
     rough_options = [ 
         {
@@ -1239,8 +1273,8 @@ def view_rough_fill(request):
 
     ]
 
-    print('------rough_metrics-------')
-    print(rough_options)
+    # print('------rough_metrics-------')
+    # print(rough_options)
 
 
 
@@ -1265,8 +1299,7 @@ def view_line_widths(request):
 
     response = requests.get(api_url, json = data, headers = header)
 
-    print(response.content)
-
+    # print(response.content)
     line_widths = pd.DataFrame(json.loads(response.content))
 
     line_widths = line_widths \
@@ -1280,11 +1313,11 @@ def view_line_widths(request):
 
 
 
-    print('-------rough_fill_scores------')
-    print(line_widths)
-    print(line_widths.columns)
-    print(np.min(line_widths['line_width_bin']))
-    print(np.max(line_widths['line_width_bin']))
+    # print('-------rough_fill_scores------')
+    # print(line_widths)
+    # print(line_widths.columns)
+    # print(np.min(line_widths['line_width_bin']))
+    # print(np.max(line_widths['line_width_bin']))
 
     line_width_options = [ 
 
@@ -1307,8 +1340,8 @@ def view_line_widths(request):
     line_widths = line_widths \
     .query('prominence > 85')
 
-    print('------rough_metrics-------')
-    print(line_width_options)
+    # print('------rough_metrics-------')
+    # print(line_width_options)
 
 
 
