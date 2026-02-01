@@ -13,6 +13,12 @@
 
         <div class="get_search_term_container">
             <div style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px;">
+                <label for="batch_id" style="font-family: 'Roboto'; font-size: 14px; color: #d2e2e2;">Batch:</label>
+                <select id="batch_id" name="batch_id" style="padding: 8px; border-radius: 5px; border: 1px solid #5d6565; background-color: #5d6565; color: #d2e2e2; font-family: 'Roboto'; font-size: 14px;">
+                    <option value="">Loading batches...</option>
+                </select>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px;">
                 <label for="labeler_id" style="font-family: 'Roboto'; font-size: 14px; color: #d2e2e2;">Labeler:</label>
                 <select id="labeler_id" name="labeler_id" style="padding: 8px; border-radius: 5px; border: 1px solid #5d6565; background-color: #5d6565; color: #d2e2e2; font-family: 'Roboto'; font-size: 14px;">
                     <option value="Steve" selected>Steve</option>
@@ -40,17 +46,23 @@
 
         <div class="sticky_image_and_controls">
             {% if selected_image and selected_image.image_link %}
-            <div class="selected_image container">
-                <h2 class="selected_image label">Selected Image</h2>
-               
+<div class="selected_image container">
+    <button type="button" class="zoom_magnify_btn selected_image_zoom" title="Zoom image">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="7" cy="7" r="4" stroke="currentColor" stroke-width="1.5" fill="none"/>
+            <path d="M10 10L13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+    </button>
+    <h2 class="selected_image label">Selected Image</h2>
+   
                     {% if "clipart-library.com" in selected_image.image_link %}
-                        <img src="https://images.weserv.nl/?url={{ selected_image.image_link|slice:'8:'|urlencode }}" alt="Selected Image" crossOrigin="anonymous">
+                        <img class="selected_image_img" src="https://images.weserv.nl/?url={{ selected_image.image_link|slice:'8:'|urlencode }}" alt="Selected Image" crossOrigin="anonymous">
                     {% else %}
-                        <img src="{{ selected_image.image_link }}" alt="Selected Image" crossOrigin="anonymous">
+        <img class="selected_image_img" src="{{ selected_image.image_link }}" alt="Selected Image" crossOrigin="anonymous">
                     {% endif %}
 
 
-            </div>
+</div>
             {% endif %}
 
             <div class="sticky_controls">
@@ -94,12 +106,18 @@
                     rule_index = {{rule_entry.rule_index}},
                     asset_id = {{asset.asset_id}} >
 
+                        <button type="button" class="zoom_magnify_btn listing_zoom" title="Zoom image">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="7" cy="7" r="4" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                                <path d="M10 10L13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                        </button>
                         <h2 class = 'label_option label'> {{asset.asset_id}}</h2>
                         {% if asset.image_link %}
                             {% if "clipart-library.com" in asset.image_link %}
                                 <img id = "image_{{asset.asset_id}}" class="design view_asset_labels large" src="https://images.weserv.nl/?url={{ asset.image_link|slice:'8:'|urlencode }}" crossOrigin="anonymous" >
                             {% else %}
-                                <img id = "image_{{asset.asset_id}}" class="design view_asset_labels large" src="{{ asset.image_link }}" crossOrigin="anonymous" >
+                        <img id = "image_{{asset.asset_id}}" class="design view_asset_labels large" src="{{ asset.image_link }}" crossOrigin="anonymous" >
                             {% endif %}
                         {% endif %}
                         <h2 class = 'label_option label'> {{asset.agree_status}}</h2>

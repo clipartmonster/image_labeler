@@ -248,7 +248,124 @@ function api_collect_label(data) {
     .then(response => { return response.json() })
     .then(data => { return console.log(data) })
 
-}1
+}
+
+
+function api_get_available_search_batches(data) {
+
+    console.log('Sending data:', data)
+
+
+    api_url = `https://backend-python-nupj.onrender.com/get_available_search_batches/`
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    return fetch(api_url, {
+    method:'POST',
+    headers : headers,
+    mode:'cors',
+    body: JSON.stringify(data)})
+    .then(response => { 
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json(); 
+    })
+    .then(data => { 
+        console.log('Response data:', data);
+        // Return the batches array from the response
+        return data.batches || [];
+    })
+    .catch(error => {
+        console.error('Error calling get_available_search_batches:', error);
+        throw error;
+    })
+
+}
+function api_get_search_term(data) {
+   
+
+    console.log('Sending data:', data)
+    
+    api_url = 'https://backend-python-nupj.onrender.com/get_search_term/';
+   
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    return fetch(api_url, {
+        method: 'POST',
+        headers: headers,
+        mode: 'cors',
+        body: JSON.stringify(data)
+    })
+    .then(response => { 
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json(); 
+    })
+    .then(data => { 
+        console.log('Get search term response:', data);
+        return data;
+    })
+    .catch(error => {
+        console.error('Error calling get_search_term:', error);
+        throw error;
+    })
+
+}
+
+function api_update_search_term(term_table_id, status) {
+   
+    console.log('Updating search term:', term_table_id, 'status:', status)
+    
+    api_url = 'https://backend-python-nupj.onrender.com/update_search_term/';
+   
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    const data = {
+        term_table_id: term_table_id.toString(),
+        status: status
+    }
+
+    return fetch(api_url, {
+        method: 'POST',
+        headers: headers,
+        mode: 'cors',
+        body: JSON.stringify(data)
+    })
+    .then(response => { 
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.text().then(text => {
+            const cleanedText = text.replace(/:\s*NaN\s*([,}])/g, ': null$1');
+            return JSON.parse(cleanedText);
+        });
+    })
+    .then(data => { 
+        console.log('Update search term response:', data);
+        return data;
+    })
+    .catch(error => {
+        console.error('Error calling update_search_term:', error);
+        throw error;
+    })
+
+}
+
+
+
+
+
 
 
 function api_collect_prompt(data) {
@@ -394,7 +511,7 @@ function api_collect_mismatch_prompt(data){
     }
 
     return fetch(api_url, {
-        method:'POST',
+        method:'GET',
         headers : headers,
         mode:'cors',
         body: JSON.stringify(data)})
@@ -509,9 +626,6 @@ function api_reset_mismatch_prompt(data){
 
 }
 
-    // def label_line_width_as_invalid(request):
-    // asset_id = request.data.get('asset_id')
-    // labeler_id = request.data.get('labeler_id')
 
     function api_label_line_width_as_invalid(data){
 

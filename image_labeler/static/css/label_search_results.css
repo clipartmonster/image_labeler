@@ -15,6 +15,7 @@ div.selected_image.container{
     align-items: center;
     gap: 15px;
     width: auto;
+    position: relative;
 }
 
 div.selected_image.container img{
@@ -121,7 +122,10 @@ div.search_form_container form label{
 div.asset_view.image_box{
     cursor: pointer;
     transition: background-color 0.2s ease;
+    position: relative;
+    overflow: visible;
 }
+
 
 div.asset_view.image_box.selected{
     background-color: orange;
@@ -153,4 +157,68 @@ div.asset_view.image_box.identical{
     background-color: #3a4a4a !important;
     border: 2px solid #d2e2e2;
     box-shadow: 0 0 10px rgba(210, 226, 226, 0.5);
+}
+
+/* Zoom magnify button */
+.zoom_magnify_btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: #5d6565;
+    border: 2px solid #d2e2e2;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    transition: all 0.15s ease;
+    color: #d2e2e2;
+    padding: 0;
+}
+
+/* Listing zoom button - positioned inside container in upper right */
+.listing_zoom {
+    position: relative;
+    left: 125px;
+}
+
+/* Selected image zoom button - fixed position in upper left */
+.selected_image_zoom {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+}
+
+.zoom_magnify_btn:hover {
+    background-color: #7a8a8a;
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.zoom_magnify_btn:active {
+    background-color: #4a5a5a;
+    transform: scale(0.95);
+}
+
+.zoom_magnify_btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Zoomed image styles */
+.asset_view.image_box img.zoomed {
+    transform: scale(3);
+    transform-origin: top left;
+    transition: transform 0.3s ease;
+    z-index: 100;
+    position: relative;
+}
+
+.selected_image.container img.zoomed {
+    transform: scale(3);
+    transform-origin: top left;
+    transition: transform 0.3s ease;
+    z-index: 100;
+    position: relative;
+    max-height: none;
 }

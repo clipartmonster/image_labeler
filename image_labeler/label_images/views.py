@@ -1373,6 +1373,10 @@ def label_search_results(request):
     'Authorization': settings.API_ACCESS_KEY
     }
 
+    print(f"=== DEBUG: Calling get_search_results API ===")
+    print(f"Search string being sent: '{search_string}'")
+    print(f"Selected result index: {selected_result_index}")
+    
     response = requests.get(api_url, json = data, headers = header)
  
     # Initialize default values
@@ -1404,6 +1408,15 @@ def label_search_results(request):
                     selected_image = selected_image[0]
                 search_results = response_json.get('search_results', [])
                 
+                # Debug: Check if selected_image matches the search
+                if selected_image:
+                    print(f"=== DEBUG: API Response ===")
+                    print(f"Selected image asset_id: {selected_image.get('asset_id')}")
+                    print(f"Number of search results: {len(search_results)}")
+                    if search_results and len(search_results) > 0:
+                        print(f"First search result asset_id: {search_results[0].get('asset_id')}")
+                        print(f"First few search result asset_ids: {[r.get('asset_id') for r in search_results[:5]]}")
+                
                 # Remove the first listing if it matches the selected_image asset_id
                 if selected_image and selected_image.get('asset_id') and search_results:
                     selected_asset_id = selected_image.get('asset_id')
@@ -1413,30 +1426,63 @@ def label_search_results(request):
                 
                 # If search results are empty, get a new search term
                 if not search_results or len(search_results) == 0:
-                    print("Search results are empty. Fetching new search term...")
+                    print("=== Search results are empty. Fetching new search term... ===")
                     from django.urls import reverse
                     # Call get_search_term API to get a new search term
                     get_search_term_url = 'https://backend-python-nupj.onrender.com/get_search_term/'
-                    get_search_term_response = requests.get(get_search_term_url, headers=header)
                     
-                    if get_search_term_response.status_code == 200:
+                    # Get batch_id and labeler_id from request if available
+                    batch_id = request.GET.get('batch_id') or request.POST.get('batch_id')
+                    labeler_id = request.GET.get('labeler_id') or request.POST.get('labeler_id', 'Steve')
+                    
+                    # Prepare POST data
+                    get_search_term_data = {}
+                    if batch_id:
                         try:
-                            get_search_term_text = get_search_term_response.text.strip()
-                            cleaned_text = get_search_term_text.replace(': NaN', ': null').replace(':NaN', ':null')
-                            get_search_term_data = json.loads(cleaned_text)
-                            
-                            if get_search_term_data and not get_search_term_data.get('error'):
-                                search_topic = get_search_term_data.get('search_topic', '')
-                                asset_type = get_search_term_data.get('asset_type', '')
-                                selected_index = get_search_term_data.get('selected_index', 0)
+                            get_search_term_data['batch_id'] = int(batch_id)
+                        except (ValueError, TypeError):
+                            print(f"Warning: Invalid batch_id '{batch_id}', skipping get_search_term call")
+                            batch_id = None
+                    if labeler_id:
+                        get_search_term_data['labeler_id'] = labeler_id
+                    
+                    # Only call get_search_term if we have batch_id
+                    if batch_id:
+                        print(f"Calling get_search_term with data: {get_search_term_data}")
+                        get_search_term_response = requests.post(get_search_term_url, json=get_search_term_data, headers=header)
+                        
+                        print(f"get_search_term response status: {get_search_term_response.status_code}")
+                        
+                        if get_search_term_response.status_code == 200:
+                            try:
+                                get_search_term_text = get_search_term_response.text.strip()
+                                cleaned_text = get_search_term_text.replace(': NaN', ': null').replace(':NaN', ':null')
+                                get_search_term_response_data = json.loads(cleaned_text)
                                 
-                                if search_topic and asset_type:
-                                    # Redirect to the same page with new search parameters
-                                    combined_string = f"{search_topic} {asset_type}"
-                                    redirect_url = reverse('label_search_results')
-                                    return redirect(f"{redirect_url}?search_string={combined_string}&selected_result_index={selected_index}")
-                        except json.JSONDecodeError as e:
-                            print(f"Error parsing get_search_term response: {e}")
+                                print(f"get_search_term response data: {get_search_term_response_data}")
+                                
+                                if get_search_term_response_data and not get_search_term_response_data.get('error'):
+                                    search_topic = get_search_term_response_data.get('search_topic', '')
+                                    asset_type = get_search_term_response_data.get('asset_type', '')
+                                    selected_index = get_search_term_response_data.get('selected_index', 0)
+                                    
+                                    if search_topic and asset_type:
+                                        # Redirect to the same page with new search parameters
+                                        combined_string = f"{search_topic} {asset_type}"
+                                        redirect_url = reverse('label_search_results')
+                                        redirect_params = f"search_string={combined_string}&selected_result_index={selected_index}"
+                                        if batch_id:
+                                            redirect_params += f"&batch_id={batch_id}"
+                                        if labeler_id:
+                                            redirect_params += f"&labeler_id={labeler_id}"
+                                        return redirect(f"{redirect_url}?{redirect_params}")
+                            except json.JSONDecodeError as e:
+                                print(f"Error parsing get_search_term response: {e}")
+                        else:
+                            print(f"get_search_term returned error status: {get_search_term_response.status_code}")
+                            print(f"Response content: {get_search_term_response.text[:500]}")
+                    else:
+                        print("No batch_id available in request, skipping get_search_term call. Frontend will handle this.")
                     # If we can't get a new search term, continue with empty results
             except json.JSONDecodeError as e:
                 print(f"Error parsing JSON response: {e}")

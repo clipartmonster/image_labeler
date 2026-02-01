@@ -1,84 +1,190 @@
-// Function to call get_search_term endpoint
-function api_get_search_term() {
+// Function to call get_available_search_batches endpoint
+function get_available_search_batches() {
     if (!API_ACCESS_KEY) {
         console.error('API_ACCESS_KEY not available yet. Please wait...');
+        return Promise.reject('API_ACCESS_KEY not available');
+    }
+
+    // Always get labeler_id from the dropdown select element
+    const labelerSelect = document.getElementById('labeler_id');
+    
+    if (!labelerSelect) {
+        console.error('labeler_id dropdown select element not found in DOM');
+        return Promise.reject('labeler_id dropdown not found');
+    }
+    
+    const labeler_id = labelerSelect.value;
+    
+    if (!labeler_id || labeler_id.trim() === '') {
+        console.error('labeler_id is empty or not set in dropdown');
+        return Promise.reject('labeler_id is required');
+    }
+
+    
+    const data = {
+        'labeler_id': labeler_id
+    };
+
+    return api_get_available_search_batches(data);
+}
+
+// Function to populate batch dropdown
+function populateBatchDropdown(batches) {
+    const batchSelect = document.getElementById('batch_id');
+    if (!batchSelect) {
+        console.error('Batch select dropdown not found');
         return;
     }
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_search_term/';
+    // Preserve the currently selected batch_id before clearing
+    const currentBatchId = batchSelect.value;
+    
+    // Also check URL parameters for batch_id
+    const urlParams = new URLSearchParams(window.location.search);
+    const batchIdFromUrl = urlParams.get('batch_id');
+    
+    // Use URL parameter if available, otherwise use current selection
+    const batchIdToPreserve = batchIdFromUrl || currentBatchId;
 
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': API_ACCESS_KEY,
-    };
+    // Clear existing options
+    batchSelect.innerHTML = '';
 
-    return fetch(api_url, {
-        method: 'GET',
-        headers: headers,
-        mode: 'cors'
-    })
-    .then(response => { 
-        // Get response as text first to handle NaN values
-        return response.text();
-    })
-    .then(text => {
-        // Replace NaN with null to make it valid JSON
-        const cleanedText = text.replace(/:\s*NaN\s*([,}])/g, ': null$1');
-        return JSON.parse(cleanedText);
-    })
-    .then(data => { 
-        console.log('Get Search Term Response:', data);
+    if (!batches || !Array.isArray(batches) || batches.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No batches available';
+        batchSelect.appendChild(option);
+        return;
+    }
+
+    // Add each batch as an option
+    batches.forEach(function(batch) {
+        const option = document.createElement('option');
+        option.value = batch.batch_id || batch.id || '';
+        // Backend returns search_terms_count, which is the number of search topics left
+        const topicsLeft = batch.search_terms_count || batch.number_of_search_topics_left || batch.topics_left || 0;
+        option.textContent = `Batch ${batch.batch_id || batch.id} (${topicsLeft} topics left)`;
+        batchSelect.appendChild(option);
+    });
+    
+    // Restore the previously selected batch_id if it exists in the new options
+    if (batchIdToPreserve) {
+        // Check if the batch_id exists in the dropdown
+        const optionExists = Array.from(batchSelect.options).some(opt => opt.value === batchIdToPreserve);
+        if (optionExists) {
+            batchSelect.value = batchIdToPreserve;
+        }
+    }
+}
+
+// Function to handle get_search_term response and update DOM
+function handleGetSearchTermResponse(data) {
+    // Check if status is error and retry get_search_term
+    if (data && data.status === 'error') {
+        console.error('Error status from API, retrying get_search_term:', data);
         
-        // Populate the search string and selected result index fields
-        const searchStringInput = document.getElementById('search_string');
-        const selectedIndexInput = document.getElementById('selected_result_index');
+        // Get batch_id from the batch dropdown
+        const batchSelect = document.getElementById('batch_id');
+        const batch_id = batchSelect && batchSelect.value ? batchSelect.value : null;
         
-        if (data && !data.error) {
-            // Combine search_topic and asset_type into search string
-            if (searchStringInput && data.search_topic !== undefined && data.asset_type !== undefined) {
-                const combinedString = data.search_topic + ' ' + data.asset_type;
+        if (!batch_id) {
+            console.error('Cannot retry: no batch_id available');
+            window.location.reload();
+            return;
+        }
+        
+        // Get labeler_id from dropdown
+        const labelerSelect = document.getElementById('labeler_id');
+        const labelerId = labelerSelect ? labelerSelect.value : 'Steve';
+        
+        const searchTermData = {
+            batch_id: parseInt(batch_id),
+            labeler_id: labelerId
+        };
+        
+        // Retry get_search_term
+        api_get_search_term(searchTermData)
+            .then(retryData => {
+                // Handle the retry response (which may reload the page)
+                handleGetSearchTermResponse(retryData);
+            })
+            .catch(error => {
+                console.error('Error retrying get_search_term:', error);
+                // If retry fails, reload the page
+                window.location.reload();
+            });
+        return;
+    }
+    
+    // Populate the search string and selected result index fields
+    const searchStringInput = document.getElementById('search_string');
+    const selectedIndexInput = document.getElementById('selected_result_index');
+    
+    if (data && !data.error) {
+        // Combine search_topic and asset_type into search string
+        if (searchStringInput && data.search_topic !== undefined && data.asset_type !== undefined) {
+            const combinedString = data.search_topic + ' ' + data.asset_type;
+            searchStringInput.value = combinedString;
+        }
+        
+        // Set selected_index into selected result index field
+        if (selectedIndexInput && data.selected_index !== undefined) {
+            selectedIndexInput.value = data.selected_index;
+        }
+        
+        // Store search_term_id if available
+        if (data.id !== undefined) {
+            window.searchTermId = data.id;
+        }
+        
+        // Reload the page with the new search parameters after fields are updated
+        if (data.search_topic && data.asset_type) {
+            const combinedString = data.search_topic + ' ' + data.asset_type;
+            
+            // Ensure fields are updated first
+            if (searchStringInput) {
                 searchStringInput.value = combinedString;
             }
-            
-            // Set selected_index into selected result index field
             if (selectedIndexInput && data.selected_index !== undefined) {
                 selectedIndexInput.value = data.selected_index;
             }
             
-            // Store search_term_id if available
+            // Build URL with new parameters
+            const url = new URL(window.location.href);
+            
+            // Remove any existing search_term_id parameters (including typos like ssearch_term_id)
+            url.searchParams.delete('search_term_id');
+            url.searchParams.delete('ssearch_term_id'); // Remove typo if it exists
+            
+            // Set new parameters
+            url.searchParams.set('search_string', combinedString);
+            if (data.selected_index !== undefined) {
+                url.searchParams.set('selected_result_index', data.selected_index);
+            }
+            // Store search_term_id in URL (after deleting old ones)
             if (data.id !== undefined) {
-                window.searchTermId = data.id;
+                url.searchParams.set('search_term_id', data.id);
             }
             
-            // Reload the page with the new search parameters
-            if (data.search_topic && data.asset_type) {
-                const combinedString = data.search_topic + ' ' + data.asset_type;
-                const url = new URL(window.location.href);
-                
-                // Remove any existing search_term_id parameters (including typos like ssearch_term_id)
-                url.searchParams.delete('search_term_id');
-                url.searchParams.delete('ssearch_term_id'); // Remove typo if it exists
-                
-                // Set new parameters
-                url.searchParams.set('search_string', combinedString);
-                if (data.selected_index !== undefined) {
-                    url.searchParams.set('selected_result_index', data.selected_index);
-                }
-                // Store search_term_id in URL (after deleting old ones)
-                if (data.id !== undefined) {
-                    url.searchParams.set('search_term_id', data.id);
-                }
-                window.location.href = url.toString();
+            // Preserve batch_id from the dropdown
+            const batchSelect = document.getElementById('batch_id');
+            if (batchSelect && batchSelect.value) {
+                url.searchParams.set('batch_id', batchSelect.value);
             }
-        } else if (data && data.error) {
-            console.error('Error from API:', data.error);
+            
+            // Preserve labeler_id from the dropdown
+            const labelerSelect = document.getElementById('labeler_id');
+            if (labelerSelect && labelerSelect.value) {
+                url.searchParams.set('labeler_id', labelerSelect.value);
+            }
+            
+            // Reload the page after fields are populated
+            console.log('here')
+            window.location.href = url.toString();
         }
-        
-        return data;
-    })
-    .catch(error => {
-        console.error('Error calling get_search_term:', error);
-    });
+    } else if (data && data.error) {
+        console.error('Error from API:', data.error);
+    }
 }
 
 // Function to update search term status to invalid
@@ -149,6 +255,63 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchTermIdFromUrl = urlParams.get('search_term_id');
     window.searchTermId = searchTermIdFromUrl || null;
     
+    // Function to load batches for the current labeler
+    function loadBatchesForLabeler() {
+        if (!API_ACCESS_KEY) {
+            // Wait for API_ACCESS_KEY to be available
+            setTimeout(function() {
+                loadBatchesForLabeler();
+            }, 500);
+            return;
+        }
+
+        // Ensure dropdown is ready before calling the endpoint
+        const labelerSelect = document.getElementById('labeler_id');
+        if (!labelerSelect) {
+            console.log('Dropdown not ready yet, waiting...');
+            setTimeout(function() {
+                loadBatchesForLabeler();
+            }, 100);
+            return;
+        }
+
+        // Check if dropdown has a value
+        if (!labelerSelect.value || labelerSelect.value.trim() === '') {
+            console.log('Dropdown value not set yet, waiting...');
+            setTimeout(function() {
+                loadBatchesForLabeler();
+            }, 100);
+            return;
+        }
+
+        get_available_search_batches()
+            .then(function(batches) {
+                // API function now returns the batches array directly
+                console.log('Loaded batches:', batches);
+                populateBatchDropdown(batches);
+            })
+            .catch(function(error) {
+                console.error('Error loading batches:', error);
+                const batchSelect = document.getElementById('batch_id');
+                if (batchSelect) {
+                    batchSelect.innerHTML = '<option value="">Error loading batches</option>';
+                }
+            });
+    }
+
+    // Load batches on page load
+    console.log('Loading batches on page load');
+    loadBatchesForLabeler();
+
+    // Reload batches when labeler changes
+    const labelerSelect = document.getElementById('labeler_id');
+    if (labelerSelect) {
+        labelerSelect.addEventListener('change', function() {
+            console.log('Labeler changed, reloading batches');
+            loadBatchesForLabeler();
+        });
+    }
+    
     // Get Search Term button handler
     const getSearchTermBtn = document.getElementById('get_search_term_btn');
     if (getSearchTermBtn) {
@@ -157,13 +320,45 @@ document.addEventListener('DOMContentLoaded', function() {
             this.classList.add('clicked');
             setTimeout(() => this.classList.remove('clicked'), 300);
             
+            // Get batch_id from the batch dropdown
+            const batchSelect = document.getElementById('batch_id');
+            const batch_id = batchSelect && batchSelect.value ? batchSelect.value : null;
+            
+            if (!batch_id) {
+                console.error('Please select a batch first');
+                return;
+            }
+            
+            // Get labeler_id from dropdown
+            const labelerSelect = document.getElementById('labeler_id');
+            const labelerId = labelerSelect ? labelerSelect.value : 'Steve';
+            
+            console.log('Getting search term for batch_id:', batch_id, 'labeler_id:', labelerId);
+            
+            const searchTermData = {
+                batch_id: parseInt(batch_id),
+                labeler_id: labelerId
+            };
+            
             // Check if API_ACCESS_KEY is available, if not wait a bit
             if (!API_ACCESS_KEY) {
                 setTimeout(function() {
-                    api_get_search_term();
+                    api_get_search_term(searchTermData)
+                        .then(data => {
+                            handleGetSearchTermResponse(data);
+                        })
+                        .catch(error => {
+                            console.error('Error getting search term:', error);
+                        });
                 }, 1000);
             } else {
-                api_get_search_term();
+                api_get_search_term(searchTermData)
+                    .then(data => {
+                        handleGetSearchTermResponse(data);
+                    })
+                    .catch(error => {
+                        console.error('Error getting search term:', error);
+                    });
             }
         });
     }
@@ -179,17 +374,36 @@ document.addEventListener('DOMContentLoaded', function() {
             const currentSearchTermId = window.searchTermId;
             if (!currentSearchTermId) {
                 console.error('No search term ID available. Please get a search term first.');
-                alert('No search term ID available. Please get a search term first.');
                 return;
             }
             
+            // Get batch_id from the batch dropdown
+            const batchSelect = document.getElementById('batch_id');
+            const batch_id = batchSelect && batchSelect.value ? batchSelect.value : null;
+            
+            if (!batch_id) {
+                console.error('Please select a batch first');
+                return;
+            }
+            
+            // Get labeler_id from dropdown
+            const labelerSelect = document.getElementById('labeler_id');
+            const labelerId = labelerSelect ? labelerSelect.value : 'Steve';
+            
             // Update status to invalid, then get new search term
-            api_update_search_term_status(currentSearchTermId)
+            api_update_search_term(currentSearchTermId, 'invalid')
                 .then(() => {
-                    return api_get_search_term();
+                    const searchTermData = {
+                        batch_id: parseInt(batch_id),
+                        labeler_id: labelerId
+                    };
+                    return api_get_search_term(searchTermData);
+                })
+                .then(data => {
+                    handleGetSearchTermResponse(data);
                 })
                 .catch(error => {
-                    console.error('Error updating search term status:', error);
+                    console.error('Error updating search term status or getting new search term:', error);
                 });
         });
     }
@@ -261,13 +475,107 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
+    // Function to zoom an image
+    function zoomImage(img) {
+        if (img.classList.contains('zoomed')) {
+            img.classList.remove('zoomed');
+            img.style.transform = '';
+            img.style.transformOrigin = '';
+        } else {
+            img.classList.add('zoomed');
+            img.style.transform = 'scale(2)';
+            img.style.transformOrigin = 'top left';
+        }
+    }
+    
+    // Function to close all zoomed images
+    function closeAllZooms() {
+        const zoomedImages = document.querySelectorAll('img.zoomed');
+        zoomedImages.forEach(function(img) {
+            img.classList.remove('zoomed');
+            img.style.transform = '';
+        });
+    }
+    
+    // Track if we should ignore the next click (to prevent immediate closing after zoom button click)
+    let ignoreNextClick = false;
+    
+    // Zoom button handlers for listing images
+    const listingZoomButtons = document.querySelectorAll('.listing_zoom');
+    listingZoomButtons.forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation(); // Prevent triggering the container click
+            e.stopImmediatePropagation(); // Prevent other handlers
+            
+            ignoreNextClick = true;
+            setTimeout(function() {
+                ignoreNextClick = false;
+            }, 100);
+            
+            const container = this.closest('.asset_view.image_box');
+            if (container) {
+                const img = container.querySelector('img.design.view_asset_labels.large');
+                if (img) {
+                    zoomImage(img);
+                }
+            }
+        });
+    });
+    
+    // Zoom button handler for selected image
+    const selectedImageZoomBtn = document.querySelector('.selected_image_zoom');
+    if (selectedImageZoomBtn) {
+        selectedImageZoomBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            
+            ignoreNextClick = true;
+            setTimeout(function() {
+                ignoreNextClick = false;
+            }, 100);
+            
+            const selectedImageContainer = this.closest('.selected_image.container');
+            if (selectedImageContainer) {
+                const img = selectedImageContainer.querySelector('img.selected_image_img');
+                if (img) {
+                    zoomImage(img);
+                }
+            }
+        });
+    }
+    
+    // Close zoom when clicking anywhere (except on zoom buttons)
+    // Use capturing phase to catch clicks before they reach listing containers
+    document.addEventListener('click', function(e) {
+        // Don't close if clicking on a zoom button or its SVG, or if we should ignore this click
+        if (e.target.closest('.zoom_magnify_btn') || ignoreNextClick) {
+            return;
+        }
+        
+        // Check if there are any zoomed images
+        const zoomedImages = document.querySelectorAll('img.zoomed');
+        if (zoomedImages.length > 0) {
+            // Close all zoomed images and prevent other handlers
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            closeAllZooms();
+            return false;
+        }
+    }, true); // Use capturing phase
+    
     // Make listings clickable and toggle orange background
     const listingContainers = document.querySelectorAll('.asset_view.image_box');
     
     listingContainers.forEach(function(container) {
         container.addEventListener('click', function(e) {
-            // Don't toggle if clicking on the identical button
-            if (e.target.classList.contains('identical_btn')) {
+            // Don't toggle if clicking on the identical button or zoom button
+            if (e.target.classList.contains('identical_btn') || e.target.closest('.zoom_magnify_btn')) {
+                return;
+            }
+            
+            // Don't toggle if there are zoomed images (let the document click handler close them first)
+            const zoomedImages = document.querySelectorAll('img.zoomed');
+            if (zoomedImages.length > 0) {
                 return;
             }
             
@@ -396,7 +704,6 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (!currentSearchTermId) {
                 console.error('No search term ID available. Please get a search term first.');
-                alert('No search term ID available. Please get a search term first.');
                 return;
             }
             
@@ -549,15 +856,34 @@ document.addEventListener('DOMContentLoaded', function() {
                         listing.remove();
                     });
                     
-                    // Show message to user
+                    // Log message to console
                     if (failed === 0) {
-                        alert(`Successfully submitted ${successful} listings!\nCreated: ${created}\nUpdated: ${updated}`);
+                        console.log(`Successfully submitted ${successful} listings!\nCreated: ${created}\nUpdated: ${updated}`);
                     } else {
-                        alert(`Submitted ${successful} listings, ${failed} failed.\nCreated: ${created}\nUpdated: ${updated}\n\nCheck console for details.`);
+                        console.log(`Submitted ${successful} listings, ${failed} failed.\nCreated: ${created}\nUpdated: ${updated}\n\nCheck console for details.`);
                     }
                     
                     // Get a new search term after alert is dismissed
-                    api_get_search_term();
+                    // Get batch_id from the batch dropdown
+                    const batchSelect = document.getElementById('batch_id');
+                    const batch_id = batchSelect && batchSelect.value ? batchSelect.value : null;
+
+                    if (batch_id) {
+                        const searchTermData = {
+                            batch_id: batch_id,
+                            labeler_id: labelerId
+                        };
+                        api_get_search_term(searchTermData)
+                            .then(data => {
+                                handleGetSearchTermResponse(data);
+                            })
+                            .catch(error => {
+                                console.error('Error getting new search term:', error);
+                                // Don't show alert here as user just dismissed one
+                            });
+                    } else {
+                        console.warn('No batch_id selected, cannot get new search term');
+                    }
                     return;
                 }
                 
