@@ -144,7 +144,10 @@ def setup_session(request):
     labeler_id = request.GET.get('labeler_id','Steve')
     task_type = request.GET.get('task_type','asset_type')
     rule_index = request.GET.get('rule_index',1)
-    batch_id = request.GET.get('batch_id',1)
+    batch_id = request.GET.get('batch_index',1)
+
+    print("--------")
+    print(batch_id)
 
     api_url = 'https://backend-python-nupj.onrender.com/get_session_options/'
 
@@ -155,19 +158,16 @@ def setup_session(request):
         'Authorization': settings.API_ACCESS_KEY
         }
 
-    # print('--------------')    
-    # print('sending request')
+
     response = requests.get(api_url, json = data, headers = header )
-    # print(response)
     session_options = json.loads(response.content)
 
-    # print(session_options)
 
     selected_options = {'labeler_id':labeler_id,
                         'task_type':task_type,
                         'rule_index':rule_index,
                         'batch_id':batch_id}    
-   
+
     return render(request, 'setup_session.html', {'session_options':session_options,
                                                   'selected_options':selected_options})
 
