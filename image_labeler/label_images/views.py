@@ -179,6 +179,12 @@ def front_page(request):
             )
             reconcile_rows = {(row[0], row[1]): row[2] for row in cursor.fetchall()}
 
+            cursor.execute("""
+                SELECT COUNT(DISTINCT asset_id) FROM "label_data.selected_assets"
+                WHERE task_type IS NULL
+            """)
+            unscoped_count = cursor.fetchone()[0]
+
         for row in selected_rows:
             tt, ri = row[0], row[1]
             ri_int = int(ri) if ri is not None else 0
@@ -200,13 +206,14 @@ def front_page(request):
                 }
             )
     except Exception:
-        pass
+        unscoped_count = 0
 
     is_admin = getattr(getattr(request.user, "profile", None), "role", "") == "admin"
 
     data = {
         "feature_status": feature_status,
         "is_admin": is_admin,
+        "unscoped_count": unscoped_count,
     }
 
     return render(request, "front_page.html", data)
@@ -313,21 +320,15 @@ def show_images(request):
 @labeler_required
 def setup_session(request):
 
-    labeler_id = request.GET.get("labeler_id", request.user.username)
     task_type = request.GET.get("task_type", "asset_type")
     rule_index = request.GET.get("rule_index", 1)
-    batch_id = request.GET.get("batch_index", 1)
-
-    print("--------")
-    print(batch_id)
 
     session_options = api_get("get_session_options", {"task_type": task_type})
 
     selected_options = {
-        "labeler_id": labeler_id,
+        "labeler_id": request.user.username,
         "task_type": task_type,
         "rule_index": rule_index,
-        "batch_id": batch_id,
     }
 
     return render(

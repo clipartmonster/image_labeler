@@ -4,48 +4,48 @@
 {% block content %}
 
 <style>
-    .dashboard { padding: 16px 24px; font-family: 'Roboto', sans-serif; color: #d2e2e2; }
-    .dashboard h2 { font-weight: 500; margin-bottom: 12px; font-size: 18px; color: #e8f0f0; }
-    .dashboard h3 { font-weight: 400; margin: 24px 0 10px; font-size: 15px; color: #8aa8a8; text-transform: uppercase; letter-spacing: 1px; }
+    .dashboard { padding: 16px 24px; font-family: 'Roboto', sans-serif; color: #1a1a1a; }
+    .dashboard h2 { font-weight: 500; margin-bottom: 12px; font-size: 18px; color: #111; }
+    .dashboard h3 { font-weight: 500; margin: 24px 0 10px; font-size: 15px; color: #333; text-transform: uppercase; letter-spacing: 1px; }
 
-    .status-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 24px; }
+    .status-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 24px; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
     .status-table th {
-        text-align: left; padding: 8px 10px; background: #1a2332;
-        color: #8aa8a8; font-weight: 500; border-bottom: 2px solid #3a5060;
+        text-align: left; padding: 8px 10px; background: #3a5060;
+        color: #fff; font-weight: 500; border-bottom: 2px solid #2a3e4e;
     }
     .status-table td {
-        padding: 7px 10px; border-bottom: 1px solid #2a3a4a;
+        padding: 7px 10px; border-bottom: 1px solid #dde3e8; color: #222;
     }
-    .status-table tr:hover td { background: #1e2e3e; }
+    .status-table tr:hover td { background: #edf2f7; }
     .status-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 
     .badge {
         display: inline-block; padding: 2px 8px; border-radius: 3px;
         font-size: 11px; font-weight: 500;
     }
-    .badge-warn { background: #4a3a20; color: #e8c060; }
-    .badge-ok { background: #203a2a; color: #60c880; }
-    .badge-info { background: #203040; color: #60a0d0; }
+    .badge-warn { background: #fef3cd; color: #856404; }
+    .badge-ok { background: #d4edda; color: #155724; }
+    .badge-info { background: #cce5ff; color: #004085; }
 
     .action-link {
-        color: #799494; text-decoration: none; margin-right: 8px; font-size: 12px;
+        color: #1a6b6b; text-decoration: none; margin-right: 8px; font-size: 12px; font-weight: 500;
     }
-    .action-link:hover { text-decoration: underline; color: #a0c8c8; }
+    .action-link:hover { text-decoration: underline; color: #0d4f4f; }
 
     .nav-grid {
         display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
         gap: 8px; margin-bottom: 16px;
     }
     .nav-grid a {
-        display: block; padding: 10px 14px; background: #243447;
-        border-radius: 4px; color: #d2e2e2; text-decoration: none;
-        font-size: 13px; border: 1px solid #2a3a4a;
+        display: block; padding: 10px 14px; background: #fff;
+        border-radius: 4px; color: #1a1a1a; text-decoration: none;
+        font-size: 13px; border: 1px solid #c0cccc; box-shadow: 0 1px 2px rgba(0,0,0,0.06);
     }
-    .nav-grid a:hover { background: #2e4457; border-color: #3a5a6a; }
-    .nav-grid a .nav-desc { font-size: 11px; color: #6a8a8a; margin-top: 2px; }
+    .nav-grid a:hover { background: #edf2f2; border-color: #90a8a8; }
+    .nav-grid a .nav-desc { font-size: 11px; color: #555; margin-top: 2px; }
 
-    .model-cell { font-size: 11px; color: #8aa8a8; }
-    .model-cell .score { font-weight: 500; }
+    .model-cell { font-size: 11px; color: #444; }
+    .model-cell .score { font-weight: 500; color: #111; }
 </style>
 
 <div class="dashboard">
@@ -101,7 +101,20 @@
         </tbody>
     </table>
     {% else %}
-    <p style="color:#6a8a8a; font-size:14px;">No scoped assets found. Upload batches with task_type and rule_index to see status here.</p>
+    <div style="background:#fff; border-radius:6px; padding:16px 20px; box-shadow:0 1px 4px rgba(0,0,0,0.12); margin-bottom:24px;">
+        <p style="color:#333; font-size:14px; margin:0 0 8px;">No assets with <code>task_type</code> / <code>rule_index</code> assigned yet.</p>
+        {% if unscoped_count %}
+        <p style="color:#856404; font-size:13px; margin:0 0 8px; background:#fef3cd; display:inline-block; padding:4px 10px; border-radius:3px;">
+            <strong>{{ unscoped_count }}</strong> selected assets exist without a task_type &mdash; these were uploaded before scoping was added.
+        </p>
+        <p style="color:#555; font-size:13px; margin:8px 0 0;">
+            To see them here, run a SQL update to tag them:<br>
+            <code style="background:#f0f0f0; padding:2px 6px; border-radius:3px; font-size:12px;">UPDATE "label_data.selected_assets" SET task_type='...', rule_index=... WHERE batch_id=... AND task_type IS NULL;</code>
+        </p>
+        {% else %}
+        <p style="color:#555; font-size:13px; margin:0;">Upload batches using the updated script (with task_type and rule_index) to see status here.</p>
+        {% endif %}
+    </div>
     {% endif %}
 
     <!-- Navigation Links -->
