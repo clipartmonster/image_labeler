@@ -319,12 +319,41 @@ def show_images(request):
 
 @labeler_required
 def setup_session(request):
+    from django.db import connection
     from django.utils.safestring import mark_safe
 
     task_type = request.GET.get("task_type", "asset_type")
     rule_index = request.GET.get("rule_index", 1)
 
     session_options = api_get("get_session_options", {"task_type": task_type})
+
+    # Get the actual (batch_id, rule_index) pairs that exist in selected_assets
+    # for this task_type — the API doesn't filter by what's in the DB.
+    valid_batch_rules = set()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT batch_id, rule_index
+                FROM "label_data.selected_assets"
+                WHERE task_type = %s AND task_type IS NOT NULL
+            """, [task_type])
+            for row in cursor.fetchall():
+                valid_batch_rules.add((str(row[0]), str(row[1])))
+    except Exception:
+        valid_batch_rules = None
+
+    rule_stats = session_options.get("rule_index_stats", [])
+    sub_stats = session_options.get("sub_batch_stats", [])
+
+    if valid_batch_rules is not None:
+        rule_stats = [
+            rs for rs in rule_stats
+            if (str(rs.get("batch_id")), str(rs.get("rule_index"))) in valid_batch_rules
+        ]
+        sub_stats = [
+            sb for sb in sub_stats
+            if (str(sb.get("batch_id")), str(sb.get("rule_index"))) in valid_batch_rules
+        ]
 
     selected_options = {
         "labeler_id": request.user.username,
@@ -334,9 +363,9 @@ def setup_session(request):
 
     session_options_json = {
         "task_types": session_options.get("task_types", []),
-        "rule_index_stats": mark_safe(json.dumps(session_options.get("rule_index_stats", []))),
+        "rule_index_stats": mark_safe(json.dumps(rule_stats)),
         "batch_options": mark_safe(json.dumps(session_options.get("batch_options", []))),
-        "sub_batch_stats": mark_safe(json.dumps(session_options.get("sub_batch_stats", []))),
+        "sub_batch_stats": mark_safe(json.dumps(sub_stats)),
     }
 
     return render(
@@ -394,13 +423,9 @@ def mturk_redirect(request):
         )
 
     from datetime import datetime
-    import pytz
+    from zoneinfo import ZoneInfo
 
-    # Define the Central Time zone
-    central_time_zone = pytz.timezone("America/Chicago")
-
-    # Get the current time in Central Time
-    central_time = datetime.now(central_time_zone)
+    central_time = datetime.now(ZoneInfo("America/Chicago"))
 
     if labeler_source == "MTurk":
         labeler_id = worker_id
@@ -434,19 +459,29 @@ def mturk_redirect(request):
             return api_get("get_test_questions", {"samples": 2})
         return []
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        future_assets = executor.submit(fetch_assets)
-        future_rules = executor.submit(fetch_rules)
-        future_test = executor.submit(fetch_test_questions)
+    try:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_assets = executor.submit(fetch_assets)
+            future_rules = executor.submit(fetch_rules)
+            future_test = executor.submit(fetch_test_questions)
 
-        assets_content = future_assets.result()
-        labelling_rules = future_rules.result()
-        test_questions = future_test.result()
+            assets_content = future_assets.result()
+            labelling_rules = future_rules.result()
+            test_questions = future_test.result()
+    except Exception:
+        logger.exception(
+            "mturk_redirect API error: task_type=%s batch_id=%s rule_index=%s sub_batch=%s",
+            task_type, batch_id, rule_index, large_sub_batch,
+        )
+        return HttpResponse("Error loading labeling session. Check logs for details.", status=500)
 
-    assets_to_label = assets_content["asset_batch"]
-
-    # print('|-------assets to label----------|')
-    # print(pd.DataFrame(assets_to_label))
+    assets_to_label = assets_content.get("asset_batch")
+    if not assets_to_label:
+        logger.error(
+            "mturk_redirect: empty asset_batch for task_type=%s batch_id=%s rule_index=%s sub_batch=%s | response keys: %s",
+            task_type, batch_id, rule_index, large_sub_batch, list(assets_content.keys()),
+        )
+        return HttpResponse("No assets found for this batch.", status=404)
 
     collection_data = {
         "task_type": task_type,
@@ -458,8 +493,6 @@ def mturk_redirect(request):
         "mturk_batch_id": mturk_batch_id,
         "rule_index": rule_indexes[0],
     }
-
-    # Test questions are already fetched in parallel above
 
     return render(
         request,
