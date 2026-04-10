@@ -34,7 +34,7 @@ RULE_INDEX = 1
 # Batch label stamped on every written row
 MODEL_BATCH_LABEL = f"misclassification_{MODEL_VERSION}"
 
-OUTPUT_TABLE = "label_data.selected_assets"
+OUTPUT_TABLE = "label_data.selected_assets_new"
 
 # Optional: path to the JSON produced by embedding_labels.ipynb for assets
 # that have no dino_embedding in ES. Set to None to skip.

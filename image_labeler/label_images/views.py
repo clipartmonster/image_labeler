@@ -136,7 +136,7 @@ def front_page(request):
                     sa.rule_index,
                     COUNT(DISTINCT sa.asset_id) AS total_selected,
                     COUNT(DISTINCT pr.asset_id) AS with_any_label
-                FROM "label_data.selected_assets" sa
+                FROM "label_data.selected_assets_new" sa
                 LEFT JOIN (
                     SELECT DISTINCT asset_id, task_type, rule_index
                     FROM "label_data.prompt_responses"
@@ -180,7 +180,7 @@ def front_page(request):
             reconcile_rows = {(row[0], row[1]): row[2] for row in cursor.fetchall()}
 
             cursor.execute("""
-                SELECT COUNT(DISTINCT asset_id) FROM "label_data.selected_assets"
+                SELECT COUNT(DISTINCT asset_id) FROM "label_data.selected_assets_new"
                 WHERE task_type IS NULL
             """)
             unscoped_count = cursor.fetchone()[0]
@@ -334,7 +334,7 @@ def setup_session(request):
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT DISTINCT batch_id, rule_index
-                FROM "label_data.selected_assets"
+                FROM "label_data.selected_assets_new"
                 WHERE task_type = %s AND task_type IS NOT NULL
             """, [task_type])
             for row in cursor.fetchall():

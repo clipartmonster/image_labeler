@@ -27,7 +27,7 @@ PROB_MAX = 0.6
 MODEL_BATCH_LABEL = "CF1_0.01"
 
 # Output Table
-OUTPUT_TABLE = "label_data.selected_assets"
+OUTPUT_TABLE = "label_data.selected_assets_new"
 
 
 def get_engines():
