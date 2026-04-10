@@ -122,7 +122,7 @@ def fetch_asset_details(engine_prod, asset_ids):
 
 
 def get_existing_batch_info(engine_dev):
-    """Return asset IDs already selected for this task_type/rule_index, and the next batch_id."""
+    """Return asset IDs already selected for this task_type/rule_index, and the next batch_id scoped to this feature."""
     logger.info(
         f"Checking existing selections for task_type='{TASK_TYPE}', rule_index={RULE_INDEX}..."
     )
@@ -131,16 +131,16 @@ def get_existing_batch_info(engine_dev):
             f'SELECT asset_id, batch_id, task_type, rule_index FROM "{OUTPUT_TABLE}"',
             engine_dev,
         )
-        next_batch_id = int(all_df["batch_id"].max() + 1) if not all_df.empty else 1
 
         scoped = all_df[
             (all_df["task_type"] == TASK_TYPE) & (all_df["rule_index"] == RULE_INDEX)
         ]
         existing_ids = set(scoped["asset_id"].unique())
+        next_batch_id = int(scoped["batch_id"].max() + 1) if not scoped.empty else 1
 
         logger.info(
             f"Found {len(existing_ids)} already-selected assets for this task/rule. "
-            f"Next batch ID: {next_batch_id}"
+            f"Next batch ID (scoped to {TASK_TYPE}/rule {RULE_INDEX}): {next_batch_id}"
         )
         return existing_ids, next_batch_id
     except Exception as e:
