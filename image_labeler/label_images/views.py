@@ -1,9 +1,10 @@
 from django.shortcuts import render, redirect
 from django.http import HttpResponse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.contrib.staticfiles import finders
-from .models import listings_to_be_labeled
-
-
+from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
+from django.contrib.auth.models import User
+from .models import listings_to_be_labeled, UserProfile
 
 from django.conf import settings
 from django.http import FileResponse, Http404
@@ -12,47 +13,208 @@ import os
 import random
 import string
 
-
+import logging
 import requests
 import json
 import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
+from .decorators import labeler_required, admin_required
 
+logger = logging.getLogger(__name__)
+
+API_BASE = 'https://backend-python-nupj.onrender.com'
+API_TIMEOUT = 15
+
+
+def api_get(path, data=None, timeout=API_TIMEOUT):
+    """GET from the backend API with standard headers, timeout, and error handling.
+    Returns parsed JSON dict, or raises on non-2xx / network failure."""
+    url = f"{API_BASE}/{path.lstrip('/')}".rstrip('/') + '/'
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': settings.API_ACCESS_KEY,
+    }
+    resp = requests.get(url, json=data or {}, headers=headers, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def login_view(request):
+    if request.user.is_authenticated:
+        return redirect('front_page')
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            auth_login(request, user)
+            next_url = request.GET.get('next', '')
+            if not next_url or not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+                next_url = 'front_page'
+            return redirect(next_url)
+        return render(request, 'auth/login.html', {'error': 'Invalid username or password.'})
+    return render(request, 'auth/login.html')
+
+
+def register_view(request):
+    if request.user.is_authenticated:
+        return redirect('front_page')
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+        password2 = request.POST.get('password2', '')
+        errors = []
+        if not username:
+            errors.append('Username is required.')
+        if len(password) < 6:
+            errors.append('Password must be at least 6 characters.')
+        if password != password2:
+            errors.append('Passwords do not match.')
+        if User.objects.filter(username=username).exists():
+            errors.append('Username already taken.')
+        if errors:
+            return render(request, 'auth/register.html', {'errors': errors, 'username': username})
+        user = User.objects.create_user(username=username, password=password)
+        UserProfile.objects.create(user=user, role='labeler')
+        return redirect('login')
+    return render(request, 'auth/register.html')
+
+
+def logout_view(request):
+    auth_logout(request)
+    return redirect('login')
+
+@labeler_required
 def front_page(request):
+    from django.db import connection
 
-    data = {}
+    rules_map = {}
+    try:
+        rules_list = api_get('get_labelling_rules').get('labelling_rules', [])
+        for r in rules_list:
+            key = (r.get('task_type'), r.get('rule_index'))
+            rules_map[key] = r.get('title', '')
+    except Exception:
+        rules_list = []
+
+    best_models = {}
+    try:
+        mr = pd.DataFrame(api_get('get_model_results').get('model_results', []))
+        if not mr.empty:
+            mr['score'] = mr.get('score', 0)
+            best = (
+                mr.sort_values('score', ascending=False)
+                .groupby(['task_type', 'rule_index'])
+                .head(1)
+            )
+            for _, row in best.iterrows():
+                key = (row['task_type'], int(row['rule_index']))
+                best_models[key] = {
+                    'val_precision': round(row.get('val_precision', 0), 3),
+                    'val_recall': round(row.get('val_recall', 0), 3),
+                    'score': round(row.get('score', 0), 3),
+                }
+    except Exception:
+        pass
+
+    # --- Asset and label counts from Postgres ---
+    feature_status = []
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT
+                    sa.task_type,
+                    sa.rule_index,
+                    COUNT(DISTINCT sa.asset_id) AS total_selected,
+                    COUNT(DISTINCT pr.asset_id) AS with_any_label
+                FROM "label_data.selected_assets" sa
+                LEFT JOIN (
+                    SELECT DISTINCT asset_id, task_type, rule_index
+                    FROM "label_data.prompt_responses"
+                ) pr
+                    ON sa.asset_id = pr.asset_id
+                    AND sa.task_type = pr.task_type
+                    AND CAST(sa.rule_index AS text) = CAST(pr.rule_index AS text)
+                WHERE sa.task_type IS NOT NULL
+                GROUP BY sa.task_type, sa.rule_index
+                ORDER BY sa.task_type, sa.rule_index
+            """)
+            selected_rows = cursor.fetchall()
+
+            # Reconciliation readiness: assets with 2+ responses, non-tied,
+            # not yet in the labels table
+            cursor.execute("""
+                SELECT
+                    pr.task_type,
+                    pr.rule_index,
+                    COUNT(*) AS reconcilable
+                FROM (
+                    SELECT
+                        asset_id, task_type, rule_index,
+                        SUM(CASE WHEN prompt_response = 'yes' THEN 1 ELSE 0 END) AS yes_ct,
+                        COUNT(*) AS sample_ct
+                    FROM "label_data.prompt_responses"
+                    GROUP BY asset_id, task_type, rule_index
+                    HAVING COUNT(*) > 1
+                ) pr
+                LEFT JOIN "label_data.asset_type.rule.labels" rl
+                    ON pr.asset_id = rl.asset_id
+                    AND CAST(pr.task_type AS text) = CAST(rl.task_type AS text)
+                    AND CAST(pr.rule_index AS text) = CAST(rl.rule_index AS text)
+                WHERE rl.asset_id IS NULL
+                  AND (CAST(pr.yes_ct AS float) / pr.sample_ct) != 0.5
+                GROUP BY pr.task_type, pr.rule_index
+            """)
+            reconcile_rows = {
+                (row[0], row[1]): row[2] for row in cursor.fetchall()
+            }
+
+        for row in selected_rows:
+            tt, ri = row[0], row[1]
+            ri_int = int(ri) if ri is not None else 0
+            key = (tt, ri_int)
+            total = row[2]
+            labeled = row[3]
+            feature_status.append({
+                'task_type': tt,
+                'rule_index': ri_int,
+                'title': rules_map.get(key, ''),
+                'total_selected': total,
+                'unlabeled': total - labeled,
+                'labeled': labeled,
+                'reconcilable': reconcile_rows.get((tt, ri), reconcile_rows.get((tt, str(ri_int)), 0)),
+                'best_model': best_models.get(key, None),
+            })
+    except Exception:
+        pass
+
+    is_admin = getattr(getattr(request.user, 'profile', None), 'role', '') == 'admin'
+
+    data = {
+        'feature_status': feature_status,
+        'is_admin': is_admin,
+    }
 
     return render(request, 'front_page.html', data)
 
+@labeler_required
 def select_line_widths(request):
 
-    labeler_id = request.GET.get('labeler_id','Steve')
+    labeler_id = request.GET.get('labeler_id', request.user.username)
     task_type = request.GET.get('task_type','asset_type')
     rule_index = request.GET.get('rule_index',1)
     batch_id = request.GET.get('batch_id',1)
     large_sub_batch = request.GET.get('large_sub_batch',1)
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
-
-    data = {'batch_type':'large_sub_batch',
-            'large_sub_batch':large_sub_batch,
-            'batch_id':batch_id,
-            'task_type':'line_width_type',
-            'rule_index':rule_index}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
- 
-    response = requests.get(api_url, json = data, headers = header)
-
-    print('hello')
-
-    assets_to_label = json.loads(response.content)['asset_batch']
-
-    print(assets_to_label)
+    resp = api_get('get_asset_batch', {
+        'batch_type': 'large_sub_batch',
+        'large_sub_batch': large_sub_batch,
+        'batch_id': batch_id,
+        'task_type': 'line_width_type',
+        'rule_index': rule_index,
+    })
+    assets_to_label = resp['asset_batch']
 
     sampling_array = [[1 + col + row * 3 for col in range(3)] for row in range(3)]
 
@@ -63,52 +225,32 @@ def select_line_widths(request):
     return render(request, 'select_line_widths.html', data)
 
 
+@labeler_required
 def select_primary_colors(request):
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
-
-    data = {'batch_type':'large_sub_batch',
-            'large_sub_batch':1,
-            'batch_id':2,
-            'task_type':'select_primary_colors',
-            'rule_index':1}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
- 
-    response = requests.get(api_url, json = data, headers = header)
-
-    print('hello')
-
-    assets_to_label = json.loads(response.content)['asset_batch']
-    # total_in_full_set_to_label = json.loads(response.content)['total_in_full_set_to_label']
-    # total_in_set_to_label = json.loads(response.content)['total_in_set_to_label']
-
-    print(assets_to_label)
+    resp = api_get('get_asset_batch', {
+        'batch_type': 'large_sub_batch',
+        'large_sub_batch': 1,
+        'batch_id': 2,
+        'task_type': 'select_primary_colors',
+        'rule_index': 1,
+    })
+    assets_to_label = resp['asset_batch']
 
     data = {'assets_to_label':assets_to_label}
 
     return render(request, 'select_primary_colors.html', data)
 
+@labeler_required
 def show_images(request):
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_color_labels/'
-
-    data = {'source':'initial_training_set',
-            'samples':50}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-    
-    response = requests.get(api_url, json = data, headers = header)
-
-    assets_to_label = json.loads(response.content)['assets_to_label']
-    total_in_full_set_to_label = json.loads(response.content)['total_in_full_set_to_label']
-    total_in_set_to_label = json.loads(response.content)['total_in_set_to_label']
+    resp = api_get('get_color_labels', {
+        'source': 'initial_training_set',
+        'samples': 50,
+    })
+    assets_to_label = resp['assets_to_label']
+    total_in_full_set_to_label = resp['total_in_full_set_to_label']
+    total_in_set_to_label = resp['total_in_set_to_label']
 
 
 
@@ -134,32 +276,20 @@ def show_images(request):
                                                 'reference_panels':range(9),
                                                 'color_labels':color_labels,
                                                 'spread_values':spread_values,
-                                                'labeler_id':'Steve'
+                                                'labeler_id': request.user.username
                                                 })
 
 
 
+@labeler_required
 def setup_session(request):
  
-    labeler_id = request.GET.get('labeler_id','Steve')
+    labeler_id = request.GET.get('labeler_id', request.user.username)
     task_type = request.GET.get('task_type','asset_type')
     rule_index = request.GET.get('rule_index',1)
     batch_id = request.GET.get('batch_id',1)
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_session_options/'
-
-    data = {"task_type":task_type}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    # print('--------------')    
-    # print('sending request')
-    response = requests.get(api_url, json = data, headers = header )
-    # print(response)
-    session_options = json.loads(response.content)
+    session_options = api_get('get_session_options', {"task_type": task_type})
 
     # print(session_options)
 
@@ -172,12 +302,9 @@ def setup_session(request):
                                                   'selected_options':selected_options})
 
 
+@labeler_required
 def initialize_session(request):
     if request.method == 'POST':
-
-        print(request.POST.get('source'))
-
-
         # selected_source = request.POST.get('source')
         # selected_features = request.POST.get('features')
         # labeler_id = request.POST.get('labeler_id')
@@ -190,36 +317,11 @@ def initialize_session(request):
 
 
 def internal(request):
-
-    task_type = request.GET.get('task_type')
-    labeler_source = request.GET.get('label_source', None)
-    label_type = request.GET.get('label_type')
-    labeler_id = request.GET.get('labeler_id')
-    samples = request.GET.get('samples',50)
-    asset_id = request.GET.get('asset_id',None)
-    test_the_labeler = request.GET.get('test_the_labeler', False)
-    batch_index  = request.GET.get('batch_index', None)
-    rule_indexes  = json.loads(request.GET.get('rule_indexes', None))
-    add_lure_questions = request.GET.get('add_lure_questions', None)
-    
-
-    api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
-    
-    data = {'batch_index':batch_index,
-            'lure_samples':2}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-    assets_to_label = json.loads(response.content)
+    return HttpResponse("Not implemented", status=501)
 
 
 
-    
-
+@labeler_required
 def mturk_redirect(request):
 
     task_type = request.GET.get('task_type')
@@ -256,13 +358,6 @@ def mturk_redirect(request):
     # Get the current time in Central Time
     central_time = datetime.now(central_time_zone)
 
-    print('----------------------------------------------------')
-    # print(central_time.strftime("%Y-%m-%d %I:%M:%S %p"))
-    # print('assignment id:' + assignment_id)
-    # print('worker id:' + worker_id)
-    # print('----------------------------------------------------')
-
-
     if labeler_source == 'MTurk':
         labeler_id = worker_id 
 
@@ -271,37 +366,26 @@ def mturk_redirect(request):
     # print(batch_id, task_type, rule_index,labeler_id)
 
     
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-    }
-
     def fetch_assets():
-        api_url = 'https://backend-python-nupj.onrender.com/get_asset_batch/'
-        data = {'batch_type':'large_sub_batch',
-                'large_sub_batch':large_sub_batch,
-                'batch_id':batch_id,
-                'task_type':task_type,
-                'rule_index':rule_index}
-        response = requests.get(api_url, json=data, headers=header)
-        return json.loads(response.content)
+        return api_get('get_asset_batch', {
+            'batch_type': 'large_sub_batch',
+            'large_sub_batch': large_sub_batch,
+            'batch_id': batch_id,
+            'task_type': task_type,
+            'rule_index': rule_index,
+        })
 
     def fetch_rules():
-        api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
-        data = {'task_type':task_type, 'rule_indexes':rule_indexes}
-        response = requests.get(api_url, json=data, headers=header)
-        return dict(json.loads(response.content))['labelling_rules']
+        return api_get('get_labelling_rules', {
+            'task_type': task_type,
+            'rule_indexes': rule_indexes,
+        })['labelling_rules']
 
     def fetch_test_questions():
-        if bool(test_the_labeler) == True:
-            # print('preparing test questions')
-            api_url = 'https://backend-python-nupj.onrender.com/get_test_questions/'
-            data = {'samples':2}
-            response = requests.get(api_url, json=data, headers=header)
-            return dict(json.loads(response.content))
+        if bool(test_the_labeler):
+            return api_get('get_test_questions', {'samples': 2})
         return []
 
-    # Execute requests in parallel
     with ThreadPoolExecutor(max_workers=3) as executor:
         future_assets = executor.submit(fetch_assets)
         future_rules = executor.submit(fetch_rules)
@@ -344,35 +428,20 @@ def mturk_redirect(request):
                                                   })
 
 
+@labeler_required
 def view_mturk_responses(request):
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
-
-    data = {'task_type':'art_type',
-            'label_type':'clip_art',
-             'rule_indexes':[1,2,3,4,5]}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-    labelling_rules = dict(json.loads(response.content))['labeling_rules']['clip_art']
+    resp = api_get('get_labelling_rules', {
+        'task_type': 'art_type',
+        'label_type': 'clip_art',
+        'rule_indexes': [1, 2, 3, 4, 5],
+    })
+    labelling_rules = resp['labeling_rules']['clip_art']
 
     prompts = {(item['prompt'], item['rule_index']) for item in labelling_rules}
     prompts = [{'prompt': prompt, 'rule_index': rule_index} for prompt, rule_index in prompts]    
 
-
-    api_url = 'https://backend-python-nupj.onrender.com/get_prompt_responses/'
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-    
-    response = requests.get(api_url, headers = header)
-    assets_w_responses = json.loads(response.content)
+    assets_w_responses = api_get('get_prompt_responses')
    
     # print('----------------------------------')
     # print(assets_w_responses)
@@ -384,23 +453,14 @@ def view_mturk_responses(request):
 
 
 
+@labeler_required
 def view_asset_labels(request):
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_asset_labels/'
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-    
-    response = requests.get(api_url, headers = header)
-    assets_w_labels = json.loads(response.content)
+    assets_w_labels = api_get('get_asset_labels')
 
     batch_ids = []
 
     for label in assets_w_labels.values():
-        print(label)
-        print('--------------')
         batch_ids.append(int(label['data']['1'][0]['mturk_batch_id']))
 
     batch_ids = list(set(batch_ids))
@@ -411,6 +471,7 @@ def view_asset_labels(request):
     return render(request, 'view_asset_labels.html', data)
 
 
+@labeler_required
 def reconcile_labels(request):
 
     assignment_id = ''.join(random.choices( string.ascii_letters + string.digits, k =20))
@@ -422,45 +483,17 @@ def reconcile_labels(request):
     rule_indexes  = json.loads(request.GET.get('rule_indexes', None))
     rule_index = int(rule_indexes[0])
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_disputed_assets/'
-    
-    data = {'rule_index':rule_index,
-            'task_type':task_type}
+    assets_to_label = api_get('get_disputed_assets', {
+        'rule_index': rule_index,
+        'task_type': task_type,
+    })
 
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-    assets_to_label = json.loads(response.content)
-  
-    # print('-----69-69-------')
-    # print(assets_to_label)
-    # print('size of assets to label')
-    # print(len(assets_to_label))
-
-
-    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
-
-    data = {'task_type':task_type,
-            'rule_indexes':rule_indexes
-            }
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-    labelling_rules = dict(json.loads(response.content))['labelling_rules']
-
-    print('----VvV----')
-    print(labelling_rules)
+    labelling_rules = api_get('get_labelling_rules', {
+        'task_type': task_type,
+        'rule_indexes': rule_indexes,
+    })['labelling_rules']
 
     labelling_rules = sorted(labelling_rules, key=lambda x: x['rule_index'])
-
-
 
     collection_data = {
         "task_type":task_type,
@@ -468,9 +501,6 @@ def reconcile_labels(request):
         "assignment_id":assignment_id,
         "labeler_source":labeler_source,
     }
-
-    print(collection_data)
-    print(task_type)
 
     return render(request, 'label_content.html', {'task_type':task_type,
                                                   'labeler_id':labeler_id,
@@ -482,6 +512,7 @@ def reconcile_labels(request):
                                                   'assignment_id':assignment_id                                                 
                                                   })
 
+@labeler_required
 def view_batch_labels(request):
 
     task_type = request.GET.get('task_type', 'asset_type')
@@ -489,26 +520,11 @@ def view_batch_labels(request):
     batch_index = int(request.GET.get('batch_index', 1))
     label_filter = request.GET.get('label_filter', 'only_yes')
 
-    print(task_type,rule_index,batch_index)
-
-    ###############################
-    #get batches assets
-
-    api_url = 'https://backend-python-nupj.onrender.com/get_batch_for_viewing/'
-
-    data = {"task_type":task_type,
-            "rule_index":rule_index,
-            "batch_index":batch_index}
-
-    # print(data)
-
-    header = {
-    'Content-Type': 'application/json',
-    'Authorization': settings.API_ACCESS_KEY
-    }
-
-    response = requests.get(api_url, json = data, headers = header)
-    batch_of_assets_response = json.loads(response.content)
+    batch_of_assets_response = api_get('get_batch_for_viewing', {
+        "task_type": task_type,
+        "rule_index": rule_index,
+        "batch_index": batch_index,
+    })
 
     # print('-----------batch_of_assets--------------')
     # print(batch_of_assets)
@@ -544,19 +560,7 @@ def view_batch_labels(request):
     else:
         label_counts = []
 
-    ###############################
-    #get labelling rules
-    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
-
-    data = {}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-    labelling_rules = dict(json.loads(response.content))
+    labelling_rules = api_get('get_labelling_rules')
 
     rule_entry = []
     if 'labelling_rules' in labelling_rules:
@@ -567,14 +571,11 @@ def view_batch_labels(request):
             .query("rule_index == @rule_index") \
             .to_dict(orient = 'records')
 
-    print('------------')
-    print(rule_entry)
-
     ##########################
 
     total_assets = len(batch_of_assets)
 
-    labeler_id_options = ['Steve','Noah']
+    labeler_id_options = list(User.objects.values_list('username', flat=True))
     label_type_filters = ['only_yes', 'only_no']
 
     if len(rule_entry) > 0:
@@ -600,27 +601,12 @@ def view_batch_labels(request):
 
 
 
+@labeler_required
 def view_labels(request):
 
     task_type = str(request.GET.get('task_type', 'asset_type')).strip()
 
-    print('-----task_type-----')
-    print(task_type)
-
-    #################################
-
-    api_url = 'https://backend-python-nupj.onrender.com/get_dark_ratios/'
-
-    data = {}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-
-    dark_ratios = pd.DataFrame(json.loads(response.content)) \
+    dark_ratios = pd.DataFrame(api_get('get_dark_ratios')) \
     .drop(['dark_label'],axis = 1) \
     .fillna(0) \
     .assign(dark_ratio = lambda x: (x.dark_ratio * 100).astype(int))
@@ -632,21 +618,7 @@ def view_labels(request):
     # print(dark_ratios)
     # print(dark_ratio_limits)
 
-    #################################
-
-    api_url = 'https://backend-python-nupj.onrender.com/get_assets_w_rule_labels/'
-
-    data = {"task_type":task_type}
-    # data = {}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-
-    labeled_assets = pd.DataFrame(json.loads(response.content))
+    labeled_assets = pd.DataFrame(api_get('get_assets_w_rule_labels', {"task_type": task_type}))
 
     task_types = pd.DataFrame(labeled_assets) \
     ['task_type'] \
@@ -697,22 +669,7 @@ def view_labels(request):
     # print('------labeled_assets-2------')
     # print(labeled_assets)
 
-    #######################
-    #get labelling rule title
-
-    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
-
-    data = {}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-    labelling_rules = dict(json.loads(response.content))
-
-    labelling_rules = pd.DataFrame(labelling_rules['labelling_rules']) 
+    labelling_rules = pd.DataFrame(api_get('get_labelling_rules')['labelling_rules']) 
 
     labelling_rules = labelling_rules \
     .filter(['task_type','rule_index','title']) \
@@ -735,19 +692,10 @@ def view_labels(request):
     return render(request, 'view_labels.html', data)
 
 
+@admin_required
 def manage_rules(request):
     
-    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
-
-    data = {}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-    labelling_rules = dict(json.loads(response.content))
+    labelling_rules = api_get('get_labelling_rules')
     
     rule_table = labelling_rules['labelling_rules']
     task_types = labelling_rules['task_type_set']
@@ -761,14 +709,13 @@ def manage_rules(request):
 
 
 
+@admin_required
 def view_prediction_labels(request):
 
     task_type = request.GET.get('task_type', 'asset_type')
     rule_index = int(request.GET.get('rule_index', 1))
     batch_index = request.GET.get('batch_index',None)
     label_type = request.GET.get("label_type",'mismatch')
-
-    print(task_type, rule_index, batch_index, label_type)
 
     #################
 
@@ -778,46 +725,30 @@ def view_prediction_labels(request):
     #################
 
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
+    rules_resp = api_get('get_labelling_rules')
 
-    data = {}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-
-    task_by_rule_options = pd.DataFrame(dict(json.loads(response.content))['labelling_rules']) \
+    task_by_rule_options = pd.DataFrame(rules_resp['labelling_rules']) \
     .filter(['task_type', 'rule_index','title'])
 
     task_type_options = task_by_rule_options \
     .filter(['task_type']) \
     .drop_duplicates() 
 
-    labelling_rules = pd.DataFrame(dict(json.loads(response.content))['labelling_rules'])
+    labelling_rules = pd.DataFrame(rules_resp['labelling_rules'])
 
     labelling_rules = labelling_rules \
     .query('task_type == @task_type') \
     .query('rule_index == @rule_index') 
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_predictions/'
+    predictions_resp = api_get('get_predictions', {
+        "rule_index": rule_index,
+        "task_type": task_type,
+        "batch_index": batch_index,
+        "label_type": label_type,
+    })
 
-    data = {"rule_index":rule_index,
-            "task_type":task_type,
-            "batch_index":batch_index,
-            "label_type":label_type}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-
-    prediction_data = pd.DataFrame(dict(json.loads(response.content))['prediction_data'])
-    batch_counts = pd.DataFrame(dict(json.loads(response.content))['batch_counts'])
+    prediction_data = pd.DataFrame(predictions_resp['prediction_data'])
+    batch_counts = pd.DataFrame(predictions_resp['batch_counts'])
 
     if len(prediction_data) > 0:
 
@@ -840,7 +771,7 @@ def view_prediction_labels(request):
         prediction_data = prediction_data.iloc[1:3000]
 
     label_types = ['model','manual']
-    labeler_id_options = ['Steve','Noah']
+    labeler_id_options = list(User.objects.values_list('username', flat=True))
     label_type_filters = ['only_yes','only_no','mismatch']
 
     data = {'prediction_data':prediction_data.to_dict(orient = 'records'),
@@ -859,25 +790,13 @@ def view_prediction_labels(request):
 
 
 
+@labeler_required
 def view_asset(request):
 
     asset_id = request.GET.get('asset_id', 158370)
 
     
-    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
-
-    data = {}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-    labelling_rules = dict(json.loads(response.content))['labelling_rules']
-
-    # print('-------------')
-    # print(labelling_rules)
+    labelling_rules = api_get('get_labelling_rules')['labelling_rules']
 
     task_types = pd.DataFrame(labelling_rules) \
     .query('task_type != "select_primary_colors"') \
@@ -886,29 +805,13 @@ def view_asset(request):
     .squeeze() \
     .tolist()
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_asset_labels/'
-
-    data = {"asset_id":asset_id}
-
-    header = {
-    'Content-Type': 'application/json',
-    'Authorization': settings.API_ACCESS_KEY
-    }
-
-    response = requests.get(api_url, json = data, headers = header)
-
-    print("--------statust code---------")
-    print(response.status_code)
-
-    if response.status_code != 500: 
-        asset_labels = json.loads(response.content)
-
+    try:
+        asset_labels = api_get('get_asset_labels', {"asset_id": asset_id})
         asset_metadata = asset_labels['asset_metadata'][0]
         asset = asset_labels['asset_data'][0]
         prompt_response = asset_labels['prompt_responses']
         labels = asset_labels['rule_labels']
-
-    else:
+    except Exception:
         asset_labels = []
         asset_metadata = []
         asset = []
@@ -926,60 +829,36 @@ def view_asset(request):
 
 
 
+@admin_required
 def view_label_issues(request):
     
     task_type = request.GET.get('task_type', 'color_fill_type')
     rule_index = int(request.GET.get('rule_index', 1))
 
-    print('------------------')
-    print(task_type)
-    print(rule_index)
+    rules_resp = api_get('get_labelling_rules')
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
-
-    data = {}
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    response = requests.get(api_url, json = data, headers = header)
-
-    task_by_rule_options = pd.DataFrame(dict(json.loads(response.content))['labelling_rules']) \
+    task_by_rule_options = pd.DataFrame(rules_resp['labelling_rules']) \
     .filter(['task_type', 'rule_index','title'])
 
     task_type_options = task_by_rule_options \
     .filter(['task_type']) \
     .drop_duplicates() 
 
-    labelling_rules = pd.DataFrame(dict(json.loads(response.content))['labelling_rules'])
+    labelling_rules = pd.DataFrame(rules_resp['labelling_rules'])
 
     labelling_rules = labelling_rules \
     .query('task_type == @task_type') \
     .query('rule_index == @rule_index') 
 
-
-    api_url = 'https://backend-python-nupj.onrender.com/get_assets_w_label_issues/'
-
-    data = {'task_type':task_type,
-            'rule_index':rule_index}
-
-    header = {
-    'Content-Type': 'application/json',
-    'Authorization': settings.API_ACCESS_KEY
-    }
-
-    response = requests.get(api_url, json = data, headers = header)
-    assets_w_label_issues = json.loads(response.content)
+    assets_w_label_issues = api_get('get_assets_w_label_issues', {
+        'task_type': task_type,
+        'rule_index': rule_index,
+    })
 
     assets_w_label_issues = pd.DataFrame(assets_w_label_issues) 
         
-    print('--------assets_w_label_issues---------')
-    print(assets_w_label_issues)
-
     label_types = ['model','manual']
-    labeler_id_options = ['Steve','Noah']
+    labeler_id_options = list(User.objects.values_list('username', flat=True))
 
     # data = {'assets':assets_w_label_issues}
 
@@ -995,61 +874,27 @@ def view_label_issues(request):
     return render(request, 'view_label_issues.html', data)
 
 
+@admin_required
 def label_testing(request):
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_label_testing_options/'
-
-    data = {"session_id":2}
-
-    header = {
-    'Content-Type': 'application/json',
-    'Authorization': settings.API_ACCESS_KEY
-    }
-
-    response = requests.get(api_url, json = data, headers = header)
-    session_data = json.loads(response.content)
+    session_data = api_get('get_label_testing_options', {"session_id": 2})
 
     experiments = session_data['data']
 
     data = {"experiments":experiments}
 
-    print(data)
-
     return render(request, 'label_testing.html', data)
 
 
+@admin_required
 def view_model_results(request):
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
-
-    header = {
-    'Content-Type': 'application/json',
-    'Authorization': settings.API_ACCESS_KEY
-    }
-
-    response = requests.get(api_url, json = {}, headers = header)
-    label_rules = json.loads(response.content)
-
-    label_rules = label_rules['labelling_rules']
-
-    label_rules = [{'rule_index': entry['rule_index'], 'task_type': entry['task_type'], 'title': entry['title']} for entry in label_rules]
+    rules_resp = api_get('get_labelling_rules')
+    label_rules = [{'rule_index': e['rule_index'], 'task_type': e['task_type'], 'title': e['title']}
+                   for e in rules_resp['labelling_rules']]
     label_rules = pd.DataFrame(label_rules)
-    
-    # print('------label_rules-------')
-    # print(label_rules)
-    
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_model_results/'
-
-    header = {
-    'Content-Type': 'application/json',
-    'Authorization': settings.API_ACCESS_KEY
-    }
-
-    response = requests.get(api_url, json = {}, headers = header)
-    model_results = json.loads(response.content)
-
-    model_results = pd.DataFrame(model_results['model_results']) \
+    model_results = pd.DataFrame(api_get('get_model_results')['model_results']) \
     .merge(label_rules, on = ['rule_index','task_type'], how = 'left')
 
     # print('------model_results------')
@@ -1113,23 +958,10 @@ def view_model_results(request):
 
 
 
+@labeler_required
 def view_primary_colors(request):
     
-    api_url = 'https://backend-python-nupj.onrender.com/get_primary_colors/'
-
-    data = {}
-
-    header = {
-    'Content-Type': 'application/json',
-    'Authorization': settings.API_ACCESS_KEY
-    }
-
-    response = requests.get(api_url, json = data, headers = header)
-    primary_colors = json.loads(response.content)
-
-    # print(primary_colors)
-
-    asset_primary_colors = pd.DataFrame(primary_colors)
+    asset_primary_colors = pd.DataFrame(api_get('get_primary_colors'))
 
     # data = {}
     data = {'asset_primary_colors':asset_primary_colors.to_dict(orient = 'records')}
@@ -1137,53 +969,24 @@ def view_primary_colors(request):
     return render(request, 'view_primary_colors.html', data)
 
 
+@admin_required
 def correct_mismatch_labels(request):
 
     task_type = request.GET.get('task_type', 'color_fill_type')
     rule_index = int(request.GET.get('rule_index', 2))
-    labeler_id = request.GET.get('labeler_id', 'Steve')
+    labeler_id = request.GET.get('labeler_id', request.user.username)
 
-    # print(task_type)
-    # print(rule_index)
-
-    ##############################
-
-    header = {
-        'Content-Type': 'application/json',
-        'Authorization': settings.API_ACCESS_KEY
-        }
-
-    ##############################
-
-    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
-
-    data = {'task_type':task_type,
-            'rule_indexes':[rule_index]
-            }
-
-    response = requests.get(api_url, json = data, headers = header)
-    # print(response)
-    label_rules = json.loads(response.content)['labelling_rules']
+    label_rules = api_get('get_labelling_rules', {
+        'task_type': task_type,
+        'rule_indexes': [rule_index],
+    })['labelling_rules']
 
     prompt = label_rules[0]['prompt']
 
-    # print('-----label_rules-------')
-    # print(label_rules)
-
-    ##############################
-
-    api_url = 'https://backend-python-nupj.onrender.com/get_mismatched_labels/'
-
-    data = {'task_type':task_type,
-            'rule_index':rule_index}
-
-    header = {
-    'Content-Type': 'application/json',
-    'Authorization': settings.API_ACCESS_KEY
-    }
-
-    response = requests.get(api_url, json = data, headers = header)
-    mismatched_labels = json.loads(response.content)['mistmatched_labels']
+    mismatched_labels = api_get('get_mismatched_labels', {
+        'task_type': task_type,
+        'rule_index': rule_index,
+    })['mistmatched_labels']
 
     mismatched_labels = pd.DataFrame(mismatched_labels) \
     .query('status == "active"')
@@ -1205,21 +1008,10 @@ def correct_mismatch_labels(request):
 
 
 
+@labeler_required
 def view_rough_fill(request):
     
-    api_url = 'https://backend-python-nupj.onrender.com/get_rough_fill_scores/'
-
-    data = {}
-
-    header = {
-    'Content-Type': 'application/json',
-    'Authorization': settings.API_ACCESS_KEY
-    }
-
-    response = requests.get(api_url, json = data, headers = header)
-
-
-    rough_fill_scores = pd.DataFrame(json.loads(response.content)['rough_fill_scores'])
+    rough_fill_scores = pd.DataFrame(api_get('get_rough_fill_scores')['rough_fill_scores'])
 
     rough_fill_scores = rough_fill_scores \
     .sample(2000)
@@ -1286,21 +1078,10 @@ def view_rough_fill(request):
 
 
 
+@labeler_required
 def view_line_widths(request):
     
-    api_url = 'https://backend-python-nupj.onrender.com/get_line_widths/'
-
-    data = {}
-
-    header = {
-    'Content-Type': 'application/json',
-    'Authorization': settings.API_ACCESS_KEY
-    }
-
-    response = requests.get(api_url, json = data, headers = header)
-
-    # print(response.content)
-    line_widths = pd.DataFrame(json.loads(response.content))
+    line_widths = pd.DataFrame(api_get('get_line_widths'))
 
     line_widths = line_widths \
     .assign(line_width_bin=lambda x: pd.cut(  x['line_width'].clip(lower=2),

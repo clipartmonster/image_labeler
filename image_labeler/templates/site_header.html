@@ -9,22 +9,22 @@
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
       <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap" rel="stylesheet">
 
-      <link rel="stylesheet", href = "{% static 'css/show_images.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/setup_session.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/slider.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/view_asset_labels.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/view_labels.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/manage_rules.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/view_batch_labels.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/view_prediction_labels.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/view_asset.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/view_label_issues.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/label_testing.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/view_model_results.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/view_primary_colors.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/line_width_palette.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/correct_mismatch_labels.css' %}">
-      <link rel="stylesheet", href = "{% static 'css/view_rough_fills.css' %}">
+      <link rel="stylesheet" href="{% static 'css/show_images.css' %}">
+      <link rel="stylesheet" href="{% static 'css/setup_session.css' %}">
+      <link rel="stylesheet" href="{% static 'css/slider.css' %}">
+      <link rel="stylesheet" href="{% static 'css/view_asset_labels.css' %}">
+      <link rel="stylesheet" href="{% static 'css/view_labels.css' %}">
+      <link rel="stylesheet" href="{% static 'css/manage_rules.css' %}">
+      <link rel="stylesheet" href="{% static 'css/view_batch_labels.css' %}">
+      <link rel="stylesheet" href="{% static 'css/view_prediction_labels.css' %}">
+      <link rel="stylesheet" href="{% static 'css/view_asset.css' %}">
+      <link rel="stylesheet" href="{% static 'css/view_label_issues.css' %}">
+      <link rel="stylesheet" href="{% static 'css/label_testing.css' %}">
+      <link rel="stylesheet" href="{% static 'css/view_model_results.css' %}">
+      <link rel="stylesheet" href="{% static 'css/view_primary_colors.css' %}">
+      <link rel="stylesheet" href="{% static 'css/line_width_palette.css' %}">
+      <link rel="stylesheet" href="{% static 'css/correct_mismatch_labels.css' %}">
+      <link rel="stylesheet" href="{% static 'css/view_rough_fills.css' %}">
 
       <script defer type="text/javascript" src = "{% static 'js/setup_session.js'%}"></script>  
       <script defer type="text/javascript" src = "{% static 'js/view_mturk_response.js'%}"></script>
@@ -56,18 +56,25 @@
  
   <body>
 
-    <button onclick="window.location.href='/label_images/front_page/'" style="
-        top: 10px;
-        left: 10px;
-        padding: 10px 20px;
-        font-size: 16px;
-        background-color: #799494;
-        color: #d2e2e2;
-        border: solid 2px #d2e2e2;
-        border-radius: 5px;
-        cursor: pointer;">
-        Front Page
-    </button>
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#243447; margin-bottom:8px;">
+        <button onclick="window.location.href='/label_images/front_page/'" style="
+            padding: 8px 16px;
+            font-size: 14px;
+            background-color: #799494;
+            color: #d2e2e2;
+            border: solid 2px #d2e2e2;
+            border-radius: 5px;
+            cursor: pointer;">
+            Dashboard
+        </button>
+
+        {% if user.is_authenticated %}
+        <div style="display:flex; align-items:center; gap:12px; font-family:'Roboto',sans-serif; font-size:13px; color:#8aa8a8;">
+            <span>{{ user.username }}{% if user.profile.role == 'admin' %} (admin){% endif %}</span>
+            <a href="{% url 'logout' %}" style="color:#d2e2e2; text-decoration:none; padding:4px 10px; border:1px solid #3a5060; border-radius:4px; font-size:12px;">Logout</a>
+        </div>
+        {% endif %}
+    </div>
 
     {% block content %}
     {% endblock %}

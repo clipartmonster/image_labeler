@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 from pathlib import Path
 from dotenv import load_dotenv
 import os
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,11 +22,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('DJANGO_KEY')
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('RENDER', 'False') != 'true'
+
+SECRET_KEY = os.getenv('DJANGO_KEY')
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'insecure-dev-key-do-not-use-in-production'
+    else:
+        raise RuntimeError("DJANGO_KEY environment variable is required in production")
 
 ALLOWED_HOSTS = ['image-labeler-wqmc.onrender.com',
                  '127.0.0.1']
@@ -52,6 +57,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -60,7 +66,6 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
 ]
 
 ROOT_URLCONF = "image_labeler.urls"
@@ -84,20 +89,25 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "image_labeler.wsgi.application"
 
-#API ACCESS KEY
 load_dotenv()
+
 API_ACCESS_KEY = os.getenv('API_ACCESS_KEY')
 
-
-# Database
-# https://docs.djangoproject.com/en/5.0/ref/settings/#databases
+# Database — Render Postgres (Django auth tables live in public schema)
+# Uses the same connection URL as the batch scripts in new_labels/
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://clipart_monster_db_user:iV0BUFPv0rMLu5MKVXesLlvFT3E6MneJ"
+    "@dpg-cocp8eq0si5c73an4rp0-a.ohio-postgres.render.com/clipart_monster_db"
+)
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": dj_database_url.parse(DATABASE_URL)
 }
+
+LOGIN_URL = "/label_images/login/"
+LOGIN_REDIRECT_URL = "/label_images/front_page/"
+LOGOUT_REDIRECT_URL = "/label_images/login/"
 
 
 # Password validation

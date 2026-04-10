@@ -20,6 +20,7 @@ DB_CONNECTION_DEV = "postgresql+pg8000://clipart_monster_db_user:iV0BUFPv0rMLu5M
 # Selection Parameters
 SAMPLE_SIZE = 20000
 MODEL_VERSION = "CF1_0.01"
+TASK_TYPE = "color_fill_type"
 RULE_INDEX = 1
 PROB_MIN = 0.4
 PROB_MAX = 0.6
@@ -49,7 +50,7 @@ def get_candidate_predictions(engine_prod):
         SELECT asset_id
         FROM "model_predictions"."rule_labels"
         WHERE 
-            task_type = 'color_fill_type' AND
+            task_type = :task_type AND
             rule_index = :rule_index AND
             model_version = :model_version AND
             probability > :prob_min AND
@@ -58,6 +59,7 @@ def get_candidate_predictions(engine_prod):
     )
 
     params = {
+        "task_type": TASK_TYPE,
         "rule_index": RULE_INDEX,
         "model_version": MODEL_VERSION,
         "prob_min": PROB_MIN,
@@ -120,26 +122,30 @@ def fetch_asset_details(engine_prod, asset_ids):
 
 
 def get_existing_batch_info(engine_dev):
-    """Get set of already selected asset_ids and the next batch_id."""
-    logger.info("Checking existing selections in DEV...")
-
-    # Read minimal data: only asset_id and batch_id
-    query = f'SELECT asset_id, batch_id FROM "{OUTPUT_TABLE}"'
-
+    """Return asset IDs already selected for this task_type/rule_index, and the next batch_id."""
+    logger.info(
+        f"Checking existing selections for task_type='{TASK_TYPE}', rule_index={RULE_INDEX}..."
+    )
     try:
-        existing_df = pd.read_sql(query, engine_dev)
-        existing_ids = set(existing_df["asset_id"].unique())
-        next_batch_id = (
-            existing_df["batch_id"].max() + 1 if not existing_df.empty else 1
+        all_df = pd.read_sql(
+            f'SELECT asset_id, batch_id, task_type, rule_index FROM "{OUTPUT_TABLE}"',
+            engine_dev,
         )
+        next_batch_id = int(all_df["batch_id"].max() + 1) if not all_df.empty else 1
+
+        scoped = all_df[
+            (all_df["task_type"] == TASK_TYPE) & (all_df["rule_index"] == RULE_INDEX)
+        ]
+        existing_ids = set(scoped["asset_id"].unique())
+
         logger.info(
-            f"Found {len(existing_ids)} already selected assets. Next batch ID: {next_batch_id}"
+            f"Found {len(existing_ids)} already-selected assets for this task/rule. "
+            f"Next batch ID: {next_batch_id}"
         )
-        return existing_ids, int(next_batch_id)
+        return existing_ids, next_batch_id
     except Exception as e:
-        # Table might not exist yet
         logger.warning(
-            f"Could not read existing assets (table might be empty or missing): {e}"
+            f"Could not read existing assets (table may be empty/missing): {e}"
         )
         return set(), 1
 
@@ -188,17 +194,15 @@ def process_new_batch():
     # 5. Add Detailed Columns
     date_now = datetime.now().strftime("%Y-%m-%d")
 
-    # Initialize all required columns with default values
-    # Metadata
     selected["batch_id"] = next_batch_id
     selected["date_created"] = date_now
     selected["model_batch"] = MODEL_BATCH_LABEL
+    selected["task_type"] = TASK_TYPE
+    selected["rule_index"] = RULE_INDEX
 
-    # Grouping/Sorting helpers
     selected["sub_batch"] = ((np.arange(len(selected)) // 5) + 1).astype(int)
     selected["large_sub_batch"] = ((np.arange(len(selected)) // 500) + 1).astype(int)
 
-    # Labeling Placeholders (Detailed Columns)
     columns_defaults = {
         "label_count": 0,
         "clip_art_type": 0,  # Placeholder for user label

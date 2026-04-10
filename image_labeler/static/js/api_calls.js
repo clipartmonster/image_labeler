@@ -3,13 +3,23 @@
 let API_ACCESS_KEY = '';
 
 fetch('/get_config/')
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            if (response.status === 302 || response.redirected || response.headers.get('content-type')?.includes('text/html')) {
+                window.location.href = '/label_images/login/';
+                return;
+            }
+            throw new Error('Config fetch failed: ' + response.status);
+        }
+        return response.json();
+    })
     .then(config => {
+        if (!config) return;
         API_ACCESS_KEY = config.API_ACCESS_KEY;
         AWS_ACCESS_KEY_ID = config.AWS_ACCESS_KEY_ID;
-        AWS_SECRET_ACCESS_KEY = config.AWS_SECRET_ACCESS_KEY
-       
-})
+        AWS_SECRET_ACCESS_KEY = config.AWS_SECRET_ACCESS_KEY;
+    })
+    .catch(err => console.error('Failed to load config:', err))
 
 
 function api_get_labelling_rules(art_type, label){
@@ -248,7 +258,7 @@ function api_collect_label(data) {
     .then(response => { return response.json() })
     .then(data => { return console.log(data) })
 
-}1
+}
 
 
 function api_collect_prompt(data) {
