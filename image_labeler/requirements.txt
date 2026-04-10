@@ -7,5 +7,4 @@ pandas
 numpy
 whitenoise
 gunicorn
-corsheaders
 django-cors-headers
