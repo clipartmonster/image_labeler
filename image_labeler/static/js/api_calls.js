@@ -404,7 +404,7 @@ function api_collect_mismatch_prompt(data){
     }
 
     return fetch(api_url, {
-        method:'POST',
+        method:'GET',
         headers : headers,
         mode:'cors',
         body: JSON.stringify(data)})
@@ -519,9 +519,6 @@ function api_reset_mismatch_prompt(data){
 
 }
 
-    // def label_line_width_as_invalid(request):
-    // asset_id = request.data.get('asset_id')
-    // labeler_id = request.data.get('labeler_id')
 
     function api_label_line_width_as_invalid(data){
 
