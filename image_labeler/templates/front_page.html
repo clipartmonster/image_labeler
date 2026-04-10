@@ -4,48 +4,56 @@
 {% block content %}
 
 <style>
-    .dashboard { padding: 16px 24px; font-family: 'Roboto', sans-serif; color: #1a1a1a; }
-    .dashboard h2 { font-weight: 500; margin-bottom: 12px; font-size: 18px; color: #111; }
-    .dashboard h3 { font-weight: 500; margin: 24px 0 10px; font-size: 15px; color: #333; text-transform: uppercase; letter-spacing: 1px; }
+    .dashboard { padding: 20px 28px; font-family: 'Roboto', sans-serif; color: #1e293b; max-width: 1200px; }
+    .dashboard h2 { font-weight: 600; margin-bottom: 14px; font-size: 17px; color: #0f172a; }
+    .dashboard h3 {
+        font-weight: 600; margin: 28px 0 10px; font-size: 12px; color: #64748b;
+        text-transform: uppercase; letter-spacing: 1.5px;
+    }
 
-    .status-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 24px; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+    .status-table {
+        width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 28px;
+        background: #fff; border-radius: 8px; overflow: hidden;
+        border: 1px solid #e2e8f0;
+    }
     .status-table th {
-        text-align: left; padding: 8px 10px; background: #3a5060;
-        color: #fff; font-weight: 500; border-bottom: 2px solid #2a3e4e;
+        text-align: left; padding: 10px 12px; background: #f8fafc;
+        color: #475569; font-weight: 600; font-size: 11px;
+        text-transform: uppercase; letter-spacing: 0.5px;
+        border-bottom: 2px solid #e2e8f0;
     }
-    .status-table td {
-        padding: 7px 10px; border-bottom: 1px solid #dde3e8; color: #222;
-    }
-    .status-table tr:hover td { background: #edf2f7; }
+    .status-table td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+    .status-table tr:hover td { background: #f8fafc; }
     .status-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 
     .badge {
-        display: inline-block; padding: 2px 8px; border-radius: 3px;
-        font-size: 11px; font-weight: 500;
+        display: inline-block; padding: 2px 8px; border-radius: 10px;
+        font-size: 10px; font-weight: 600; letter-spacing: 0.3px; margin-left: 4px;
     }
-    .badge-warn { background: #fef3cd; color: #856404; }
-    .badge-ok { background: #d4edda; color: #155724; }
-    .badge-info { background: #cce5ff; color: #004085; }
+    .badge-warn { background: #fef3c7; color: #92400e; }
+    .badge-ok { background: #d1fae5; color: #065f46; }
+    .badge-info { background: #dbeafe; color: #1e40af; }
 
     .action-link {
-        color: #1a6b6b; text-decoration: none; margin-right: 8px; font-size: 12px; font-weight: 500;
+        color: #2563eb; text-decoration: none; margin-right: 10px; font-size: 12px; font-weight: 500;
     }
-    .action-link:hover { text-decoration: underline; color: #0d4f4f; }
+    .action-link:hover { text-decoration: underline; color: #1d4ed8; }
 
     .nav-grid {
         display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 8px; margin-bottom: 16px;
+        gap: 10px; margin-bottom: 8px;
     }
     .nav-grid a {
-        display: block; padding: 10px 14px; background: #fff;
-        border-radius: 4px; color: #1a1a1a; text-decoration: none;
-        font-size: 13px; border: 1px solid #c0cccc; box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+        display: block; padding: 12px 16px; background: #fff;
+        border-radius: 6px; color: #1e293b; text-decoration: none;
+        font-size: 13px; font-weight: 500; border: 1px solid #e2e8f0;
+        transition: border-color 0.15s, box-shadow 0.15s;
     }
-    .nav-grid a:hover { background: #edf2f2; border-color: #90a8a8; }
-    .nav-grid a .nav-desc { font-size: 11px; color: #555; margin-top: 2px; }
+    .nav-grid a:hover { border-color: #cbd5e1; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    .nav-grid a .nav-desc { font-size: 11px; color: #64748b; margin-top: 3px; font-weight: 400; }
 
-    .model-cell { font-size: 11px; color: #444; }
-    .model-cell .score { font-weight: 500; color: #111; }
+    .model-cell { font-size: 11px; color: #64748b; }
+    .model-cell .score { font-weight: 600; color: #0f172a; }
 </style>
 
 <div class="dashboard">
@@ -101,18 +109,18 @@
         </tbody>
     </table>
     {% else %}
-    <div style="background:#fff; border-radius:6px; padding:16px 20px; box-shadow:0 1px 4px rgba(0,0,0,0.12); margin-bottom:24px;">
-        <p style="color:#333; font-size:14px; margin:0 0 8px;">No assets with <code>task_type</code> / <code>rule_index</code> assigned yet.</p>
+    <div style="background:#fff; border-radius:8px; padding:16px 20px; border:1px solid #e2e8f0; margin-bottom:28px;">
+        <p style="color:#334155; font-size:14px; margin:0 0 8px;">No assets with <code style="background:#f1f5f9; padding:1px 5px; border-radius:3px; font-size:12px;">task_type</code> / <code style="background:#f1f5f9; padding:1px 5px; border-radius:3px; font-size:12px;">rule_index</code> assigned yet.</p>
         {% if unscoped_count %}
-        <p style="color:#856404; font-size:13px; margin:0 0 8px; background:#fef3cd; display:inline-block; padding:4px 10px; border-radius:3px;">
-            <strong>{{ unscoped_count }}</strong> selected assets exist without a task_type &mdash; these were uploaded before scoping was added.
+        <p style="color:#92400e; font-size:13px; margin:0 0 8px; background:#fef3c7; display:inline-block; padding:4px 12px; border-radius:10px; font-weight:500;">
+            {{ unscoped_count }} selected assets exist without a task_type &mdash; uploaded before scoping was added.
         </p>
-        <p style="color:#555; font-size:13px; margin:8px 0 0;">
-            To see them here, run a SQL update to tag them:<br>
-            <code style="background:#f0f0f0; padding:2px 6px; border-radius:3px; font-size:12px;">UPDATE "label_data.selected_assets" SET task_type='...', rule_index=... WHERE batch_id=... AND task_type IS NULL;</code>
+        <p style="color:#64748b; font-size:13px; margin:8px 0 0;">
+            Tag them with a SQL update:<br>
+            <code style="background:#f1f5f9; padding:3px 8px; border-radius:4px; font-size:12px; display:inline-block; margin-top:4px;">UPDATE "label_data.selected_assets" SET task_type='...', rule_index=... WHERE batch_id=... AND task_type IS NULL;</code>
         </p>
         {% else %}
-        <p style="color:#555; font-size:13px; margin:0;">Upload batches using the updated script (with task_type and rule_index) to see status here.</p>
+        <p style="color:#64748b; font-size:13px; margin:0;">Upload batches using the updated script (with task_type and rule_index) to see status here.</p>
         {% endif %}
     </div>
     {% endif %}

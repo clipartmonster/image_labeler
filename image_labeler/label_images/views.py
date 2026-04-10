@@ -319,6 +319,7 @@ def show_images(request):
 
 @labeler_required
 def setup_session(request):
+    from django.utils.safestring import mark_safe
 
     task_type = request.GET.get("task_type", "asset_type")
     rule_index = request.GET.get("rule_index", 1)
@@ -331,10 +332,17 @@ def setup_session(request):
         "rule_index": rule_index,
     }
 
+    session_options_json = {
+        "task_types": session_options.get("task_types", []),
+        "rule_index_stats": mark_safe(json.dumps(session_options.get("rule_index_stats", []))),
+        "batch_options": mark_safe(json.dumps(session_options.get("batch_options", []))),
+        "sub_batch_stats": mark_safe(json.dumps(session_options.get("sub_batch_stats", []))),
+    }
+
     return render(
         request,
         "setup_session.html",
-        {"session_options": session_options, "selected_options": selected_options},
+        {"session_options": session_options_json, "selected_options": selected_options},
     )
 
 

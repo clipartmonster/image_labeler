@@ -4,130 +4,111 @@
 {% block content %}
 
 <style>
-    .setup-wrap { padding: 16px 24px; font-family: 'Roboto', sans-serif; max-width: 1100px; }
-    .setup-wrap h2 { font-size: 16px; font-weight: 500; color: #222; margin: 20px 0 8px; }
-    .setup-wrap h2:first-child { margin-top: 0; }
+    .setup-wrap { padding: 20px 28px; font-family: 'Roboto', sans-serif; max-width: 1100px; color: #1e293b; }
+    .setup-wrap h2 { font-size: 14px; font-weight: 600; color: #0f172a; margin: 0 0 10px; }
 
-    .setup-section { background: #fff; border-radius: 6px; padding: 14px 18px; margin-bottom: 14px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .setup-section {
+        background: #fff; border-radius: 8px; padding: 16px 20px; margin-bottom: 12px;
+        border: 1px solid #e2e8f0;
+    }
 
     .pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
     .pill {
-        padding: 8px 18px; border-radius: 5px; border: 2px solid #b0c0c0;
-        background: #eef3f3; color: #333; font-size: 13px; font-weight: 500;
+        padding: 8px 20px; border-radius: 6px; border: 1px solid #e2e8f0;
+        background: #fff; color: #334155; font-size: 13px; font-weight: 500;
         cursor: pointer; transition: all 0.15s;
     }
-    .pill:hover { background: #dce8e8; border-color: #80a0a0; }
-    .pill.selected { background: #3a5060; color: #fff; border-color: #3a5060; }
+    .pill:hover { background: #f8fafc; border-color: #cbd5e1; }
+    .pill.selected { background: #1e293b; color: #fff; border-color: #1e293b; }
 
+    .card-row { display: flex; flex-wrap: wrap; gap: 8px; }
     .rule-card {
-        padding: 10px 16px; border-radius: 5px; border: 2px solid #b0c0c0;
-        background: #eef3f3; cursor: pointer; transition: all 0.15s; min-width: 200px;
+        padding: 12px 16px; border-radius: 6px; border: 1px solid #e2e8f0;
+        background: #fff; cursor: pointer; transition: all 0.15s; min-width: 200px;
     }
-    .rule-card:hover { background: #dce8e8; border-color: #80a0a0; }
-    .rule-card.selected { background: #3a5060; border-color: #3a5060; }
+    .rule-card:hover { background: #f8fafc; border-color: #cbd5e1; }
+    .rule-card.selected { background: #1e293b; border-color: #1e293b; }
     .rule-card.selected .rule-title,
     .rule-card.selected .rule-num,
-    .rule-card.selected .rule-progress { color: #fff; }
-    .rule-num { font-size: 12px; font-weight: 600; color: #3a5060; }
-    .rule-title { font-size: 13px; color: #333; margin: 2px 0; }
-    .rule-progress { font-size: 11px; color: #666; }
+    .rule-card.selected .rule-progress { color: #f1f5f9; }
+    .rule-num { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .rule-title { font-size: 13px; color: #1e293b; margin: 3px 0 2px; font-weight: 500; }
+    .rule-progress { font-size: 11px; color: #94a3b8; }
 
     .batch-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-    .batch-card {
-        width: 130px; padding: 10px; border-radius: 5px; text-align: center;
-        cursor: pointer; border: 2px solid transparent; transition: all 0.15s;
+    .sub-batch-card {
+        width: 140px; padding: 10px; border-radius: 6px; text-align: center;
+        cursor: pointer; border: 2px solid #e2e8f0; transition: all 0.15s; background: #fff;
     }
-    .batch-card:hover { border-color: #80a0a0; }
-    .batch-card.selected { border-color: #3a5060; background: #dce8e8 !important; }
-    .batch-card .batch-num { font-size: 13px; font-weight: 600; color: #222; }
-    .batch-card .batch-stat { font-size: 11px; color: #444; margin-top: 2px; }
-    .batch-card .batch-detail { font-size: 10px; color: #666; margin-top: 2px; }
-
-    .batch-done { background: #c8d8d0; }
-    .batch-partial { background: #d4e8a8; }
-    .batch-open { background: #f0e8c0; }
+    .sub-batch-card:hover { border-color: #cbd5e1; }
+    .sub-batch-card.selected { border-color: #1e293b; background: #f8fafc; }
+    .sub-batch-card .sb-num { font-size: 13px; font-weight: 600; color: #1e293b; }
+    .sub-batch-card .sb-stat { font-size: 11px; color: #475569; margin-top: 2px; }
+    .sub-batch-card .sb-detail { font-size: 10px; color: #64748b; margin-top: 2px; }
+    .sub-batch-card.done { background: #f0fdf4; border-color: #bbf7d0; }
+    .sub-batch-card.partial { background: #fefce8; border-color: #fef08a; }
 
     .start-btn {
-        margin-top: 16px; padding: 12px 32px; font-size: 14px; font-weight: 500;
-        background: #3a5060; color: #fff; border: none; border-radius: 5px;
-        cursor: pointer; font-family: 'Roboto', sans-serif;
+        margin-top: 16px; padding: 10px 28px; font-size: 13px; font-weight: 600;
+        background: #1e293b; color: #fff; border: none; border-radius: 6px;
+        cursor: pointer; font-family: 'Roboto', sans-serif; transition: background 0.15s;
     }
-    .start-btn:hover { background: #2a4050; }
-    .start-btn:disabled { background: #999; cursor: not-allowed; }
+    .start-btn:hover { background: #0f172a; }
+    .start-btn:disabled { background: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
 
-    .empty-msg { color: #888; font-size: 13px; font-style: italic; }
-    .labeler-tag { font-size: 12px; color: #555; margin-bottom: 12px; }
+    .empty-msg { color: #94a3b8; font-size: 13px; margin: 4px 0; }
+    .labeler-tag { font-size: 13px; color: #64748b; margin-bottom: 16px; }
+    .labeler-tag strong { color: #1e293b; }
 </style>
 
 <div class="setup-wrap">
-
-    <div id="selected_options"
-         data-task-type="{{ selected_options.task_type }}"
-         data-rule-index="{{ selected_options.rule_index }}"
-         data-labeler-id="{{ selected_options.labeler_id }}"
-         style="display:none;">
-    </div>
 
     <p class="labeler-tag">Labeling as <strong>{{ selected_options.labeler_id }}</strong></p>
 
     <!-- Step 1: Task Type -->
     <div class="setup-section">
         <h2>1. Select Task Type</h2>
-        <div class="pill-row">
+        <div class="pill-row" id="task-type-row">
             {% for tt in session_options.task_types %}
-            <div class="pill task-type-pill" data-task-type="{{ tt.task_type }}">
-                {{ tt.task_type }}
-            </div>
+            <div class="pill task-type-pill" data-task-type="{{ tt.task_type }}">{{ tt.task_type }}</div>
             {% endfor %}
         </div>
     </div>
 
-    <!-- Step 2: Rule Index -->
+    <!-- Step 2: Rule (JS populated) -->
     <div class="setup-section" id="rule-section" style="display:none;">
         <h2>2. Select Rule</h2>
-        <div class="pill-row" id="rule-row">
-            {% for rs in session_options.rule_index_stats %}
-            <div class="rule-card"
-                 data-batch-id="{{ rs.batch_id }}"
-                 data-rule-index="{{ rs.rule_index }}">
-                <div class="rule-num">Rule {{ rs.rule_index }}</div>
-                <div class="rule-title">{{ rs.title }}</div>
-                <div class="rule-progress">{{ rs.completed_labels }} / {{ rs.samples }} labeled</div>
-            </div>
-            {% endfor %}
-        </div>
-        <p class="empty-msg" id="no-rules-msg" style="display:none;">No rules available for this task type.</p>
+        <div class="card-row" id="rule-row"></div>
+        <p class="empty-msg" id="no-rules-msg" style="display:none;">No rules for this task type.</p>
     </div>
 
-    <!-- Step 3: Sub-Batches -->
+    <!-- Step 3: Batch (JS populated) -->
     <div class="setup-section" id="batch-section" style="display:none;">
-        <h2>3. Select Sub-Batch</h2>
-        <div class="batch-grid" id="batch-grid">
-            {% for sb in session_options.sub_batch_stats %}
-            <div class="batch-card
-                        {% if sb.percent_remaining == 0 %}batch-done{% elif sb.one_label == 0 %}batch-partial{% else %}batch-open{% endif %}"
-                 data-batch-id="{{ sb.batch_id }}"
-                 data-rule-index="{{ sb.rule_index }}"
-                 data-large-sub-batch="{{ sb.large_sub_batch }}"
-                 data-task-type="{{ selected_options.task_type }}">
-                <div class="batch-num">Batch {{ sb.large_sub_batch }}</div>
-                <div class="batch-stat">{{ sb.completed_labels }} / {{ sb.samples }}</div>
-                <div class="batch-detail">
-                    {% if sb.percent_remaining == 0 %}
-                        Done
-                    {% else %}
-                        {{ sb.no_labels }} unlabeled &middot; {{ sb.one_label }} need 2nd
-                    {% endif %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        <p class="empty-msg" id="no-batches-msg" style="display:none;">No sub-batches for this rule.</p>
+        <h2>3. Select Batch</h2>
+        <div class="pill-row" id="batch-row"></div>
+        <p class="empty-msg" id="no-batches-msg" style="display:none;">No batches for this rule.</p>
+    </div>
+
+    <!-- Step 4: Sub-Batches (JS populated) -->
+    <div class="setup-section" id="sub-batch-section" style="display:none;">
+        <h2>4. Select Sub-Batch</h2>
+        <div class="batch-grid" id="sub-batch-grid"></div>
+        <p class="empty-msg" id="no-sub-msg" style="display:none;">No sub-batches available.</p>
     </div>
 
     <button class="start-btn" id="start-btn" disabled>Start Labeling</button>
 
 </div>
+
+<script>
+    window.__setupData = {
+        taskType: "{{ selected_options.task_type|escapejs }}",
+        ruleIndex: "{{ selected_options.rule_index|escapejs }}",
+        labelerId: "{{ selected_options.labeler_id|escapejs }}",
+        ruleStats: {{ session_options.rule_index_stats }},
+        batchOptions: {{ session_options.batch_options }},
+        subBatchStats: {{ session_options.sub_batch_stats }}
+    };
+</script>
 
 {% endblock %}

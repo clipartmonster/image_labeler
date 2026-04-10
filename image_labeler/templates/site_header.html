@@ -56,22 +56,24 @@
  
   <body>
 
-    <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#243447; margin-bottom:8px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 16px; background:#1e293b;">
         <button onclick="window.location.href='/label_images/front_page/'" style="
-            padding: 8px 16px;
-            font-size: 14px;
-            background-color: #799494;
-            color: #d2e2e2;
-            border: solid 2px #d2e2e2;
-            border-radius: 5px;
+            padding: 7px 18px;
+            font-size: 13px;
+            font-family: 'Roboto', sans-serif;
+            font-weight: 500;
+            background-color: #334155;
+            color: #f1f5f9;
+            border: 1px solid #475569;
+            border-radius: 4px;
             cursor: pointer;">
             Dashboard
         </button>
 
         {% if user.is_authenticated %}
-        <div style="display:flex; align-items:center; gap:12px; font-family:'Roboto',sans-serif; font-size:13px; color:#8aa8a8;">
-            <span>{{ user.username }}{% if user.profile.role == 'admin' %} (admin){% endif %}</span>
-            <a href="{% url 'logout' %}" style="color:#d2e2e2; text-decoration:none; padding:4px 10px; border:1px solid #3a5060; border-radius:4px; font-size:12px;">Logout</a>
+        <div style="display:flex; align-items:center; gap:12px; font-family:'Roboto',sans-serif; font-size:13px; color:#cbd5e1;">
+            <span>{{ user.username }}{% if user.profile.role == 'admin' %} <span style="color:#94a3b8;">(admin)</span>{% endif %}</span>
+            <a href="{% url 'logout' %}" style="color:#f1f5f9; text-decoration:none; padding:4px 12px; border:1px solid #475569; border-radius:4px; font-size:12px;">Logout</a>
         </div>
         {% endif %}
     </div>
