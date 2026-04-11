@@ -70,7 +70,7 @@
         <h2>1. Select Task Type</h2>
         <div class="pill-row" id="task-type-row">
             {% for tt in session_options.task_types %}
-            <div class="pill task-type-pill" data-task-type="{{ tt.task_type }}">{{ tt.task_type }}</div>
+            <div class="pill task-type-pill" data-task-type="{{ tt }}">{{ tt }}</div>
             {% endfor %}
         </div>
     </div>
