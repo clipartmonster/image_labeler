@@ -231,6 +231,8 @@ def front_page(request):
             unlabeled = user_unlabeled.get(
                 (tt, ri_str), user_unlabeled.get((tt, str(ri_int)), 0)
             )
+            if unlabeled == 0:
+                continue
             feature_status.append(
                 {
                     "task_type": tt,
