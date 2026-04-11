@@ -127,32 +127,63 @@ def front_page(request):
 
     # --- Asset and label counts from Postgres ---
     feature_status = []
+    unscoped_count = 0
     try:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
                 SELECT
-                    sa.task_type,
-                    sa.rule_index,
-                    COUNT(DISTINCT sa.asset_id) AS total_selected,
-                    COUNT(DISTINCT pr.asset_id) AS with_any_label
-                FROM "label_data.selected_assets_new" sa
-                LEFT JOIN (
-                    SELECT DISTINCT asset_id, task_type, rule_index
+                    COALESCE(pr.task_type, sa.task_type) AS task_type,
+                    COALESCE(pr.rule_index, sa.rule_index) AS rule_index,
+                    COALESCE(sa.total_selected, 0)  AS total_selected,
+                    COALESCE(pr.total_responded, 0) AS total_responded,
+                    COALESCE(rl.reconciled, 0)      AS reconciled
+                FROM (
+                    SELECT task_type, CAST(rule_index AS text) AS rule_index,
+                           COUNT(DISTINCT asset_id) AS total_responded
                     FROM "label_data.prompt_responses"
+                    GROUP BY task_type, rule_index
                 ) pr
-                    ON sa.asset_id = pr.asset_id
-                    AND sa.task_type = pr.task_type
-                    AND CAST(sa.rule_index AS text) = CAST(pr.rule_index AS text)
-                WHERE sa.task_type IS NOT NULL
-                GROUP BY sa.task_type, sa.rule_index
-                ORDER BY sa.task_type, sa.rule_index
+                FULL OUTER JOIN (
+                    SELECT task_type, CAST(rule_index AS text) AS rule_index,
+                           COUNT(DISTINCT asset_id) AS total_selected
+                    FROM "label_data.selected_assets_new"
+                    WHERE task_type IS NOT NULL
+                    GROUP BY task_type, rule_index
+                ) sa ON pr.task_type = sa.task_type AND pr.rule_index = sa.rule_index
+                FULL OUTER JOIN (
+                    SELECT task_type, CAST(rule_index AS text) AS rule_index,
+                           COUNT(DISTINCT asset_id) AS reconciled
+                    FROM "label_data.asset_type.rule.labels"
+                    GROUP BY task_type, rule_index
+                ) rl ON COALESCE(pr.task_type, sa.task_type) = rl.task_type
+                    AND COALESCE(pr.rule_index, sa.rule_index) = rl.rule_index
+                ORDER BY 1, 2
             """
             )
-            selected_rows = cursor.fetchall()
+            status_rows = cursor.fetchall()
 
             # Reconciliation readiness: assets with 2+ responses, non-tied,
             # not yet in the labels table
+            labeler_id = request.user.username
+            cursor.execute(
+                """
+                SELECT sa.task_type, CAST(sa.rule_index AS text) AS rule_index,
+                       COUNT(DISTINCT sa.asset_id) AS unlabeled_by_user
+                FROM "label_data.selected_assets_new" sa
+                LEFT JOIN "label_data.prompt_responses" pr
+                    ON sa.asset_id = pr.asset_id
+                    AND sa.task_type = pr.task_type
+                    AND CAST(sa.rule_index AS text) = CAST(pr.rule_index AS text)
+                    AND pr.labeler_id = %s
+                WHERE sa.task_type IS NOT NULL
+                  AND pr.asset_id IS NULL
+                GROUP BY sa.task_type, CAST(sa.rule_index AS text)
+                """,
+                [labeler_id],
+            )
+            user_unlabeled = {(row[0], row[1]): row[2] for row in cursor.fetchall()}
+
             cursor.execute(
                 """
                 SELECT
@@ -179,41 +210,44 @@ def front_page(request):
             )
             reconcile_rows = {(row[0], row[1]): row[2] for row in cursor.fetchall()}
 
-            cursor.execute("""
-                SELECT COUNT(DISTINCT asset_id) FROM "label_data.selected_assets_new"
-                WHERE task_type IS NULL
-            """)
-            unscoped_count = cursor.fetchone()[0]
-
-        for row in selected_rows:
-            tt, ri = row[0], row[1]
-            ri_int = int(ri) if ri is not None else 0
+        for row in status_rows:
+            tt, ri_str = row[0], row[1]
+            if not tt:
+                continue
+            ri_int = int(ri_str) if ri_str is not None else 0
             key = (tt, ri_int)
-            total = row[2]
-            labeled = row[3]
+            total_selected = row[2]
+            total_responded = row[3]
+            reconciled = row[4]
+            unreconciled = total_responded - reconciled
+            reconcilable = reconcile_rows.get(
+                (tt, ri_str), reconcile_rows.get((tt, str(ri_int)), 0)
+            )
+            unlabeled = user_unlabeled.get(
+                (tt, ri_str), user_unlabeled.get((tt, str(ri_int)), 0)
+            )
             feature_status.append(
                 {
                     "task_type": tt,
                     "rule_index": ri_int,
                     "title": rules_map.get(key, ""),
-                    "total_selected": total,
-                    "unlabeled": total - labeled,
-                    "labeled": labeled,
-                    "reconcilable": reconcile_rows.get(
-                        (tt, ri), reconcile_rows.get((tt, str(ri_int)), 0)
-                    ),
+                    "total_selected": total_selected,
+                    "unlabeled": unlabeled,
+                    "total_responded": total_responded,
+                    "reconciled": reconciled,
+                    "unreconciled": unreconciled,
+                    "reconcilable": reconcilable,
                     "best_model": best_models.get(key, None),
                 }
             )
     except Exception:
-        unscoped_count = 0
+        pass
 
     is_admin = getattr(getattr(request.user, "profile", None), "role", "") == "admin"
 
     data = {
         "feature_status": feature_status,
         "is_admin": is_admin,
-        "unscoped_count": unscoped_count,
     }
 
     return render(request, "front_page.html", data)

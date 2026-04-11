@@ -67,9 +67,11 @@
                 <th>Task Type</th>
                 <th>Rule</th>
                 <th>Title</th>
-                <th class="num">Selected</th>
-                <th class="num">Unlabeled</th>
-                <th class="num">Labeled</th>
+                <th class="num">Batched</th>
+                <th class="num">Your Unlabeled</th>
+                <th class="num">Responded</th>
+                <th class="num">Reconciled</th>
+                <th class="num">Unreconciled</th>
                 <th class="num">Ready to Reconcile</th>
                 <th>Best Model</th>
                 <th>Actions</th>
@@ -86,7 +88,12 @@
                     {{ f.unlabeled }}
                     {% if f.unlabeled > 0 %}<span class="badge badge-warn">needs labels</span>{% endif %}
                 </td>
-                <td class="num">{{ f.labeled }}</td>
+                <td class="num">{{ f.total_responded }}</td>
+                <td class="num">{{ f.reconciled }}</td>
+                <td class="num">
+                    {{ f.unreconciled }}
+                    {% if f.unreconciled > 0 %}<span class="badge badge-warn">needs reconcile</span>{% endif %}
+                </td>
                 <td class="num">
                     {{ f.reconcilable }}
                     {% if f.reconcilable > 0 %}<span class="badge badge-info">run reconcile</span>{% endif %}
@@ -96,7 +103,7 @@
                     <span class="score">{{ f.best_model.score }}</span>
                     (P={{ f.best_model.val_precision }} R={{ f.best_model.val_recall }})
                     {% else %}
-                    <span style="color:#5a6a6a;">--</span>
+                    <span style="color:#94a3b8;">--</span>
                     {% endif %}
                 </td>
                 <td>
@@ -110,18 +117,7 @@
     </table>
     {% else %}
     <div style="background:#fff; border-radius:8px; padding:16px 20px; border:1px solid #e2e8f0; margin-bottom:28px;">
-        <p style="color:#334155; font-size:14px; margin:0 0 8px;">No assets with <code style="background:#f1f5f9; padding:1px 5px; border-radius:3px; font-size:12px;">task_type</code> / <code style="background:#f1f5f9; padding:1px 5px; border-radius:3px; font-size:12px;">rule_index</code> assigned yet.</p>
-        {% if unscoped_count %}
-        <p style="color:#92400e; font-size:13px; margin:0 0 8px; background:#fef3c7; display:inline-block; padding:4px 12px; border-radius:10px; font-weight:500;">
-            {{ unscoped_count }} selected assets exist without a task_type &mdash; uploaded before scoping was added.
-        </p>
-        <p style="color:#64748b; font-size:13px; margin:8px 0 0;">
-            Tag them with a SQL update:<br>
-            <code style="background:#f1f5f9; padding:3px 8px; border-radius:4px; font-size:12px; display:inline-block; margin-top:4px;">UPDATE "label_data.selected_assets_new" SET task_type='...', rule_index=... WHERE batch_id=... AND task_type IS NULL;</code>
-        </p>
-        {% else %}
-        <p style="color:#64748b; font-size:13px; margin:0;">Upload batches using the updated script (with task_type and rule_index) to see status here.</p>
-        {% endif %}
+        <p style="color:#334155; font-size:14px; margin:0;">No labeling data found. Upload batches to get started.</p>
     </div>
     {% endif %}
 
