@@ -171,12 +171,17 @@ def front_page(request):
                 SELECT sa.task_type, CAST(sa.rule_index AS text) AS rule_index,
                        COUNT(DISTINCT sa.asset_id) AS unlabeled_by_user
                 FROM "label_data.selected_assets_new" sa
+                LEFT JOIN "label_data.asset_type.rule.labels" rl
+                    ON sa.asset_id = rl.asset_id
+                    AND sa.task_type = rl.task_type
+                    AND CAST(sa.rule_index AS text) = CAST(rl.rule_index AS text)
                 LEFT JOIN "label_data.prompt_responses" pr
                     ON sa.asset_id = pr.asset_id
                     AND sa.task_type = pr.task_type
                     AND CAST(sa.rule_index AS text) = CAST(pr.rule_index AS text)
                     AND pr.labeler_id = %s
                 WHERE sa.task_type IS NOT NULL
+                  AND rl.asset_id IS NULL
                   AND pr.asset_id IS NULL
                 GROUP BY sa.task_type, CAST(sa.rule_index AS text)
                 """,
@@ -359,35 +364,93 @@ def setup_session(request):
     task_type = request.GET.get("task_type", "asset_type")
     rule_index = request.GET.get("rule_index", 1)
 
-    session_options = api_get("get_session_options", {"task_type": task_type})
+    # Titles from API
+    rules_map = {}
+    try:
+        for r in api_get("get_labelling_rules").get("labelling_rules", []):
+            rules_map[(r.get("task_type"), int(r.get("rule_index", 0)))] = r.get("title", "")
+    except Exception:
+        pass
 
-    # Get the actual (batch_id, rule_index) pairs that exist in selected_assets
-    # for this task_type — the API doesn't filter by what's in the DB.
-    valid_batch_rules = set()
+    # All data from Postgres — no more get_session_options API call
+    task_types = []
+    rule_stats = []
+    sub_stats = []
     try:
         with connection.cursor() as cursor:
+            cursor.execute(
+                'SELECT DISTINCT task_type FROM "label_data.selected_assets_new" WHERE task_type IS NOT NULL ORDER BY task_type'
+            )
+            task_types = [row[0] for row in cursor.fetchall()]
+
+            # Rule-level stats: per (batch_id, rule_index)
             cursor.execute("""
-                SELECT DISTINCT batch_id, rule_index
-                FROM "label_data.selected_assets_new"
-                WHERE task_type = %s AND task_type IS NOT NULL
+                SELECT
+                    sa.batch_id,
+                    sa.rule_index,
+                    COUNT(DISTINCT sa.asset_id) AS samples,
+                    COUNT(DISTINCT CASE WHEN rc.ct >= 2 THEN sa.asset_id END) AS completed_labels
+                FROM "label_data.selected_assets_new" sa
+                LEFT JOIN (
+                    SELECT asset_id, task_type, rule_index, COUNT(*) AS ct
+                    FROM "label_data.prompt_responses"
+                    GROUP BY asset_id, task_type, rule_index
+                ) rc ON sa.asset_id = rc.asset_id
+                    AND sa.task_type = rc.task_type
+                    AND CAST(sa.rule_index AS text) = CAST(rc.rule_index AS text)
+                WHERE sa.task_type = %s
+                GROUP BY sa.batch_id, sa.rule_index
+                ORDER BY sa.rule_index, sa.batch_id
             """, [task_type])
             for row in cursor.fetchall():
-                valid_batch_rules.add((str(row[0]), str(row[1])))
+                bid, ri, samples, completed = row
+                ri_int = int(ri) if ri is not None else 0
+                rule_stats.append({
+                    "batch_id": int(bid),
+                    "rule_index": ri_int,
+                    "title": rules_map.get((task_type, ri_int), ""),
+                    "samples": samples,
+                    "completed_labels": completed,
+                })
+
+            # Sub-batch stats: per (batch_id, rule_index, large_sub_batch)
+            cursor.execute("""
+                SELECT
+                    sa.batch_id,
+                    sa.rule_index,
+                    sa.large_sub_batch,
+                    COUNT(DISTINCT sa.asset_id) AS samples,
+                    COUNT(DISTINCT CASE WHEN rc.ct >= 2 THEN sa.asset_id END) AS completed_labels,
+                    COUNT(DISTINCT CASE WHEN rc.ct IS NULL THEN sa.asset_id END) AS no_labels,
+                    COUNT(DISTINCT CASE WHEN rc.ct = 1 THEN sa.asset_id END) AS one_label
+                FROM "label_data.selected_assets_new" sa
+                LEFT JOIN (
+                    SELECT asset_id, task_type, rule_index, COUNT(*) AS ct
+                    FROM "label_data.prompt_responses"
+                    GROUP BY asset_id, task_type, rule_index
+                ) rc ON sa.asset_id = rc.asset_id
+                    AND sa.task_type = rc.task_type
+                    AND CAST(sa.rule_index AS text) = CAST(rc.rule_index AS text)
+                WHERE sa.task_type = %s
+                GROUP BY sa.batch_id, sa.rule_index, sa.large_sub_batch
+                ORDER BY sa.rule_index, sa.batch_id, sa.large_sub_batch
+            """, [task_type])
+            for row in cursor.fetchall():
+                bid, ri, lsb, samples, completed, no_lab, one_lab = row
+                remaining = (no_lab + one_lab)
+                pct_remaining = round(remaining / samples * 100, 1) if samples else 0
+                sub_stats.append({
+                    "batch_id": int(bid),
+                    "rule_index": int(ri) if ri is not None else 0,
+                    "large_sub_batch": int(lsb),
+                    "samples": samples,
+                    "completed_labels": completed,
+                    "no_labels": no_lab,
+                    "one_label": one_lab,
+                    "percent_remaining": pct_remaining,
+                })
     except Exception:
-        valid_batch_rules = None
-
-    rule_stats = session_options.get("rule_index_stats", [])
-    sub_stats = session_options.get("sub_batch_stats", [])
-
-    if valid_batch_rules is not None:
-        rule_stats = [
-            rs for rs in rule_stats
-            if (str(rs.get("batch_id")), str(rs.get("rule_index"))) in valid_batch_rules
-        ]
-        sub_stats = [
-            sb for sb in sub_stats
-            if (str(sb.get("batch_id")), str(sb.get("rule_index"))) in valid_batch_rules
-        ]
+        logger.exception("setup_session Postgres query failed")
 
     selected_options = {
         "labeler_id": request.user.username,
@@ -396,9 +459,9 @@ def setup_session(request):
     }
 
     session_options_json = {
-        "task_types": session_options.get("task_types", []),
+        "task_types": task_types,
         "rule_index_stats": mark_safe(json.dumps(rule_stats)),
-        "batch_options": mark_safe(json.dumps(session_options.get("batch_options", []))),
+        "batch_options": mark_safe(json.dumps([])),
         "sub_batch_stats": mark_safe(json.dumps(sub_stats)),
     }
 
