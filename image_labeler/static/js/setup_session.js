@@ -404,16 +404,22 @@ function show_batch_indicator_container(rule_index){
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         })
-            .then(r => r.json())
-            .then(data => {
+            .then(r => r.text().then(text => ({ status: r.status, text })))
+            .then(({ status, text }) => {
                 submitBtn.disabled = false;
+                let data;
+                try { data = JSON.parse(text); } catch(e) {
+                    statusEl.style.color = '#f38ba8';
+                    statusEl.textContent = `Server error (${status}): ${text.slice(0, 200)}`;
+                    return;
+                }
                 if (data.status === 'success') {
                     statusEl.style.color = '#a6e3a1';
                     statusEl.textContent = data.explanation;
                     setTimeout(() => window.location.reload(), 1200);
                 } else {
                     statusEl.style.color = '#f38ba8';
-                    statusEl.textContent = data.explanation || 'Unknown error.';
+                    statusEl.textContent = data.explanation || data.detail || `Error ${status}`;
                 }
             })
             .catch(err => {

@@ -216,6 +216,12 @@ if _prod_url:
             "CONN_MAX_AGE": 60,
         }
 
+# DRF — disable session auth so CSRF is never enforced on API views.
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": [],
+}
+
 # In-process cache for session options and other short-lived data.
 # Switch to a Redis backend by setting CACHE_URL=redis://... in the environment.
 _cache_url = os.getenv("CACHE_URL", "")
