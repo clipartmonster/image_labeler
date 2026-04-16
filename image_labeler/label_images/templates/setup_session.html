@@ -51,51 +51,41 @@
                 </div>
             </div>
 
-            <div style = 'margin:5px; width:100%'>
-                <h1 id = 'title' class = 'listing_info label'> Select Batch type</h1>
-
-                <div style = 'display:flex; flex-wrap: wrap; flex-direction: row; gap:10px'> 
-
-                    {% for batch in session_options.batch_options%}
-             
-                        <div class = 'option button rectangle batch_option' batch_id = {{batch.batch_id}}> 
-                            <h1 class = 'option title'>Batch {{batch.batch_id}}</h1>
-                        </div>  
-                    {% endfor %}
-        
-                </div>
-            </div>
-
+            <!-- Step 2: Select Rule (aggregated totals, no batch context) -->
             <div style = 'margin:5px; width:100%'>
                 <h1 id = 'title' class = 'listing_info label'> Select Rule </h1>
                     <div style = 'display:flex; flex-wrap: wrap; flex-direction: row; gap:10px'> 
                
-                      {% for rule_stat in session_options.rule_index_stats%}
-        
-                                    <div class = 'option button rectangle rule_option' batch_id = {{rule_stat.batch_id}} rule_index = {{rule_stat.rule_index}}> 
-                                        <div style="display: grid; grid-template-rows: 20px 20px 20px; justify-items: start; text-align: left;">
-
-                                            <div style = 'display:grid; width:200px; grid-template-columns: 50px auto; align-items:center'>
-                                                <h1 style = 'margin-left:0' class="option title">rule {{ rule_stat.rule_index }}</h1>
-                                                
-
-                                                
-                                                        <div style = 'text-align:right' >
-                                                            <h3 class = 'option title' style = 'padding:5px;' >
-                                                                {{rule_stat.completed_labels}} / {{rule_stat.samples}}
-                                                            </h3>
-                                                        </div>
-
-                                            </div>
-
-                                            <h3 style = 'margin-left:0' class="option title">{{ rule_stat.title }}</h3>
-
-
-                                        </div>
+                      {% for rule in session_options.rule_summary %}
+                                    <div class='option button rectangle rule_option'
+                                         rule_index={{rule.rule_index}}
+                                         style='display:block; height:auto; padding:14px 18px; cursor:pointer;'>
+                                        <p style='font-family:Roboto; color:#d2e2e2; margin:0 0 3px 0; line-height:1.3; font-size:16px; font-weight:700;'>Rule {{rule.rule_index}}</p>
+                                        <p style='font-family:Roboto; color:#d2e2e2; margin:0 0 3px 0; line-height:1.3; font-size:12px;'>{{rule.completed_labels}} / {{rule.samples}} labeled</p>
+                                        <p style='font-family:Roboto; color:#d2e2e2; margin:0; line-height:1.3; font-size:11px;'>{{rule.title}}</p>
                                     </div>
                     {% endfor %}
             
 
+                </div>
+            </div>
+
+            <!-- Step 3: Select Batch (filtered by rule_index, revealed on rule click) -->
+            <div style = 'margin:5px; width:100%'>
+                <h1 id = 'title' class = 'listing_info label'> Select Batch</h1>
+
+                <div style = 'display:flex; flex-wrap: wrap; flex-direction: row; gap:10px'> 
+
+                    {% for rule_stat in session_options.rule_index_stats %}
+                        <div class='option button rectangle batch_option'
+                             batch_id={{rule_stat.batch_id}}
+                             rule_index={{rule_stat.rule_index}}
+                             style='display:none; height:auto; padding:12px 16px; cursor:pointer;'>
+                            <p style='font-family:Roboto; color:#d2e2e2; margin:0 0 2px 0; line-height:1.3; font-size:15px; font-weight:700;'>Batch {{rule_stat.batch_id}}</p>
+                            <p style='font-family:Roboto; color:#d2e2e2; margin:0; line-height:1.3; font-size:11px;'>{{rule_stat.completed_labels}} / {{rule_stat.samples}}</p>
+                        </div>
+                    {% endfor %}
+        
                 </div>
             </div>
         </div>
@@ -146,6 +136,18 @@
                             </div>  
                         
                 {% endfor %}
+
+                <!-- Add sub-batch button (hidden until task_type + rule_index are selected) -->
+                <div id="add_sub_batch_btn" class="add_sub_batch_trigger"
+                     title="Add a new sub-batch of 500 assets"
+                     style="display:none; cursor:pointer;">
+                    <div style="display:flex; align-items:center; justify-content:center;
+                                font-size:2.5rem; font-weight:300; color:#aaa;
+                                min-height:80px; min-width:80px;
+                                border:2px dashed #555; border-radius:8px; opacity:0.7;">
+                        +
+                    </div>
+                </div>
             
 
             </div>
@@ -161,5 +163,89 @@
         </button>   
 
 </div>
+
+<!-- ===== Add Sub-batch Modal ===== -->
+<div id="sub_batch_modal_overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:1000; align-items:center; justify-content:center;">
+
+    <div style="background:#1e1e2e; border-radius:12px; padding:28px 32px; width:440px; max-width:95vw; color:#cdd6f4; font-family:inherit; position:relative;">
+
+        <button id="sub_batch_modal_close"
+                style="position:absolute; top:12px; right:16px; background:none; border:none; color:#cdd6f4; font-size:1.4rem; cursor:pointer; line-height:1;">✕</button>
+
+        <h2 style="margin:0 0 20px; font-size:1.1rem; font-weight:600; color:#cba6f7;">Add Sub-batch (500 assets)</h2>
+
+        <!-- Step 1: Rule Index -->
+        <div style="margin-bottom:18px;">
+            <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:8px;">Rule Index</label>
+            <div id="rule_index_buttons" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+        </div>
+
+        <!-- Step 2: everything below, hidden until rule_index is picked -->
+        <div id="sub_batch_step2" style="display:none;">
+
+            <!-- Target batch -->
+            <div style="margin-bottom:14px;">
+                <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Target Batch</label>
+                <select id="target_batch_select"
+                        style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #7f849c; background:#313244; color:#cdd6f4; font-size:.85rem;">
+                    <option value="">Loading…</option>
+                </select>
+                <p id="batch_capacity_note" style="margin:5px 0 0; font-size:.75rem; color:#a6adc8;"></p>
+            </div>
+
+            <!-- Source toggle -->
+            <div style="display:flex; gap:10px; margin-bottom:14px;">
+                <button id="src_model_btn" class="sub_batch_src_btn active_src"
+                        style="flex:1; padding:8px; border-radius:6px; border:1px solid #7f849c; cursor:pointer; font-size:.85rem;">
+                    Model Predictions
+                </button>
+                <button id="src_random_btn" class="sub_batch_src_btn"
+                        style="flex:1; padding:8px; border-radius:6px; border:1px solid #7f849c; cursor:pointer; font-size:.85rem;">
+                    Random (s3)
+                </button>
+            </div>
+
+            <!-- Model options -->
+            <div id="model_options_section" style="margin-bottom:14px;">
+                <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Model Version</label>
+                <select id="model_version_select"
+                        style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #7f849c; background:#313244; color:#cdd6f4; font-size:.85rem;">
+                    <option value="">—</option>
+                </select>
+
+                <div style="display:flex; gap:10px; margin-top:12px;">
+                    <div style="flex:1;">
+                        <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Prob Min</label>
+                        <input id="prob_min_input" type="number" step="0.05" min="0" max="1" value="0.4"
+                               style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #7f849c; background:#313244; color:#cdd6f4; font-size:.85rem; box-sizing:border-box;">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Prob Max</label>
+                        <input id="prob_max_input" type="number" step="0.05" min="0" max="1" value="0.6"
+                               style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #7f849c; background:#313244; color:#cdd6f4; font-size:.85rem; box-sizing:border-box;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status -->
+            <p id="sub_batch_status" style="min-height:1.4em; font-size:.85rem; color:#a6e3a1; margin-bottom:14px;"></p>
+
+            <!-- Submit -->
+            <button id="sub_batch_submit_btn"
+                    style="width:100%; padding:10px; border-radius:8px; border:none; background:#cba6f7; color:#1e1e2e; font-weight:700; font-size:.9rem; cursor:pointer;">
+                Create Sub-batch
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+.sub_batch_src_btn  { background: #313244; color: #cdd6f4; }
+.active_src         { background: #cba6f7 !important; color: #1e1e2e !important; font-weight:700; }
+.rule_idx_btn       { padding: 8px 14px; border-radius: 6px; border: 1px solid #7f849c;
+                      background: #313244; color: #cdd6f4; cursor: pointer; font-size: .85rem; }
+.rule_idx_btn.active_rule { background: #89b4fa; color: #1e1e2e; font-weight: 700; border-color: #89b4fa; }
+</style>
 
 {% endblock %}

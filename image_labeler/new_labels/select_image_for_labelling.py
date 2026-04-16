@@ -4,7 +4,6 @@ import numpy as np
 import random
 import string
 import os
-import boto3
 
 import functions as f
 
@@ -83,7 +82,7 @@ filtered_assets = (
 # Get the table that contains all images avaiable for labelling
 connection_dev = engine_dev.connect()
 label_image_table = pd.read_sql(
-    'SELECT * FROM "label_data.selected_assets"', connection
+    'SELECT * FROM "label_data.selected_assets_new"', connection
 )
 
 
@@ -112,7 +111,7 @@ os.makedirs(label_directory)
 
 date = datetime.now().strftime("%Y-%m-%d")
 
-selected_assets = (
+selected_assets_new = (
     avaiable_assets.sample(20000)
     .filter(["asset_id", "image_link"])
     .assign(batch_id=batch_id)
@@ -133,21 +132,21 @@ successful_downloads = []
 with ThreadPoolExecutor(max_workers=20) as executor:
     futures = [
         executor.submit(download_and_upload, row, label_directory, batch_id)
-        for _, row in selected_assets.iterrows()
+        for _, row in selected_assets_new.iterrows()
     ]
 
     for i, future in enumerate(as_completed(futures), 1):
         result = future.result()
-        print(f"{i} out of {len(selected_assets)}")
+        print(f"{i} out of {len(selected_assets_new)}")
         if result is not None:
             successful_downloads.append(result)
 
-# for index, row in selected_assets.iterrows():
+# for index, row in selected_assets_new.iterrows():
 
 #     # if index < 1414:
 #     #     continue
 
-#     print( str(index) + ' out of ' + str(len(selected_assets)))
+#     print( str(index) + ' out of ' + str(len(selected_assets_new)))
 
 #     if row.image_link.startswith('http'):
 
@@ -176,12 +175,12 @@ with ThreadPoolExecutor(max_workers=20) as executor:
 #             print(f"Asset ID: {row.asset_id}")
 
 # Filter the DataFrame to keep only the rows with successful downloads
-selected_assets = selected_assets.loc[successful_downloads]
+selected_assets_new = selected_assets_new.loc[successful_downloads]
 
 # Reset the index if needed
-selected_assets = selected_assets.reset_index(drop=True)
+selected_assets_new = selected_assets_new.reset_index(drop=True)
 
-temp = selected_assets.copy()
+temp = selected_assets_new.copy()
 
 temp["sub_batch"] = ((temp.index // 5) + 1).astype(int)
 temp["large_sub_batch"] = ((temp.index // 500) + 1).astype(int)
@@ -190,6 +189,6 @@ temp["color_type"] = "undetermined"
 
 
 # temp \
-#     .to_sql('label_data.selected_assets',
+#     .to_sql('label_data.selected_assets_new',
 #             con = connection,
 #             if_exists='append',index = False)

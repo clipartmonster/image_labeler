@@ -8,5 +8,6 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("label_images/", include('label_images.urls')),
     path('get_config/', get_config, name = 'get_config'),
+    path("", include('labeling_api.urls')),
     path('', lambda request: redirect('label_images/front_page/', permanent=False)),
 ]

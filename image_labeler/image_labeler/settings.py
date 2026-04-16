@@ -11,31 +11,52 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
 from pathlib import Path
+from urllib.parse import unquote, urlparse
+
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 import os
+import sys
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load `.env` before reading DJANGO_KEY / DATABASE_URL / etc. (manage.py cwd may vary).
+load_dotenv(BASE_DIR / ".env")
+
+# Repo root (parent of the Django project folder) — `labeling_api` lives here as a sibling app.
+REPO_ROOT = BASE_DIR.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('DJANGO_KEY')
+_on_render = os.getenv("RENDER", "False").lower() == "true"
+SECRET_KEY = os.getenv("DJANGO_KEY") or os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    if _on_render:
+        raise ImproperlyConfigured(
+            "Set DJANGO_KEY or SECRET_KEY in the Render dashboard (or environment)."
+        )
+    # Local dev only — not secret; set DJANGO_KEY in .env for a stable key across machines.
+    SECRET_KEY = "django-insecure-local-dev-only-not-for-production"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('RENDER', 'False') != 'true'
+DEBUG = not _on_render
 
-ALLOWED_HOSTS = ['image-labeler-wqmc.onrender.com',
-                 '127.0.0.1']
+ALLOWED_HOSTS = ["image-labeler-wqmc.onrender.com", "127.0.0.1"]
 
-X_FRAME_OPTIONS = 'ALLOWALL'
+X_FRAME_OPTIONS = "ALLOWALL"
 
 CORS_ALLOWED_ORIGINS = [
     "https://workersandbox.mturk.com",
     "https://www.mturk.com",
-    "https://image-labeler-wqmc.onrender.com"
+    "https://image-labeler-wqmc.onrender.com",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
 ]
 
 # Application definition
@@ -48,6 +69,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "corsheaders",
+    "rest_framework",
+    "labeling_api",
     "label_images",
 ]
 
@@ -69,7 +92,7 @@ ROOT_URLCONF = "image_labeler.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [os.path.join(BASE_DIR, 'templates')],
+        "DIRS": [os.path.join(BASE_DIR, "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -77,6 +100,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "image_labeler.context_processors.labeling_api_base",
             ],
         },
     },
@@ -84,20 +108,129 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "image_labeler.wsgi.application"
 
-#API ACCESS KEY
-load_dotenv()
-API_ACCESS_KEY = os.getenv('API_ACCESS_KEY')
+# API ACCESS KEY (must match between server-side `requests`, browser JS, and @api_authorization).
+API_ACCESS_KEY = (os.getenv("API_ACCESS_KEY") or "").strip() or None
 
+# Base URL for labeling HTTP API. If unset locally, default to this app (merged UI + API).
+# If unset on Render, default to this service hostname — NOT the old separate backend host
+# (that would 401: remote API expects its own API_ACCESS_KEY).
+_DEFAULT_LABELING_API_BASE = (
+    "http://127.0.0.1:8000"
+    if not _on_render
+    else "https://image-labeler-wqmc.onrender.com"
+)
+LABELING_API_BASE_URL = os.getenv(
+    "LABELING_API_BASE_URL", _DEFAULT_LABELING_API_BASE
+).rstrip("/")
 
-# Database
-# https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-
-DATABASES = {
+# Used by labeling_api (Elasticsearch kNN search). Point at your cluster or local node.
+ELASTICSEARCH_DSL = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "hosts": [
+            h.strip()
+            for h in os.getenv("ELASTICSEARCH_HOSTS", "http://127.0.0.1:9200").split(
+                ","
+            )
+            if h.strip()
+        ],
     }
 }
+
+MTURK_ACCESS_ID = os.getenv("MTURK_ACCESS_ID", "")
+MTURK_SECRET_KEY = os.getenv("MTURK_SECRET_KEY", "")
+MTURK_HOST = os.getenv(
+    "MTURK_HOST",
+    "https://mturk-requester-sandbox.us-east-1.amazonaws.com",
+)
+
+
+# Database — PostgreSQL only (labeling_api uses schemas like label_data.*; SQLite is not supported).
+# https://docs.djangoproject.com/en/5.0/ref/settings/#databases
+#
+# Set either DATABASE_URL (postgres:// or postgresql://) or POSTGRES_DB + POSTGRES_USER (and optional
+# POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT).
+
+
+def _database_from_env():
+    url = os.getenv("DATABASE_URL", "").strip()
+    if url:
+        u = urlparse(url)
+        if u.scheme in ("postgres", "postgresql"):
+            path = (u.path or "").lstrip("/")
+            if "?" in path:
+                path = path.split("?", 1)[0]
+            return {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": unquote(path),
+                "USER": unquote(u.username) if u.username else "",
+                "PASSWORD": unquote(u.password) if u.password else "",
+                "HOST": u.hostname or "localhost",
+                "PORT": str(u.port or 5432),
+                # Reuse DB connections across requests instead of opening a new one each time.
+                "CONN_MAX_AGE": 60,
+            }
+        raise ImproperlyConfigured(
+            "DATABASE_URL must use postgres:// or postgresql:// (SQLite is not used in this project)."
+        )
+
+    pg_db = os.getenv("POSTGRES_DB") or os.getenv("PGDATABASE")
+    pg_user = os.getenv("POSTGRES_USER") or os.getenv("PGUSER")
+    if pg_db and pg_user:
+        return {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": pg_db,
+            "USER": pg_user,
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD") or os.getenv("PGPASSWORD") or "",
+            "HOST": os.getenv("POSTGRES_HOST") or os.getenv("PGHOST") or "localhost",
+            "PORT": os.getenv("POSTGRES_PORT") or os.getenv("PGPORT") or "5432",
+            "CONN_MAX_AGE": 60,
+        }
+
+    raise ImproperlyConfigured(
+        "PostgreSQL is required. Set DATABASE_URL (e.g. postgres://user:pass@host:5432/dbname) "
+        "or POSTGRES_DB and POSTGRES_USER (optional: POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT). "
+        "SQLite is not supported."
+    )
+
+
+DATABASES = {"default": _database_from_env()}
+
+# Prod (read-only) — used by create_sub_batch to query model_predictions and content.assets.
+# Falls back to default if PROD_DATABASE_URL is not set.
+_prod_url = os.getenv("PROD_DATABASE_URL", "").strip()
+if _prod_url:
+    _pu = urlparse(_prod_url)
+    if _pu.scheme in ("postgres", "postgresql"):
+        _prod_path = (_pu.path or "").lstrip("/")
+        if "?" in _prod_path:
+            _prod_path = _prod_path.split("?", 1)[0]
+        DATABASES["prod"] = {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": unquote(_prod_path),
+            "USER": unquote(_pu.username) if _pu.username else "",
+            "PASSWORD": unquote(_pu.password) if _pu.password else "",
+            "HOST": _pu.hostname or "localhost",
+            "PORT": str(_pu.port or 5432),
+            "CONN_MAX_AGE": 60,
+        }
+
+# In-process cache for session options and other short-lived data.
+# Switch to a Redis backend by setting CACHE_URL=redis://... in the environment.
+_cache_url = os.getenv("CACHE_URL", "")
+if _cache_url.startswith("redis"):
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": _cache_url,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "labeler-cache",
+        }
+    }
 
 
 # Password validation
@@ -134,13 +267,13 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-STATIC_URL = '/static/'
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+STATIC_URL = "/static/"
+STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
 
 
 # This setting informs Django of the URI path from which your static files will be served to users
 # Here, they well be accessible at your-domain.onrender.com/static/... or yourcustomdomain.com/static/...
-STATIC_URL = '/static/'
+STATIC_URL = "/static/"
 # This production code might break development mode, so we check whether we're in DEBUG mode
 # if not DEBUG:    # Tell Django to copy static assets into a path called `staticfiles` (this is specific to Render)
 #     STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
@@ -148,10 +281,10 @@ STATIC_URL = '/static/'
 #     # and renames the files with unique names for each version to support long-term caching
 #     STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 # Enable the WhiteNoise storage backend, which compresses static files to reduce disk use
 # and renames the files with unique names for each version to support long-term caching
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 
 
 # Default primary key field type
@@ -159,4 +292,6 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-
+# labeling_api uses legacy unmanaged CharField() without max_length (Django 5 flags E120).
+# Prefer adding max_length per field over silencing long-term.
+SILENCED_SYSTEM_CHECKS = ["fields.E120"]
