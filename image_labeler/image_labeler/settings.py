@@ -196,8 +196,10 @@ def _database_from_env():
 DATABASES = {"default": _database_from_env()}
 
 # Prod (read-only) — used by create_sub_batch to query model_predictions and content.assets.
-# Falls back to default if PROD_DATABASE_URL is not set.
-_prod_url = os.getenv("PROD_DATABASE_URL", "").strip()
+# Falls back to default if neither DATABASE_URL_PROD nor PROD_DATABASE_URL is set.
+_prod_url = (
+    os.getenv("DATABASE_URL_PROD") or os.getenv("PROD_DATABASE_URL") or ""
+).strip()
 if _prod_url:
     _pu = urlparse(_prod_url)
     if _pu.scheme in ("postgres", "postgresql"):
