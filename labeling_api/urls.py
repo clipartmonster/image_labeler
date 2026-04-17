@@ -167,4 +167,5 @@ urlpatterns = [
     path("proxy_image/", views.proxy_image, name="proxy_image"),
     path("get_sub_batch_options/", views.get_sub_batch_options, name="get_sub_batch_options"),
     path("create_sub_batch/", views.create_sub_batch, name="create_sub_batch"),
+    path("get_reconcile_count/", views.get_reconcile_count, name="get_reconcile_count"),
 ]

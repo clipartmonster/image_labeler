@@ -160,7 +160,17 @@
 
         <button class = 'get_images' onclick = 'show_images_wo_labels()'>            
             <h1 class = 'title_font field_label'> Start Labeling</h1>
-        </button>   
+        </button>
+
+        <!-- Reconciliation section — shown when a rule is selected -->
+        <div id="reconcile_section" style="display:none; margin-top:28px; padding:20px 24px; background:#1e1e2e; border-radius:10px; border:1px solid #313244;">
+            <h2 style="margin:0 0 10px; font-size:1rem; font-weight:600; color:#cba6f7; font-family:Roboto;">Reconciliation</h2>
+            <p id="reconcile_count_text" style="margin:0 0 14px; font-family:Roboto; font-size:0.9rem; color:#a6adc8;">Loading…</p>
+            <button id="reconcile_btn"
+                    style="display:none; background:#cba6f7; color:#1e1e2e; border:none; border-radius:6px; padding:9px 22px; font-size:0.9rem; font-weight:600; cursor:pointer; font-family:Roboto;">
+                Reconcile
+            </button>
+        </div>
 
 </div>
 

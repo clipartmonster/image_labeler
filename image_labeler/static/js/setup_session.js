@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', function(){
             document.querySelectorAll('.rule_option').forEach(r => r.classList.remove('selected'))
             el.classList.add('selected')
             filterBatchOptions(el.getAttribute('rule_index'))
+            loadReconcileCount(el.getAttribute('rule_index'))
         })
     })
 
@@ -52,6 +53,7 @@ document.addEventListener('DOMContentLoaded', function(){
         if (savedRuleBtn) {
             savedRuleBtn.classList.add('selected')
             filterBatchOptions(saved_rule)
+            loadReconcileCount(saved_rule)
             if (saved_batch) {
                 const matchedBatch = document.querySelector(
                     `.batch_option[batch_id="${saved_batch}"][rule_index="${saved_rule}"]`
@@ -92,6 +94,44 @@ function filterSubBatches(batch_id, rule_index) {
     })
     syncAddButton()
 }
+
+function loadReconcileCount(rule_index) {
+    const task_type = document.getElementById('selected_options').getAttribute('task_type')
+    const section   = document.getElementById('reconcile_section')
+    const countText = document.getElementById('reconcile_count_text')
+    const btn       = document.getElementById('reconcile_btn')
+    const labeler_id = document.getElementById('labeler_id').value
+        || document.getElementById('selected_options').getAttribute('labeler_id')
+
+    if (!task_type || !rule_index) { section.style.display = 'none'; return; }
+
+    section.style.display = 'block'
+    countText.textContent = 'Loading…'
+    btn.style.display = 'none'
+
+    fetch(`/get_reconcile_count/?task_type=${encodeURIComponent(task_type)}&rule_index=${encodeURIComponent(rule_index)}`)
+        .then(r => r.json())
+        .then(data => {
+            const n = data.disputed_count || 0
+            if (n === 0) {
+                countText.textContent = 'No assets currently need reconciliation for this rule.'
+                btn.style.display = 'none'
+            } else {
+                countText.textContent = `${n} asset${n === 1 ? '' : 's'} need reconciliation for Rule ${rule_index}.`
+                btn.style.display = 'inline-block'
+                btn.onclick = () => {
+                    window.location.href = `/label_images/reconcile_labels/?task_type=${encodeURIComponent(task_type)}`
+                        + `&rule_indexes=${encodeURIComponent(JSON.stringify([parseInt(rule_index)]))}`
+                        + `&labeler_id=${encodeURIComponent(labeler_id)}`
+                }
+            }
+        })
+        .catch(() => {
+            countText.textContent = 'Could not load reconciliation count.'
+            btn.style.display = 'none'
+        })
+}
+
 
 function select_task_type(task_type) {
     const labeler_id = document.getElementById('labeler_id').value

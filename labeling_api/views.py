@@ -4046,3 +4046,55 @@ def create_sub_batch(request):
     except Exception as e:
         logger.exception("create_sub_batch error")
         return JsonResponse({"status": "failed", "explanation": str(e)}, status=500)
+
+
+@csrf_exempt
+@api_view(["GET"])
+def get_reconcile_count(request):
+    """Return the number of disputed (50/50) assets for a task_type + rule_index.
+
+    Args:
+        request: GET with ``task_type`` and ``rule_index`` query params.
+
+    Returns:
+        JSON with ``disputed_count`` (int).
+
+    Frontend:
+        Called by ``setup_session.js`` when a rule is selected, to populate the
+        reconciliation section count before the user starts reconciling.
+    """
+    task_type = request.GET.get("task_type")
+    rule_index = request.GET.get("rule_index")
+
+    if not task_type or rule_index is None:
+        return JsonResponse({"status": "failed", "explanation": "task_type and rule_index are required"}, status=400)
+
+    try:
+        rule_index = int(rule_index)
+
+        flagged_ids = set(label_issues_table.objects.values_list("asset_id", flat=True))
+
+        pr_qs = prompt_responses.objects.filter(
+            task_type=task_type, rule_index=rule_index
+        ).values("asset_id", "prompt_response")
+
+        pr_df = pd.DataFrame(list(pr_qs))
+
+        if pr_df.empty:
+            return JsonResponse({"disputed_count": 0})
+
+        disputed = (
+            pr_df.groupby("asset_id")
+            .agg(samples=("prompt_response", "count"), yes=("prompt_response", lambda x: (x == "yes").sum()))
+            .reset_index()
+            .query("samples > 1")
+            .assign(pct=lambda x: x.yes / x.samples)
+            .query("pct == 0.5")
+            .query("asset_id not in @flagged_ids")
+        )
+
+        return JsonResponse({"disputed_count": len(disputed)})
+
+    except Exception as e:
+        logger.exception("get_reconcile_count error")
+        return JsonResponse({"status": "failed", "explanation": str(e)}, status=500)
