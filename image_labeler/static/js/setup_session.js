@@ -96,42 +96,59 @@ function filterSubBatches(batch_id, rule_index) {
 }
 
 function loadReconcileCount(rule_index) {
-    const task_type  = document.getElementById('selected_options').getAttribute('task_type')
-    const countText  = document.getElementById('reconcile_count_text')
-    const btn        = document.getElementById('reconcile_btn')
-    const labeler_id = document.getElementById('labeler_id').value
-        || document.getElementById('selected_options').getAttribute('labeler_id')
+    const countText = document.getElementById('reconcile_count_text')
+    const btn       = document.getElementById('reconcile_btn')
+    if (!countText) { console.error('reconcile_count_text not found'); return }
 
-    if (!task_type || !rule_index) {
-        countText.textContent = 'Select a rule to see reconciliation status.'
-        btn.style.display = 'none'
-        return
-    }
+    try {
+        const task_type  = document.getElementById('selected_options').getAttribute('task_type')
+        const labeler_id = document.getElementById('labeler_id').value
+            || document.getElementById('selected_options').getAttribute('labeler_id')
 
-    countText.textContent = 'Loading…'
-    btn.style.display = 'none'
+        countText.textContent = `[debug] called with task_type=${task_type}, rule_index=${rule_index} — fetching…`
+        if (btn) btn.style.display = 'none'
 
-    fetch(`/get_reconcile_count/?task_type=${encodeURIComponent(task_type)}&rule_index=${encodeURIComponent(rule_index)}`)
-        .then(r => r.json())
-        .then(data => {
-            const n = data.disputed_count || 0
-            if (n === 0) {
-                countText.textContent = 'No assets currently need reconciliation for this rule.'
-                btn.style.display = 'none'
-            } else {
-                countText.textContent = `${n} asset${n === 1 ? '' : 's'} need reconciliation for Rule ${rule_index}.`
-                btn.style.display = 'inline-block'
-                btn.onclick = () => {
-                    window.location.href = `/label_images/reconcile_labels/?task_type=${encodeURIComponent(task_type)}`
-                        + `&rule_indexes=${encodeURIComponent(JSON.stringify([parseInt(rule_index)]))}`
-                        + `&labeler_id=${encodeURIComponent(labeler_id)}`
+        if (!task_type || rule_index == null || rule_index === '') {
+            countText.textContent = 'Select a rule to see reconciliation status.'
+            return
+        }
+
+        const url = `/get_reconcile_count/?task_type=${encodeURIComponent(task_type)}&rule_index=${encodeURIComponent(rule_index)}`
+
+        fetch(url)
+            .then(r => r.text().then(t => ({ status: r.status, t })))
+            .then(({ status, t }) => {
+                let data
+                try { data = JSON.parse(t) } catch (e) {
+                    countText.textContent = `Server error ${status}: ${t.slice(0, 200)}`
+                    return
                 }
-            }
-        })
-        .catch(() => {
-            countText.textContent = 'Could not load reconciliation count.'
-            btn.style.display = 'none'
-        })
+                const n = data.disputed_count
+                if (typeof n !== 'number') {
+                    countText.textContent = `Bad response (${status}): ${t.slice(0, 200)}`
+                    return
+                }
+                if (n === 0) {
+                    countText.textContent = `No assets currently need reconciliation for Rule ${rule_index}.`
+                    if (btn) btn.style.display = 'none'
+                } else {
+                    countText.textContent = `${n} asset${n === 1 ? '' : 's'} need reconciliation for Rule ${rule_index}.`
+                    if (btn) {
+                        btn.style.display = 'inline-block'
+                        btn.onclick = () => {
+                            window.location.href = `/label_images/reconcile_labels/?task_type=${encodeURIComponent(task_type)}`
+                                + `&rule_indexes=${encodeURIComponent(JSON.stringify([parseInt(rule_index)]))}`
+                                + `&labeler_id=${encodeURIComponent(labeler_id)}`
+                        }
+                    }
+                }
+            })
+            .catch(err => {
+                countText.textContent = 'Fetch failed: ' + (err && err.message ? err.message : err)
+            })
+    } catch (e) {
+        countText.textContent = 'JS error: ' + (e && e.message ? e.message : e)
+    }
 }
 
 
