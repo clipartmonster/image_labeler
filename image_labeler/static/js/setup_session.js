@@ -69,6 +69,14 @@ document.addEventListener('DOMContentLoaded', function(){
 })
 
 
+// Toggle the "+" sub-batch trigger when the user has picked a task_type.
+function syncAddSubBatchBtn() {
+    const btn = document.getElementById('add_sub_batch_btn')
+    if (!btn) return
+    const taskType = document.getElementById('selected_options').getAttribute('task_type')
+    btn.style.display = taskType ? 'block' : 'none'
+}
+
 // Show batch buttons that match the chosen rule_index; hide the rest.
 // Also collapses the sub-batch grid until a batch is picked.
 function filterBatchOptions(rule_index) {
@@ -76,11 +84,10 @@ function filterBatchOptions(rule_index) {
         el.style.display = el.getAttribute('rule_index') === String(rule_index) ? 'block' : 'none'
         el.classList.remove('selected')
     })
-    // collapse sub-batch grid
     document.querySelectorAll('.batch.indicator.container').forEach(el => {
         el.style.display = 'none'
     })
-    syncAddButton()
+    syncAddSubBatchBtn()
 }
 
 
@@ -92,7 +99,7 @@ function filterSubBatches(batch_id, rule_index) {
             el.getAttribute('rule_index')  === String(rule_index)
         ) ? 'flex' : 'none'
     })
-    syncAddButton()
+    syncAddSubBatchBtn()
 }
 
 function loadReconcileCount(rule_index) {
@@ -105,13 +112,13 @@ function loadReconcileCount(rule_index) {
         const labeler_id = document.getElementById('labeler_id').value
             || document.getElementById('selected_options').getAttribute('labeler_id')
 
-        countText.textContent = `[debug] called with task_type=${task_type}, rule_index=${rule_index} — fetching…`
-        if (btn) btn.style.display = 'none'
-
         if (!task_type || rule_index == null || rule_index === '') {
             countText.textContent = 'Select a rule to see reconciliation status.'
+            if (btn) btn.style.display = 'none'
             return
         }
+        countText.textContent = 'Loading…'
+        if (btn) btn.style.display = 'none'
 
         const url = `/get_reconcile_count/?task_type=${encodeURIComponent(task_type)}&rule_index=${encodeURIComponent(rule_index)}`
 
