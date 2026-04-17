@@ -96,16 +96,18 @@ function filterSubBatches(batch_id, rule_index) {
 }
 
 function loadReconcileCount(rule_index) {
-    const task_type = document.getElementById('selected_options').getAttribute('task_type')
-    const section   = document.getElementById('reconcile_section')
-    const countText = document.getElementById('reconcile_count_text')
-    const btn       = document.getElementById('reconcile_btn')
+    const task_type  = document.getElementById('selected_options').getAttribute('task_type')
+    const countText  = document.getElementById('reconcile_count_text')
+    const btn        = document.getElementById('reconcile_btn')
     const labeler_id = document.getElementById('labeler_id').value
         || document.getElementById('selected_options').getAttribute('labeler_id')
 
-    if (!task_type || !rule_index) { section.style.display = 'none'; return; }
+    if (!task_type || !rule_index) {
+        countText.textContent = 'Select a rule to see reconciliation status.'
+        btn.style.display = 'none'
+        return
+    }
 
-    section.style.display = 'block'
     countText.textContent = 'Loading…'
     btn.style.display = 'none'
 
