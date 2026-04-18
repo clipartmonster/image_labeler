@@ -18,6 +18,26 @@
             </select>
         </div>
 
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Task Type</h1>
+            <select id="task_type_select" class='title_font field_label'>
+                {% for rule in all_rules %}
+                <option value="{{ rule.task_type }}" data-rule-index="{{ rule.rule_index }}"
+                    {% if rule.task_type == rule_entry.task_type and rule.rule_index == rule_entry.rule_index %}selected{% endif %}>
+                    {{ rule.task_type }} — {{ rule.title }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Sort by Date</h1>
+            <select id="sort_by_select" class='title_font field_label'>
+                <option value="date_desc" {% if sort_by == "date_desc" %}selected{% endif %}>Newest first</option>
+                <option value="date_asc" {% if sort_by == "date_asc" %}selected{% endif %}>Oldest first</option>
+            </select>
+        </div>
+
         <div style='display:flex; gap:10px'>
             <h2 id=image_count class='label_option label'>total: {{total_assets}} </h2>
             {% for label_count in label_counts %}

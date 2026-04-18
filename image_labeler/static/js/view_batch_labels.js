@@ -28,6 +28,26 @@ if (window.location.pathname === '/label_images/view_batch_labels/') {
             }
         })
 
+        const task_type_select = document.getElementById('task_type_select');
+        if (task_type_select) {
+            task_type_select.addEventListener('change', function () {
+                const selected = this.options[this.selectedIndex];
+                const url = new URL(window.location.href);
+                url.searchParams.set('task_type', selected.value);
+                url.searchParams.set('rule_index', selected.getAttribute('data-rule-index'));
+                window.location.href = url.toString();
+            });
+        }
+
+        const sort_by_select = document.getElementById('sort_by_select');
+        if (sort_by_select) {
+            sort_by_select.addEventListener('change', function () {
+                const url = new URL(window.location.href);
+                url.searchParams.set('sort_by', this.value);
+                window.location.href = url.toString();
+            });
+        }
+
     });
 
 }

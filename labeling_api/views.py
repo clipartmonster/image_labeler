@@ -1214,7 +1214,7 @@ def get_batch_for_viewing(request: Request) -> JsonResponse:
         list(
             prompt_responses.objects.filter(
                 task_type=task_type, rule_index=rule_index
-            ).values("asset_id", "prompt_response")
+            ).values("asset_id", "prompt_response", "datetime_created")
         )
     )
 
@@ -1233,7 +1233,7 @@ def get_batch_for_viewing(request: Request) -> JsonResponse:
         )
         .groupby(["asset_id"])
         .agg(
-            samples=("prompt_response", "count"), yes_responses=("yes_response", "sum")
+            samples=("prompt_response", "count"), yes_responses=("yes_response", "sum"), date_labeled=("datetime_created", "max")
         )
         .assign(no_responses=lambda x: x.samples - x.yes_responses)
         .assign(percent_agree=lambda x: x.yes_responses / x.samples)

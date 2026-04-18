@@ -503,6 +503,7 @@ def view_batch_labels(request):
     rule_index = int(request.GET.get("rule_index", 1))
     batch_index = int(request.GET.get("batch_index", 1))
     label_filter = request.GET.get("label_filter", "only_yes")
+    sort_by = request.GET.get("sort_by", "date_desc")
 
     print(task_type, rule_index, batch_index)
 
@@ -541,6 +542,10 @@ def view_batch_labels(request):
                 batch_of_assets = batch_of_assets.query('label=="yes"')
             elif label_filter == "only_no":
                 batch_of_assets = batch_of_assets.query('label=="no"')
+
+        if "date_labeled" in batch_of_assets.columns:
+            ascending = sort_by == "date_asc"
+            batch_of_assets = batch_of_assets.sort_values("date_labeled", ascending=ascending)
         else:
             batch_of_assets = pd.DataFrame()
     else:
@@ -577,6 +582,7 @@ def view_batch_labels(request):
     labelling_rules = dict(json.loads(response.content))
 
     rule_entry = []
+    all_rules = []
     if "labelling_rules" in labelling_rules:
         rules_df = pd.DataFrame(labelling_rules["labelling_rules"])
         if (
@@ -589,6 +595,7 @@ def view_batch_labels(request):
                 .query("rule_index == @rule_index")
                 .to_dict(orient="records")
             )
+            all_rules = rules_df[["task_type", "rule_index", "title"]].to_dict(orient="records")
 
     print("------------")
     print(rule_entry)
@@ -612,11 +619,13 @@ def view_batch_labels(request):
 
     data = {
         "rule_entry": rule_entry,
+        "all_rules": all_rules,
         "label_counts": label_counts,
         "total_assets": total_assets,
         "labeler_id_options": labeler_id_options,
         "label_type_filters": label_type_filters,
         "label_filter": label_filter,
+        "sort_by": sort_by,
         "batch_of_assets": batch_of_assets.to_dict(orient="records"),
     }
 
