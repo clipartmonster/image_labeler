@@ -543,6 +543,8 @@ def view_batch_labels(request):
             elif label_filter == "only_no":
                 batch_of_assets = batch_of_assets.query('label=="no"')
 
+        batch_of_assets = batch_of_assets.drop_duplicates(subset="asset_id")
+
         if "date_labeled" in batch_of_assets.columns:
             ascending = sort_by == "date_asc"
             batch_of_assets = batch_of_assets.sort_values("date_labeled", ascending=ascending)
