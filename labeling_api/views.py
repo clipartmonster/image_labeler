@@ -1677,13 +1677,6 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
         flagged_ids = label_issues_table.objects.values_list("asset_id", flat=True)
         assets_qs = assets_qs.exclude(asset_id__in=flagged_ids)
 
-    # For line_width_type, only include assets that have lines.
-    if task_type == "line_width_type":
-        has_lines_ids = line_type_table.objects.filter(
-            line_type="has lines"
-        ).values_list("asset_id", flat=True)
-        assets_qs = assets_qs.filter(asset_id__in=has_lines_ids)
-
     selected_assets_new = pd.DataFrame(list(assets_qs))
 
     batch_options = (

@@ -249,7 +249,7 @@ function show_images_wo_labels(){
 
     console.log(task_type,batch_id,rule_index,large_sub_batch)
 
-    if (task_type == 'line_width_type') {
+    if (task_type == 'line_width_type' && rule_index == '2') {
         link_stem = '/label_images/select_line_widths/'
     } else {
         link_stem = '/label_images/mturk_redirect/'
