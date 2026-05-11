@@ -81,3 +81,46 @@ function toggle_slider_control(slider_control){
     
 
 }
+
+// --- Similar labeled examples (embedding search) ---
+function showSimilarExamples(assetId, taskType, ruleIndex, targetLabel) {
+    var modal = document.getElementById('similar_examples_modal');
+    var content = document.getElementById('similar_examples_content');
+    var title = document.getElementById('similar_examples_title');
+
+    title.textContent = 'Similar images labeled "' + targetLabel + '"';
+    content.innerHTML = '<p style="color:#a0b8b8;">Loading...</p>';
+    modal.style.display = 'flex';
+
+    var url = window.LABELING_API_BASE_URL + '/get_similar_labeled_examples/?asset_id=' + assetId +
+              '&task_type=' + taskType + '&rule_index=' + ruleIndex + '&target_label=' + targetLabel;
+
+    fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'unavailable') {
+                content.innerHTML = '<p style="color:#e0a0a0;">Embedding search unavailable (models not loaded).</p>';
+                return;
+            }
+            if (data.status !== 'ok' || !data.results || data.results.length === 0) {
+                content.innerHTML = '<p style="color:#a0b8b8;">No similar examples found.</p>';
+                return;
+            }
+            var html = '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px;">';
+            data.results.forEach(function(item) {
+                html += '<div style="text-align:center;">';
+                html += '<img src="' + item.image_link + '" style="width:100%; border-radius:6px; border:1px solid #4a5a5a;">';
+                html += '<p style="font-size:11px; color:#8a9a9a; margin:4px 0 0;">Score: ' + item.score.toFixed(3) + '</p>';
+                html += '</div>';
+            });
+            html += '</div>';
+            content.innerHTML = html;
+        })
+        .catch(function() {
+            content.innerHTML = '<p style="color:#e0a0a0;">Error loading similar examples.</p>';
+        });
+}
+
+function closeSimilarModal() {
+    document.getElementById('similar_examples_modal').style.display = 'none';
+}

@@ -1,0 +1,106 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — Image Labeler</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: #1a2a2a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .login-card {
+            background: #2a3a3a;
+            border-radius: 12px;
+            padding: 40px;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+        }
+        .login-card h1 {
+            color: #d2e2e2;
+            font-size: 24px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .login-card label {
+            display: block;
+            color: #a0b8b8;
+            font-size: 14px;
+            margin-bottom: 6px;
+        }
+        .login-card input[type="text"],
+        .login-card input[type="password"] {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #4a5a5a;
+            border-radius: 6px;
+            background: #1a2a2a;
+            color: #d2e2e2;
+            font-size: 15px;
+            margin-bottom: 16px;
+        }
+        .login-card input:focus {
+            outline: none;
+            border-color: #799494;
+        }
+        .login-card button {
+            width: 100%;
+            padding: 12px;
+            background: #799494;
+            color: #d2e2e2;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        .login-card button:hover { background: #5a7a7a; }
+        .error-list {
+            background: #3a2020;
+            border: 1px solid #6a3030;
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            color: #e0a0a0;
+            font-size: 14px;
+            list-style: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>Image Labeler</h1>
+
+        {% if form.errors %}
+        <ul class="error-list">
+            <li>Invalid username or password. Please try again.</li>
+        </ul>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <label for="id_username">Username</label>
+            <input type="text" name="username" id="id_username" autofocus required>
+
+            <label for="id_password">Password</label>
+            <input type="password" name="password" id="id_password" required>
+
+            <button type="submit">Log In</button>
+            {% if next %}
+            <input type="hidden" name="next" value="{{ next }}">
+            {% endif %}
+        </form>
+    </div>
+</body>
+</html>

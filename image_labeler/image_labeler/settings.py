@@ -303,3 +303,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # labeling_api uses legacy unmanaged CharField() without max_length (Django 5 flags E120).
 # Prefer adding max_length per field over silencing long-term.
 SILENCED_SYSTEM_CHECKS = ["fields.E120"]
+
+# Authentication
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/label_images/front_page/"
+LOGOUT_REDIRECT_URL = "/accounts/login/"
+
+# Labeler payment: default per-batch rate (can be overridden per BatchAssignment).
+LABELER_PAY_PER_BATCH = os.getenv("LABELER_PAY_PER_BATCH", "15.00")

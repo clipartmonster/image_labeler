@@ -103,6 +103,17 @@
                     crossOrigin="anonymous">
                 <h2 class='label_option label'> {{asset.agree_status}}</h2>
 
+                <div style='display:flex; gap:4px; margin:6px 0;'>
+                    <button onclick="showSimilarExamples('{{asset.asset_id}}', '{{rule_entry.task_type}}', '{{rule_entry.rule_index}}', 'yes')"
+                            style="font-size:11px; padding:4px 8px; background:#2a4a2a; color:#a0e0a0; border:1px solid #4a8a4a; border-radius:4px; cursor:pointer;">
+                        Similar Yes
+                    </button>
+                    <button onclick="showSimilarExamples('{{asset.asset_id}}', '{{rule_entry.task_type}}', '{{rule_entry.rule_index}}', 'no')"
+                            style="font-size:11px; padding:4px 8px; background:#4a2a2a; color:#e0a0a0; border:1px solid #8a4a4a; border-radius:4px; cursor:pointer;">
+                        Similar No
+                    </button>
+                </div>
+
                 <div style='display:flex; gap:1px; align-items: center; margin:10px'>
                     <h1 class='listing_info label'>No</h1>
                     <div class="slider-container prediction_labels">
@@ -142,6 +153,17 @@
                     crossOrigin="anonymous">
                 <h2 class='label_option label'> {{asset.agree_status}}</h2>
 
+                <div style='display:flex; gap:4px; margin:6px 0;'>
+                    <button onclick="showSimilarExamples('{{asset.asset_id}}', '{{rule_entry.task_type}}', '{{rule_entry.rule_index}}', 'yes')"
+                            style="font-size:11px; padding:4px 8px; background:#2a4a2a; color:#a0e0a0; border:1px solid #4a8a4a; border-radius:4px; cursor:pointer;">
+                        Similar Yes
+                    </button>
+                    <button onclick="showSimilarExamples('{{asset.asset_id}}', '{{rule_entry.task_type}}', '{{rule_entry.rule_index}}', 'no')"
+                            style="font-size:11px; padding:4px 8px; background:#4a2a2a; color:#e0a0a0; border:1px solid #8a4a4a; border-radius:4px; cursor:pointer;">
+                        Similar No
+                    </button>
+                </div>
+
                 <div style='display:flex; gap:1px; align-items: center; margin:10px'>
                     <h1 class='listing_info label'>No</h1>
                     <div class="slider-container prediction_labels">
@@ -164,5 +186,13 @@
     </div>
 </div>
 
+<!-- Similar Examples Modal -->
+<div id="similar_examples_modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:#1e2e2e; border-radius:12px; padding:24px 28px; width:600px; max-width:95vw; max-height:80vh; overflow-y:auto; position:relative;">
+        <button onclick="closeSimilarModal()" style="position:absolute; top:12px; right:16px; background:none; border:none; color:#d2e2e2; font-size:1.4rem; cursor:pointer;">&#x2715;</button>
+        <h2 id="similar_examples_title" style="color:#d2e2e2; font-size:16px; margin:0 0 16px; font-family:Roboto;"></h2>
+        <div id="similar_examples_content"></div>
+    </div>
+</div>
 
 {% endblock%}

@@ -168,4 +168,7 @@ urlpatterns = [
     path("get_sub_batch_options/", views.get_sub_batch_options, name="get_sub_batch_options"),
     path("create_sub_batch/", views.create_sub_batch, name="create_sub_batch"),
     path("get_reconcile_count/", views.get_reconcile_count, name="get_reconcile_count"),
+    path("record_labeling_session/", views.record_labeling_session, name="record_labeling_session"),
+    path("get_rule_examples/", views.get_rule_examples, name="get_rule_examples"),
+    path("get_similar_labeled_examples/", views.get_similar_labeled_examples, name="get_similar_labeled_examples"),
 ]

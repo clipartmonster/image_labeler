@@ -28,6 +28,7 @@
       <link rel="stylesheet", href = "{% static 'css/correct_mismatch_labels.css' %}">
       <link rel="stylesheet", href = "{% static 'css/view_rough_fills.css' %}">
       <link rel="stylesheet", href = "{% static 'css/setup_session.css' %}">
+      <link rel="stylesheet", href = "{% static 'css/label_sidebar.css' %}">
 
       <script defer type="text/javascript" src = "{% static 'js/setup_session.js'%}?v=5"></script>  
       <script defer type="text/javascript" src = "{% static 'js/view_mturk_response.js'%}"></script>
@@ -59,18 +60,35 @@
  
   <body>
 
-    <button onclick="window.location.href='/label_images/front_page/'" style="
-        top: 10px;
-        left: 10px;
-        padding: 10px 20px;
-        font-size: 16px;
-        background-color: #799494;
-        color: #d2e2e2;
-        border: solid 2px #d2e2e2;
-        border-radius: 5px;
-        cursor: pointer;">
-        Front Page
-    </button>
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 10px 0 10px;">
+      <button onclick="window.location.href='/label_images/front_page/'" style="
+          padding: 10px 20px;
+          font-size: 16px;
+          background-color: #799494;
+          color: #d2e2e2;
+          border: solid 2px #d2e2e2;
+          border-radius: 5px;
+          cursor: pointer;">
+          Front Page
+      </button>
+
+      {% if user.is_authenticated %}
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="color:#a0b8b8; font-size:14px;">{{ user.username }}</span>
+        <a href="{% url 'logout' %}" style="
+            padding: 8px 16px;
+            font-size: 14px;
+            background-color: #4a5a5a;
+            color: #d2e2e2;
+            border: solid 1px #6a7a7a;
+            border-radius: 5px;
+            text-decoration: none;
+            cursor: pointer;">
+            Logout
+        </a>
+      </div>
+      {% endif %}
+    </div>
 
     {% block content %}
     {% endblock %}

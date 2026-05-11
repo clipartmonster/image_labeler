@@ -29,7 +29,7 @@ urlpatterns = [
     path('correct_mismatch_labels/', views.correct_mismatch_labels, name = 'correct_mismatch_labels'),
 
     path('manage_rules/', views.manage_rules, name = 'manage_rules'),
-
+    path('assign_batch/', views.assign_batch, name = 'assign_batch'),
 
 ]
 

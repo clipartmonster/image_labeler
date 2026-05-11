@@ -462,7 +462,8 @@ function show_batch_indicator_container(rule_index){
         statusEl.style.color = '#a6adc8';
         statusEl.textContent = 'Creating sub-batch…';
 
-        const payload = { task_type, rule_index: parseInt(rule_index), batch_id: parseInt(batch_id), source };
+        const batch_size = parseInt(document.getElementById('batch_size_input')?.value || '500');
+        const payload = { task_type, rule_index: parseInt(rule_index), batch_id: parseInt(batch_id), source, batch_size };
         if (source === 'model') Object.assign(payload, { model_version, prob_min, prob_max });
 
         fetch('/create_sub_batch/', {

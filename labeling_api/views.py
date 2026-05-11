@@ -1335,6 +1335,24 @@ def get_asset_batch(request: Request) -> JsonResponse:
     else:
         large_sub_batch = [int(x) for x in large_sub_batch or []]
 
+    # Scoped visibility: labelers can only access their assigned batches.
+    if hasattr(request, "user") and request.user.is_authenticated:
+        profile = getattr(request.user, "profile", None)
+        if profile and profile.role == "labeler":
+            from label_images.models import BatchAssignment
+            has_assignment = BatchAssignment.objects.filter(
+                user=request.user,
+                task_type=task_type,
+                rule_index=rule_index,
+                batch_id=batch_id,
+                large_sub_batch__in=large_sub_batch,
+            ).exists()
+            if not has_assignment:
+                return JsonResponse(
+                    {"batch_index": large_sub_batch, "asset_batch": []},
+                    safe=False,
+                )
+
     # Assets with 2+ prompt responses for this task/rule are complete — exclude them.
     completed_ids = set(
         prompt_responses.objects.filter(task_type=task_type, rule_index=rule_index)
@@ -3806,6 +3824,8 @@ def create_sub_batch(request):
 
     task_type = body.get("task_type")
     source = body.get("source", "random")
+    requested_batch_size = int(body.get("batch_size", SUB_BATCH_SIZE))
+    requested_batch_size = max(1, min(requested_batch_size, SUB_BATCH_SIZE))
 
     try:
         rule_index = int(body.get("rule_index"))
@@ -3830,13 +3850,13 @@ def create_sub_batch(request):
             task_type=task_type, rule_index=rule_index, batch_id=batch_id
         ).count()
 
-        if current_count + SUB_BATCH_SIZE > BATCH_MAX_ASSETS:
+        if current_count + requested_batch_size > BATCH_MAX_ASSETS:
             return JsonResponse(
                 {
                     "status": "failed",
                     "explanation": (
                         f"Batch {batch_id} already has {current_count} assets. "
-                        f"Adding {SUB_BATCH_SIZE} would exceed the {BATCH_MAX_ASSETS} limit. "
+                        f"Adding {requested_batch_size} would exceed the {BATCH_MAX_ASSETS} limit. "
                         "Please create a new batch_id first."
                     ),
                 },
@@ -3949,7 +3969,7 @@ def create_sub_batch(request):
                     },
                     status=400,
                 )
-            window = min(pool_count, max(SUB_BATCH_SIZE * 10, 5000))
+            window = min(pool_count, max(requested_batch_size * 10, 5000))
             offset = random.randint(0, max(0, pool_count - window))
             pool = list(pool_qs.order_by("asset_id")[offset : offset + window])
             logger.debug(
@@ -3971,8 +3991,8 @@ def create_sub_batch(request):
                     status=400,
                 )
 
-        # 4. Sample 500 -----------------------------------------------------
-        sample_n = min(SUB_BATCH_SIZE, len(pool))
+        # 4. Sample assets --------------------------------------------------
+        sample_n = min(requested_batch_size, len(pool))
         selected = random.sample(pool, sample_n)
 
         # 5. Next large_sub_batch for this batch ----------------------------
@@ -4090,4 +4110,140 @@ def get_reconcile_count(request):
 
     except Exception as e:
         logger.exception("get_reconcile_count error")
+        return JsonResponse({"status": "failed", "explanation": str(e)}, status=500)
+
+
+@csrf_exempt
+@api_view(["POST"])
+def record_labeling_session(request):
+    """Record timing data for a labeling session (rate tracking)."""
+    from label_images.models import LabelingSession, BatchAssignment
+    from django.contrib.auth.models import User
+    from django.utils.dateparse import parse_datetime
+
+    try:
+        data = request.data
+        username = data.get("username")
+        task_type = data.get("task_type")
+        rule_index = int(data.get("rule_index", 0))
+        batch_id = int(data.get("batch_id", 0))
+        large_sub_batch = int(data.get("large_sub_batch", 0))
+        started_at = parse_datetime(data.get("started_at", ""))
+        ended_at = parse_datetime(data.get("ended_at", ""))
+        labels_completed = int(data.get("labels_completed", 0))
+
+        user = User.objects.get(username=username)
+        assignment = BatchAssignment.objects.filter(
+            user=user,
+            task_type=task_type,
+            rule_index=rule_index,
+            batch_id=batch_id,
+            large_sub_batch=large_sub_batch,
+        ).first()
+
+        if not assignment:
+            return JsonResponse({"status": "no_assignment"}, status=404)
+
+        session = LabelingSession.objects.create(
+            user=user,
+            batch_assignment=assignment,
+            started_at=started_at,
+            ended_at=ended_at,
+            labels_completed=labels_completed,
+        )
+
+        return JsonResponse({
+            "status": "ok",
+            "session_id": session.id,
+            "labels_per_hour": session.labels_per_hour,
+        })
+
+    except Exception as e:
+        logger.exception("record_labeling_session error")
+        return JsonResponse({"status": "failed", "explanation": str(e)}, status=500)
+
+
+@csrf_exempt
+@api_view(["GET"])
+def get_rule_examples(request):
+    """Return manually uploaded yes/no example images for a rule."""
+    from label_images.models import RuleExample
+
+    task_type = request.query_params.get("task_type", "")
+    rule_index = request.query_params.get("rule_index", "")
+
+    examples = RuleExample.objects.filter(
+        task_type=task_type,
+        rule_index=int(rule_index) if rule_index else 0,
+    ).values("label", "image_url", "caption")
+
+    yes_examples = [e for e in examples if e["label"] == "yes"]
+    no_examples = [e for e in examples if e["label"] == "no"]
+
+    return JsonResponse({
+        "yes_examples": yes_examples,
+        "no_examples": no_examples,
+    })
+
+
+@csrf_exempt
+@api_view(["GET"])
+def get_similar_labeled_examples(request):
+    """Find visually similar images with a specific label using DINOv2 embeddings."""
+    from .embedding_functions import get_image_scores, get_image_vector
+    from .functions import load_image
+    from .models import assets_w_rule_labels, label_data_selected_assets_new
+
+    try:
+        asset_id = request.query_params.get("asset_id")
+        task_type = request.query_params.get("task_type", "")
+        rule_index = int(request.query_params.get("rule_index", 0))
+        target_label = request.query_params.get("target_label", "yes")
+
+        config = apps.get_app_config("labeling_api")
+        if config.dino_model is None:
+            return JsonResponse({
+                "status": "unavailable",
+                "explanation": "Embedding search unavailable (torch/models not loaded).",
+            }, status=503)
+
+        asset = label_data_selected_assets_new.objects.filter(asset_id=asset_id).first()
+        if not asset:
+            return JsonResponse({"status": "not_found"}, status=404)
+
+        image = load_image(asset.image_link)
+        if image is None:
+            return JsonResponse({"status": "image_load_failed"}, status=400)
+
+        image_vector = get_image_vector(image)
+        similar_scores = get_image_scores(image_vector, k=100)
+
+        label_value = 1 if target_label == "yes" else 0
+        labeled_assets = set(
+            assets_w_rule_labels.objects.filter(
+                task_type=task_type,
+                rule_index=rule_index,
+                label=label_value,
+            ).values_list("asset_id", flat=True)
+        )
+
+        results = []
+        for item in similar_scores:
+            if int(item["asset_id"]) in labeled_assets and str(item["asset_id"]) != str(asset_id):
+                asset_row = label_data_selected_assets_new.objects.filter(
+                    asset_id=item["asset_id"]
+                ).first()
+                if asset_row:
+                    results.append({
+                        "asset_id": item["asset_id"],
+                        "score": item["score"],
+                        "image_link": asset_row.image_link,
+                    })
+                if len(results) >= 8:
+                    break
+
+        return JsonResponse({"status": "ok", "results": results})
+
+    except Exception as e:
+        logger.exception("get_similar_labeled_examples error")
         return JsonResponse({"status": "failed", "explanation": str(e)}, status=500)

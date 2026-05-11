@@ -1,7 +1,8 @@
 from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.contrib.staticfiles import finders
-
+from django.contrib.auth.decorators import login_required
+from django.db.models import Count
 
 from django.conf import settings
 from django.http import FileResponse, Http404
@@ -18,6 +19,17 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
 
+def is_admin(request):
+    """Return True if the logged-in user has the admin role."""
+    if not request.user.is_authenticated:
+        return False
+    profile = getattr(request.user, "profile", None)
+    if profile is None:
+        return request.user.is_superuser
+    return profile.role == "admin" or request.user.is_superuser
+
+
+@login_required
 def front_page(request):
 
     data = {}
@@ -25,6 +37,46 @@ def front_page(request):
     return render(request, "front_page.html", data)
 
 
+@login_required
+def assign_batch(request):
+    """Admin-only: assign a sub-batch to a labeler."""
+    from .models import BatchAssignment
+    from django.contrib.auth.models import User
+    from django.utils.dateparse import parse_date
+    from django.utils import timezone
+    from datetime import datetime
+
+    if request.method != "POST" or not is_admin(request):
+        return redirect("setup_session")
+
+    username = request.POST.get("labeler_username")
+    task_type = request.POST.get("task_type")
+    rule_index = int(request.POST.get("rule_index", 1))
+    batch_id = int(request.POST.get("batch_id", 1))
+    large_sub_batch = int(request.POST.get("large_sub_batch", 1))
+    payment = request.POST.get("payment_amount", settings.LABELER_PAY_PER_BATCH)
+    deadline_str = request.POST.get("deadline")
+
+    user = User.objects.get(username=username)
+    deadline_date = parse_date(deadline_str)
+    deadline_dt = timezone.make_aware(datetime.combine(deadline_date, datetime.max.time().replace(microsecond=0)))
+
+    BatchAssignment.objects.update_or_create(
+        user=user,
+        task_type=task_type,
+        rule_index=rule_index,
+        batch_id=batch_id,
+        large_sub_batch=large_sub_batch,
+        defaults={
+            "payment_amount": payment,
+            "deadline": deadline_dt,
+        },
+    )
+
+    return redirect(f"/label_images/setup_session/?task_type={task_type}")
+
+
+@login_required
 def select_line_widths(request):
 
     labeler_id = request.GET.get("labeler_id", "Steve")
@@ -67,6 +119,7 @@ def select_line_widths(request):
     return render(request, "select_line_widths.html", data)
 
 
+@login_required
 def select_primary_colors(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_asset_batch/"
@@ -99,6 +152,7 @@ def select_primary_colors(request):
     return render(request, "select_primary_colors.html", data)
 
 
+@login_required
 def show_images(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_color_labels/"
@@ -150,37 +204,112 @@ def show_images(request):
     )
 
 
+@login_required
 def setup_session(request):
     from labeling_api.views import _build_session_options
+    from .models import BatchAssignment
+    from django.utils import timezone
 
     labeler_id = request.GET.get("labeler_id", "Steve")
     task_type = request.GET.get("task_type", "asset_type")
     rule_index = request.GET.get("rule_index", 1)
     batch_id = request.GET.get("batch_index", 1)
 
-    try:
-        session_options = _build_session_options(task_type)
-    except Exception as exc:
-        return HttpResponse(
-            f"Failed to build session options: {exc}",
-            status=502,
-            content_type="text/plain; charset=utf-8",
+    user_is_admin = is_admin(request)
+
+    if user_is_admin:
+        try:
+            session_options = _build_session_options(task_type)
+        except Exception as exc:
+            return HttpResponse(
+                f"Failed to build session options: {exc}",
+                status=502,
+                content_type="text/plain; charset=utf-8",
+            )
+
+        from django.contrib.auth.models import User
+        labeler_users = User.objects.filter(profile__role="labeler").values_list("username", flat=True)
+
+        selected_options = {
+            "labeler_id": labeler_id,
+            "task_type": task_type,
+            "rule_index": rule_index,
+            "batch_id": batch_id,
+        }
+
+        return render(
+            request,
+            "setup_session.html",
+            {
+                "session_options": session_options,
+                "selected_options": selected_options,
+                "user_is_admin": True,
+                "labeler_users": list(labeler_users),
+                "default_pay": settings.LABELER_PAY_PER_BATCH,
+            },
+        )
+    else:
+        now = timezone.now()
+        assignments = BatchAssignment.objects.filter(
+            user=request.user, completed_at__isnull=True
+        ).order_by("deadline")
+
+        assignment_data = []
+        for a in assignments:
+            from labeling_api.models import label_data_selected_assets_new, prompt_responses
+            total = label_data_selected_assets_new.objects.filter(
+                task_type=a.task_type,
+                rule_index=a.rule_index,
+                batch_id=a.batch_id,
+                large_sub_batch=a.large_sub_batch,
+            ).count()
+
+            completed = prompt_responses.objects.filter(
+                task_type=a.task_type,
+                rule_index=a.rule_index,
+                asset_id__in=label_data_selected_assets_new.objects.filter(
+                    task_type=a.task_type,
+                    rule_index=a.rule_index,
+                    batch_id=a.batch_id,
+                    large_sub_batch=a.large_sub_batch,
+                ).values_list("asset_id", flat=True),
+            ).values("asset_id").annotate(
+                cnt=Count("id")
+            ).filter(cnt__gte=2).count()
+
+            days_left = (a.deadline - now).days
+            if days_left < 0:
+                deadline_status = "overdue"
+            elif days_left <= 2:
+                deadline_status = "urgent"
+            else:
+                deadline_status = "ok"
+
+            assignment_data.append({
+                "id": a.id,
+                "task_type": a.task_type,
+                "rule_index": a.rule_index,
+                "batch_id": a.batch_id,
+                "large_sub_batch": a.large_sub_batch,
+                "payment_amount": a.payment_amount,
+                "deadline": a.deadline,
+                "deadline_status": deadline_status,
+                "total": total,
+                "completed": completed,
+                "progress_pct": int((completed / total * 100) if total > 0 else 0),
+            })
+
+        return render(
+            request,
+            "setup_session.html",
+            {
+                "user_is_admin": False,
+                "assignments": assignment_data,
+            },
         )
 
-    selected_options = {
-        "labeler_id": labeler_id,
-        "task_type": task_type,
-        "rule_index": rule_index,
-        "batch_id": batch_id,
-    }
 
-    return render(
-        request,
-        "setup_session.html",
-        {"session_options": session_options, "selected_options": selected_options},
-    )
-
-
+@login_required
 def initialize_session(request):
     if request.method == "POST":
 
@@ -197,6 +326,7 @@ def initialize_session(request):
     return redirect("select_source")
 
 
+@login_required
 def internal(request):
 
     task_type = request.GET.get("task_type")
@@ -223,6 +353,7 @@ def internal(request):
     assets_to_label = json.loads(response.content)
 
 
+@login_required
 def mturk_redirect(request):
 
     task_type = request.GET.get("task_type")
@@ -352,6 +483,7 @@ def mturk_redirect(request):
     )
 
 
+@login_required
 def view_mturk_responses(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_labelling_rules/"
@@ -400,6 +532,7 @@ def view_mturk_responses(request):
     )
 
 
+@login_required
 def view_asset_labels(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_asset_labels/"
@@ -426,6 +559,7 @@ def view_asset_labels(request):
     return render(request, "view_asset_labels.html", data)
 
 
+@login_required
 def reconcile_labels(request):
 
     assignment_id = "".join(random.choices(string.ascii_letters + string.digits, k=20))
@@ -497,6 +631,7 @@ def reconcile_labels(request):
     )
 
 
+@login_required
 def view_batch_labels(request):
 
     task_type = request.GET.get("task_type", "asset_type")
@@ -641,6 +776,7 @@ def view_batch_labels(request):
         raise e
 
 
+@login_required
 def view_labels(request):
 
     task_type = str(request.GET.get("task_type", "asset_type")).strip()
@@ -789,6 +925,7 @@ def view_labels(request):
     return render(request, "view_labels.html", data)
 
 
+@login_required
 def manage_rules(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_labelling_rules/"
@@ -811,6 +948,7 @@ def manage_rules(request):
     return render(request, "manage_rules.html", data)
 
 
+@login_required
 def view_prediction_labels(request):
 
     task_type = request.GET.get("task_type", "asset_type")
@@ -919,6 +1057,7 @@ def view_prediction_labels(request):
     return render(request, "view_prediction_labels.html", data)
 
 
+@login_required
 def view_asset(request):
 
     asset_id = request.GET.get("asset_id", 158370)
@@ -988,6 +1127,7 @@ def view_asset(request):
     return render(request, "view_asset.html", data)
 
 
+@login_required
 def view_label_issues(request):
 
     task_type = request.GET.get("task_type", "color_fill_type")
@@ -1058,6 +1198,7 @@ def view_label_issues(request):
     return render(request, "view_label_issues.html", data)
 
 
+@login_required
 def label_testing(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_label_testing_options/"
@@ -1081,6 +1222,7 @@ def label_testing(request):
     return render(request, "label_testing.html", data)
 
 
+@login_required
 def view_model_results(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_labelling_rules/"
@@ -1207,6 +1349,7 @@ def view_model_results(request):
     return render(request, "view_model_results.html", data)
 
 
+@login_required
 def view_primary_colors(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_primary_colors/"
@@ -1231,6 +1374,7 @@ def view_primary_colors(request):
     return render(request, "view_primary_colors.html", data)
 
 
+@login_required
 def correct_mismatch_labels(request):
 
     task_type = request.GET.get("task_type", "color_fill_type")
@@ -1297,6 +1441,7 @@ def correct_mismatch_labels(request):
     return render(request, "correct_mismatch_labels.html", data)
 
 
+@login_required
 def view_rough_fill(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_rough_fill_scores/"
@@ -1368,6 +1513,7 @@ def view_rough_fill(request):
     return render(request, "view_rough_fill.html", data)
 
 
+@login_required
 def view_line_widths(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_line_widths/"
@@ -1427,6 +1573,7 @@ def view_line_widths(request):
     return render(request, "view_line_widths.html", data)
 
 
+@login_required
 def label_search_results(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_search_results/"

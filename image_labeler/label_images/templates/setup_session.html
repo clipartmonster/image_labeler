@@ -3,7 +3,58 @@
 
 {% block content %}
 
+{% if not user_is_admin %}
+<!-- ===== LABELER VIEW ===== -->
+<div class='light container' style='padding:20px;'>
+    <h1 class='listing_info label' style='margin-bottom:20px;'>Your Assigned Batches</h1>
 
+    {% if not assignments %}
+        <p style='color:#a0b8b8; font-family:Roboto;'>No batches assigned yet. Check back later.</p>
+    {% endif %}
+
+    <div style='display:flex; flex-wrap:wrap; gap:16px;'>
+    {% for a in assignments %}
+        <div class='batch indicator container' style='padding:16px; min-width:260px; border-radius:10px;
+            {% if a.deadline_status == "overdue" %}border:2px solid #e06060;
+            {% elif a.deadline_status == "urgent" %}border:2px solid #e0c060;
+            {% else %}border:1px solid #4a5a5a;{% endif %}'>
+
+            <h2 style='font-family:Roboto; color:#d2e2e2; margin:0 0 6px;'>
+                {{ a.task_type }} &mdash; Rule {{ a.rule_index }}
+            </h2>
+            <p style='font-family:Roboto; color:#a0b8b8; font-size:13px; margin:0 0 4px;'>
+                Batch {{ a.batch_id }} / Sub-batch {{ a.large_sub_batch }}
+            </p>
+            <p style='font-family:Roboto; color:#a0b8b8; font-size:13px; margin:0 0 4px;'>
+                Images: <strong style='color:#d2e2e2;'>{{ a.completed }} / {{ a.total }}</strong>
+            </p>
+            <p style='font-family:Roboto; color:#a0b8b8; font-size:13px; margin:0 0 4px;'>
+                Payment: <strong style='color:#a0e0a0;'>${{ a.payment_amount }}</strong>
+            </p>
+            <p style='font-family:Roboto; font-size:12px; margin:0 0 10px;
+                {% if a.deadline_status == "overdue" %}color:#e06060;
+                {% elif a.deadline_status == "urgent" %}color:#e0c060;
+                {% else %}color:#a0b8b8;{% endif %}'>
+                Deadline: {{ a.deadline|date:"M d, Y" }}
+                {% if a.deadline_status == "overdue" %} (OVERDUE){% endif %}
+            </p>
+
+            <!-- Progress bar -->
+            <div style='background:#1a2a2a; border-radius:4px; height:8px; width:100%; margin-bottom:12px;'>
+                <div style='background:#799494; border-radius:4px; height:8px; width:{{ a.progress_pct }}%;'></div>
+            </div>
+
+            <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}"
+               style='display:inline-block; padding:8px 20px; background:#799494; color:#d2e2e2; border-radius:5px; text-decoration:none; font-family:Roboto; font-size:14px;'>
+                Start Labeling
+            </a>
+        </div>
+    {% endfor %}
+    </div>
+</div>
+
+{% else %}
+<!-- ===== ADMIN VIEW ===== -->
 <div class = 'light container'>
 
         <div id = selected_options 
@@ -126,8 +177,14 @@
                                             </div>
                                         </div>
 
-                                        <div class = view_button  >
-                                            <h1 class = 'option title'>V</h1> 
+                                        <div style='display:flex; gap:6px;'>
+                                            <div class = view_button  >
+                                                <h1 class = 'option title'>V</h1> 
+                                            </div>
+                                            <div class='view_button' style='background:#cba6f7; cursor:pointer;'
+                                                 onclick="openAssignModal('{{selected_options.task_type}}', '{{sub_batch.rule_index}}', '{{sub_batch.batch_id}}', '{{sub_batch.large_sub_batch}}')">
+                                                <h1 class='option title' style='color:#1e1e2e;'>A</h1>
+                                            </div>
                                         </div>
                                         
 
@@ -183,7 +240,15 @@
         <button id="sub_batch_modal_close"
                 style="position:absolute; top:12px; right:16px; background:none; border:none; color:#cdd6f4; font-size:1.4rem; cursor:pointer; line-height:1;">✕</button>
 
-        <h2 style="margin:0 0 20px; font-size:1.1rem; font-weight:600; color:#cba6f7;">Add Sub-batch (500 assets)</h2>
+        <h2 style="margin:0 0 20px; font-size:1.1rem; font-weight:600; color:#cba6f7;">Add Sub-batch</h2>
+
+        <!-- Batch size -->
+        <div style="margin-bottom:14px;">
+            <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Batch Size (images)</label>
+            <input id="batch_size_input" type="number" min="10" max="500" value="500"
+                   style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #7f849c; background:#313244; color:#cdd6f4; font-size:.85rem; box-sizing:border-box;">
+            <p style="margin:4px 0 0; font-size:.72rem; color:#a6adc8;">Use 50-100 for training batches, 500 for normal batches.</p>
+        </div>
 
         <!-- Step 1: Rule Index -->
         <div style="margin-bottom:18px;">
@@ -257,5 +322,54 @@
                       background: #313244; color: #cdd6f4; cursor: pointer; font-size: .85rem; }
 .rule_idx_btn.active_rule { background: #89b4fa; color: #1e1e2e; font-weight: 700; border-color: #89b4fa; }
 </style>
+
+<!-- ===== Assign Batch Modal (Admin only) ===== -->
+<div id="assign_batch_modal_overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:1001; align-items:center; justify-content:center;">
+    <div style="background:#1e1e2e; border-radius:12px; padding:28px 32px; width:400px; max-width:95vw; color:#cdd6f4; font-family:Roboto; position:relative;">
+        <button onclick="document.getElementById('assign_batch_modal_overlay').style.display='none'"
+                style="position:absolute; top:12px; right:16px; background:none; border:none; color:#cdd6f4; font-size:1.4rem; cursor:pointer;">&#x2715;</button>
+        <h2 style="margin:0 0 18px; font-size:1.1rem; color:#cba6f7;">Assign Batch to Labeler</h2>
+        <form id="assign_batch_form" method="post" action="/label_images/assign_batch/">
+            {% csrf_token %}
+            <input type="hidden" name="task_type" id="assign_task_type">
+            <input type="hidden" name="rule_index" id="assign_rule_index">
+            <input type="hidden" name="batch_id" id="assign_batch_id">
+            <input type="hidden" name="large_sub_batch" id="assign_large_sub_batch">
+
+            <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Labeler</label>
+            <select name="labeler_username" style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #7f849c; background:#313244; color:#cdd6f4; font-size:.85rem; margin-bottom:12px;">
+                {% for lu in labeler_users %}
+                <option value="{{ lu }}">{{ lu }}</option>
+                {% endfor %}
+            </select>
+
+            <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Payment ($)</label>
+            <input type="number" name="payment_amount" step="0.01" value="{{ default_pay }}"
+                   style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #7f849c; background:#313244; color:#cdd6f4; font-size:.85rem; margin-bottom:12px; box-sizing:border-box;">
+
+            <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Deadline</label>
+            <input type="date" name="deadline"
+                   style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #7f849c; background:#313244; color:#cdd6f4; font-size:.85rem; margin-bottom:16px; box-sizing:border-box;">
+
+            <button type="submit"
+                    style="width:100%; padding:10px; border-radius:8px; border:none; background:#cba6f7; color:#1e1e2e; font-weight:700; font-size:.9rem; cursor:pointer;">
+                Assign
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAssignModal(taskType, ruleIndex, batchId, largeSubBatch) {
+    document.getElementById('assign_task_type').value = taskType;
+    document.getElementById('assign_rule_index').value = ruleIndex;
+    document.getElementById('assign_batch_id').value = batchId;
+    document.getElementById('assign_large_sub_batch').value = largeSubBatch;
+    document.getElementById('assign_batch_modal_overlay').style.display = 'flex';
+}
+</script>
+
+{% endif %}
 
 {% endblock %}

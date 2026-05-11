@@ -3,6 +3,57 @@
 
     {% block content %}
 
+    <div class="labeling-layout">
+
+        <!-- Rules + Examples Sidebar -->
+        <div class="rules-sidebar" id="rulesSidebar">
+            <button class="sidebar-toggle" onclick="document.getElementById('rulesSidebar').classList.toggle('open')">&#9776;</button>
+            <h2>Rules &amp; Examples</h2>
+
+            {% for rule in labelling_rules %}
+                {% if rule.rule_index != 0 %}
+                <div style="margin-bottom:18px;">
+                    <h2 style="color:#d2e2e2; font-size:14px; margin:0 0 4px;">Rule {{ rule.rule_index }}: {{ rule.title }}</h2>
+                    <div class="rule-prompt">{{ rule.description }}
+                        {% if rule.directives %}
+                        <ul style="margin:6px 0 0; padding-left:16px;">
+                            {% for d in rule.directives %}
+                            <li>{{ d.directive }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </div>
+
+                    <div class="examples-section" id="examples_rule_{{ rule.rule_index }}">
+                        <!-- Examples loaded via JS or from template data -->
+                        {% for example in rule.examples %}
+                            {% if example.example_type == 'correct' %}
+                            <div class="example-item" style="display:inline-block; width:45%; margin:2px;">
+                                <img src="{{ example.image_path }}" style="border:2px solid #4a8a4a;">
+                                {% if example.caption %}<div class="caption">{{ example.caption }}</div>{% endif %}
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                        {% for example in rule.examples %}
+                            {% if example.example_type == 'incorrect' %}
+                            <div class="example-item" style="display:inline-block; width:45%; margin:2px;">
+                                <img src="{{ example.image_path }}" style="border:2px solid #8a4a4a;">
+                                {% if example.caption %}<div class="caption">{{ example.caption }}</div>{% endif %}
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    <!-- Dynamic examples from RuleExample model -->
+                    <div id="dynamic_examples_{{ rule.rule_index }}"></div>
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        <!-- Main labeling content -->
+        <div class="labeling-main">
+
         <div id = 'mobile_keyboard' class = 'listing light container mobile_keyboard'>
 
             <div style = 'display:flex; gap: 35px;'>
@@ -68,5 +119,43 @@
 
             
         {% endif %}
+
+        </div><!-- .labeling-main -->
+    </div><!-- .labeling-layout -->
+
+    <script>
+    // Load dynamic examples from RuleExample model
+    (function() {
+        var taskType = '{{ collection_data.task_type }}';
+        var rules = document.querySelectorAll('[id^="dynamic_examples_"]');
+        rules.forEach(function(container) {
+            var ruleIndex = container.id.replace('dynamic_examples_', '');
+            fetch(window.LABELING_API_BASE_URL + '/get_rule_examples/?task_type=' + taskType + '&rule_index=' + ruleIndex)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var html = '';
+                    if (data.yes_examples && data.yes_examples.length) {
+                        html += '<div class="examples-section"><h3 class="yes-label">YES examples</h3><div class="example-grid">';
+                        data.yes_examples.forEach(function(ex) {
+                            html += '<div class="example-item"><img src="' + ex.image_url + '">';
+                            if (ex.caption) html += '<div class="caption">' + ex.caption + '</div>';
+                            html += '</div>';
+                        });
+                        html += '</div></div>';
+                    }
+                    if (data.no_examples && data.no_examples.length) {
+                        html += '<div class="examples-section"><h3 class="no-label">NO examples</h3><div class="example-grid">';
+                        data.no_examples.forEach(function(ex) {
+                            html += '<div class="example-item"><img src="' + ex.image_url + '">';
+                            if (ex.caption) html += '<div class="caption">' + ex.caption + '</div>';
+                            html += '</div>';
+                        });
+                        html += '</div></div>';
+                    }
+                    container.innerHTML = html;
+                });
+        });
+    })();
+    </script>
 
     {% endblock %}

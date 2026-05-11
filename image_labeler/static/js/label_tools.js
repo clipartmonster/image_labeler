@@ -680,4 +680,59 @@ document.addEventListener('DOMContentLoaded', function(){
         } )
     })
 
+    // --- Session timing for rate tracking ---
+    if (!sessionStorage.getItem('labeling_session_start')) {
+        sessionStorage.setItem('labeling_session_start', new Date().toISOString());
+        sessionStorage.setItem('labeling_session_count', '0');
+    }
 })
+
+
+// Increment label count on each prompt submission
+var _originalCollectPrompt = typeof api_collect_prompt === 'function' ? api_collect_prompt : null;
+function _incrementSessionCount() {
+    var count = parseInt(sessionStorage.getItem('labeling_session_count') || '0');
+    sessionStorage.setItem('labeling_session_count', String(count + 1));
+}
+
+// Hook into collect_prompt to track label submissions
+var _origCollectPromptFn = window.collect_prompt;
+if (_origCollectPromptFn) {
+    window.collect_prompt = function(element, response) {
+        _incrementSessionCount();
+        return _origCollectPromptFn(element, response);
+    };
+}
+
+// Send session data on page unload
+window.addEventListener('beforeunload', function() {
+    var startedAt = sessionStorage.getItem('labeling_session_start');
+    var count = parseInt(sessionStorage.getItem('labeling_session_count') || '0');
+    if (!startedAt || count === 0) return;
+
+    var endedAt = new Date().toISOString();
+
+    // Gather batch context from the page
+    var collectionData = document.querySelector('.collection_data');
+    var params = new URLSearchParams(window.location.search);
+
+    var payload = {
+        username: params.get('labeler_id') || (collectionData ? collectionData.getAttribute('labeler_id') : ''),
+        task_type: params.get('task_type') || (collectionData ? collectionData.getAttribute('task_type') : ''),
+        rule_index: params.get('rule_indexes') || params.get('rule_index') || '0',
+        batch_id: params.get('batch_id') || '0',
+        large_sub_batch: params.get('large_sub_batch') || '0',
+        started_at: startedAt,
+        ended_at: endedAt,
+        labels_completed: count
+    };
+
+    var blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    navigator.sendBeacon(
+        window.LABELING_API_BASE_URL + '/record_labeling_session/',
+        blob
+    );
+
+    sessionStorage.removeItem('labeling_session_start');
+    sessionStorage.removeItem('labeling_session_count');
+});

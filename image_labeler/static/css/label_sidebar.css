@@ -1,0 +1,119 @@
+.labeling-layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 0;
+    min-height: 100vh;
+}
+
+.rules-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    background: #1e2e2e;
+    border-right: 1px solid #3a4a4a;
+    padding: 16px;
+    font-family: 'Roboto', sans-serif;
+}
+
+.rules-sidebar h2 {
+    color: #d2e2e2;
+    font-size: 16px;
+    margin: 0 0 12px;
+    font-weight: 600;
+}
+
+.rules-sidebar .rule-prompt {
+    color: #a0b8b8;
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 0 0 16px;
+    padding: 10px;
+    background: #2a3a3a;
+    border-radius: 6px;
+}
+
+.rules-sidebar .examples-section {
+    margin-bottom: 16px;
+}
+
+.rules-sidebar .examples-section h3 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.rules-sidebar .examples-section h3.yes-label {
+    color: #a0e0a0;
+    background: rgba(100, 200, 100, 0.1);
+}
+
+.rules-sidebar .examples-section h3.no-label {
+    color: #e0a0a0;
+    background: rgba(200, 100, 100, 0.1);
+}
+
+.rules-sidebar .example-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.rules-sidebar .example-item {
+    text-align: center;
+}
+
+.rules-sidebar .example-item img {
+    width: 100%;
+    border-radius: 4px;
+    border: 1px solid #3a4a4a;
+}
+
+.rules-sidebar .example-item .caption {
+    font-size: 11px;
+    color: #8a9a9a;
+    margin-top: 3px;
+}
+
+.rules-sidebar .sidebar-toggle {
+    display: none;
+}
+
+.labeling-main {
+    overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+    .labeling-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .rules-sidebar {
+        position: fixed;
+        left: -310px;
+        top: 0;
+        z-index: 900;
+        transition: left 0.3s ease;
+        width: 300px;
+    }
+
+    .rules-sidebar.open {
+        left: 0;
+    }
+
+    .rules-sidebar .sidebar-toggle {
+        display: block;
+        position: absolute;
+        top: 10px;
+        right: -36px;
+        background: #799494;
+        color: #d2e2e2;
+        border: none;
+        border-radius: 0 6px 6px 0;
+        padding: 8px 10px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+}
