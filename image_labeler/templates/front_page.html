@@ -4,71 +4,129 @@
 {% block content %}
 
     
-<div style = 'display:flex; flex-direction: row;'>
+<div style = 'display:flex; flex-direction: row; gap: 20px; flex-wrap: wrap;'>
 
     <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
 
         <ul style="list-style-type: none; padding: 0;">
             
             <li style="margin-bottom: 5px;">
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/setup_session/">
-                    <h1 class = "label_option intro">Setup session</h1>
+                <a href="/label_images/setup_session/">
+                    <h1 class = "label_option intro">Setup Session</h1>
                 </a>
             </li>
             
+            {% if user_is_admin %}
             <li style="margin-bottom: 5px;">
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_asset/">
+                <a href="/label_images/view_asset/">
                     <h1 class = "label_option intro">View Asset</h1>
                 </a>
             </li>
             
             <li style="margin-bottom: 5px;">
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_model_results/">
+                <a href="/label_images/view_model_results/">
                     <h1 class = "label_option intro">View Model Results</h1>
                 </a>
             </li>
             
-            <li>
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_batch_labels/">
+            <li style="margin-bottom: 5px;">
+                <a href="/label_images/view_batch_labels/">
                     <h1 class = "label_option intro">View Batch Labels</h1>
                 </a>
             </li>
 
-            <li>
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_prediction_labels/?task_type=asset_type&rule_index=3">
+            <li style="margin-bottom: 5px;">
+                <a href="/label_images/view_prediction_labels/?task_type=asset_type&rule_index=3">
                     <h1 class = "label_option intro">Prediction Labels</h1>
                 </a>
             </li>
 
-            <li>
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_labels/">
-                    <h1 class = "label_option intro">View Labels [takes a while to load]</h1>
+            <li style="margin-bottom: 5px;">
+                <a href="/label_images/view_labels/">
+                    <h1 class = "label_option intro">View Labels</h1>
                 </a>
             </li>
 
-            <li>
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_primary_colors/">
+            <li style="margin-bottom: 5px;">
+                <a href="/label_images/view_primary_colors/">
                     <h1 class = "label_option intro">Primary Colors</h1>
                 </a>
             </li>
 
-
-            <li>
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_line_widths/">
+            <li style="margin-bottom: 5px;">
+                <a href="/label_images/view_line_widths/">
                     <h1 class = "label_option intro">Line Width</h1>
                 </a>
             </li>
 
-            <li>
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_rough_fill/">
+            <li style="margin-bottom: 5px;">
+                <a href="/label_images/view_rough_fill/">
                     <h1 class = "label_option intro">Rough Fill</h1>
                 </a>
             </li>
 
+            <li style="margin-bottom: 5px;">
+                <a href="/label_images/manage_rules/">
+                    <h1 class = "label_option intro">Manage Rules</h1>
+                </a>
+            </li>
+
+            <li style="margin-bottom: 5px;">
+                <a href="/label_images/label_search_results/">
+                    <h1 class = "label_option intro">Label Search Results</h1>
+                </a>
+            </li>
+            {% endif %}
 
         </ul>
 
     </div>
+
+    {% if user_is_admin %}
+    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap; align-self:flex-start;' >
+
+        <h1 class="label_option intro" style="width:100%; margin-bottom:10px; color:#cba6f7;">Admin</h1>
+
+        <ul style="list-style-type: none; padding: 0;">
+            <li style="margin-bottom: 5px;">
+                <a href="/admin/">
+                    <h1 class = "label_option intro">Django Admin Panel</h1>
+                </a>
+            </li>
+
+            <li style="margin-bottom: 5px;">
+                <a href="/admin/auth/user/">
+                    <h1 class = "label_option intro">Manage Users</h1>
+                </a>
+            </li>
+
+            <li style="margin-bottom: 5px;">
+                <a href="/admin/label_images/userprofile/">
+                    <h1 class = "label_option intro">User Profiles &amp; Roles</h1>
+                </a>
+            </li>
+
+            <li style="margin-bottom: 5px;">
+                <a href="/admin/label_images/batchassignment/">
+                    <h1 class = "label_option intro">Batch Assignments</h1>
+                </a>
+            </li>
+
+            <li style="margin-bottom: 5px;">
+                <a href="/admin/label_images/labelingsession/">
+                    <h1 class = "label_option intro">Labeling Sessions &amp; Rates</h1>
+                </a>
+            </li>
+
+            <li style="margin-bottom: 5px;">
+                <a href="/admin/label_images/ruleexample/">
+                    <h1 class = "label_option intro">Rule Examples</h1>
+                </a>
+            </li>
+        </ul>
+
+    </div>
+    {% endif %}
 
 </div>
 

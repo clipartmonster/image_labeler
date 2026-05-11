@@ -4,8 +4,8 @@ from .models import UserProfile, BatchAssignment, LabelingSession, RuleExample
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ("user", "role")
-    list_filter = ("role",)
+    list_display = ("user", "role", "must_change_password")
+    list_filter = ("role", "must_change_password")
 
 
 @admin.register(BatchAssignment)

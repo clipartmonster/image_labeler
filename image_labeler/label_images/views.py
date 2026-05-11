@@ -30,9 +30,36 @@ def is_admin(request):
 
 
 @login_required
+def change_password(request):
+    """Force new users to set their own password on first login."""
+    if request.method == "POST":
+        new_pw = request.POST.get("new_password", "")
+        confirm_pw = request.POST.get("confirm_password", "")
+
+        if len(new_pw) < 8:
+            return render(request, "change_password.html", {"error": "Password must be at least 8 characters."})
+        if new_pw != confirm_pw:
+            return render(request, "change_password.html", {"error": "Passwords do not match."})
+
+        request.user.set_password(new_pw)
+        request.user.save()
+
+        profile = getattr(request.user, "profile", None)
+        if profile:
+            profile.must_change_password = False
+            profile.save()
+
+        from django.contrib.auth import update_session_auth_hash
+        update_session_auth_hash(request, request.user)
+        return redirect("front_page")
+
+    return render(request, "change_password.html", {})
+
+
+@login_required
 def front_page(request):
 
-    data = {}
+    data = {"user_is_admin": is_admin(request)}
 
     return render(request, "front_page.html", data)
 

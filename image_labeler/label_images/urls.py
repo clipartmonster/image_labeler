@@ -30,6 +30,7 @@ urlpatterns = [
 
     path('manage_rules/', views.manage_rules, name = 'manage_rules'),
     path('assign_batch/', views.assign_batch, name = 'assign_batch'),
+    path('change_password/', views.change_password, name = 'change_password'),
 
 ]
 

@@ -84,6 +84,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "label_images.middleware.ForcePasswordChangeMiddleware",
 ]
 
 ROOT_URLCONF = "image_labeler.urls"
