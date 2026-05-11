@@ -1,0 +1,140 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+<div class="wf-page">
+    <div class="wf-nav">
+        <a href="/label_images/setup_session/">Session Setup</a>
+        <a href="/label_images/admin/labelers/">Labelers</a>
+        <a href="/label_images/admin/bulk_assign/">Bulk Assign</a>
+        <a href="/label_images/admin/performance/">Performance</a>
+        <a href="/label_images/admin/adjudication/" class="active">Adjudication</a>
+    </div>
+
+    <h1>Disagreement Adjudication</h1>
+    <p style="font-size:.85rem; color:#a6adc8; margin-bottom:18px;">
+        Assets where labelers disagreed (agreement &lt; {{ threshold|floatformat:0 }}%). Review and decide the correct label.
+    </p>
+
+    <div class="wf-filters">
+        <label>Task Type</label>
+        <input id="filterTT" class="wf-input" style="width:160px;" placeholder="e.g. asset_type">
+        <label>Rule Index</label>
+        <input id="filterRI" type="number" class="wf-input" style="width:80px;">
+        <button class="wf-btn wf-btn-primary wf-btn-sm" onclick="loadDisagreements(1)">Load</button>
+        <span id="totalCount" style="font-size:.85rem; color:#a6adc8;"></span>
+    </div>
+
+    <div id="itemsContainer"></div>
+
+    <div id="pagination" style="display:flex; gap:10px; margin-top:14px;"></div>
+</div>
+
+<script>
+var _currentPage = 1;
+
+function getCsrfToken() {
+    var c = document.cookie.match(/csrftoken=([^;]+)/);
+    return c ? c[1] : '';
+}
+
+function loadDisagreements(page) {
+    _currentPage = page || 1;
+    var tt = document.getElementById('filterTT').value;
+    var ri = document.getElementById('filterRI').value;
+    var url = '/label_images/admin/adjudication/list/?page=' + _currentPage;
+    if (tt) url += '&task_type=' + encodeURIComponent(tt);
+    if (ri) url += '&rule_index=' + ri;
+
+    document.getElementById('itemsContainer').innerHTML = '<p style="color:#a6adc8;">Loading…</p>';
+
+    fetch(url).then(r => r.json()).then(function(data) {
+        document.getElementById('totalCount').textContent = data.total + ' disagreements';
+        var container = document.getElementById('itemsContainer');
+        container.innerHTML = '';
+
+        if (!data.items.length) {
+            container.innerHTML = '<p style="color:#a6e3a1;">No disagreements found.</p>';
+            document.getElementById('pagination').innerHTML = '';
+            return;
+        }
+
+        data.items.forEach(function(item) {
+            var card = document.createElement('div');
+            card.className = 'wf-asset-card';
+            card.id = 'card-' + item.asset_id + '-' + item.task_type + '-' + item.rule_index;
+
+            var imgUrl = item.image_link || '';
+            var imgTag = imgUrl ? '<img src="' + imgUrl + '" alt="asset ' + item.asset_id + '">' : '<div style="width:140px;height:140px;background:#313244;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#a6adc8;">No image</div>';
+
+            var responsesHtml = '<table class="wf-table" style="margin:8px 0;"><thead><tr><th>Labeler</th><th>Response</th><th>Time</th></tr></thead><tbody>';
+            item.responses.forEach(function(r) {
+                var color = r.response === 'yes' ? '#a6e3a1' : '#f38ba8';
+                responsesHtml += '<tr><td>' + r.labeler_id + '</td><td style="color:' + color + ';">' + r.response + '</td><td style="font-size:.8rem;">' + (r.datetime || '') + '</td></tr>';
+            });
+            responsesHtml += '</tbody></table>';
+
+            card.innerHTML = imgTag +
+                '<div class="wf-asset-meta">' +
+                    '<p style="margin:0 0 4px; font-size:.9rem; font-weight:600;">Asset ' + item.asset_id + '</p>' +
+                    '<p style="margin:0 0 4px; font-size:.8rem; color:#a6adc8;">' + item.task_type + ' / Rule ' + item.rule_index + '</p>' +
+                    '<p style="margin:0 0 8px; font-size:.8rem;">' +
+                        '<span class="wf-badge wf-badge-green">' + item.yes_count + ' yes</span> ' +
+                        '<span class="wf-badge wf-badge-red">' + item.no_count + ' no</span> ' +
+                        '<span class="wf-badge wf-badge-gray">' + item.agreement_pct + '% agree</span>' +
+                    '</p>' +
+                    responsesHtml +
+                    '<div style="display:flex; gap:8px; align-items:center; margin-top:8px;">' +
+                        '<button class="wf-btn wf-btn-success wf-btn-sm" onclick="adjudicate(' + item.asset_id + ',\'' + item.task_type + '\',' + item.rule_index + ',\'yes\',this)">Yes</button>' +
+                        '<button class="wf-btn wf-btn-danger wf-btn-sm" onclick="adjudicate(' + item.asset_id + ',\'' + item.task_type + '\',' + item.rule_index + ',\'no\',this)">No</button>' +
+                        '<input type="text" placeholder="Notes (optional)" class="wf-input" style="flex:1; font-size:.8rem;" id="notes-' + item.asset_id + '-' + item.rule_index + '">' +
+                    '</div>' +
+                '</div>';
+            container.appendChild(card);
+        });
+
+        // Pagination
+        var pagDiv = document.getElementById('pagination');
+        pagDiv.innerHTML = '';
+        var totalPages = Math.ceil(data.total / data.page_size);
+        for (var p = 1; p <= totalPages; p++) {
+            var btn = document.createElement('button');
+            btn.className = 'wf-btn wf-btn-sm ' + (p === data.page ? 'wf-btn-primary' : '');
+            btn.textContent = p;
+            btn.style.background = p === data.page ? '' : '#313244';
+            btn.style.color = p === data.page ? '' : '#cdd6f4';
+            (function(pp) { btn.onclick = function() { loadDisagreements(pp); }; })(p);
+            pagDiv.appendChild(btn);
+        }
+    });
+}
+
+function adjudicate(assetId, taskType, ruleIndex, decision, btn) {
+    var notesEl = document.getElementById('notes-' + assetId + '-' + ruleIndex);
+    var notes = notesEl ? notesEl.value : '';
+
+    fetch('/label_images/admin/adjudication/save/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({asset_id: assetId, task_type: taskType, rule_index: ruleIndex, decision: decision, notes: notes}),
+    })
+    .then(r => r.json())
+    .then(function(data) {
+        if (data.error) { alert(data.error); return; }
+        var card = document.getElementById('card-' + assetId + '-' + taskType + '-' + ruleIndex);
+        if (card) {
+            card.style.opacity = '0.4';
+            card.style.pointerEvents = 'none';
+            var badge = document.createElement('span');
+            badge.className = 'wf-badge ' + (decision === 'yes' ? 'wf-badge-green' : 'wf-badge-red');
+            badge.textContent = 'Decided: ' + decision;
+            badge.style.fontSize = '.9rem';
+            badge.style.marginLeft = '12px';
+            btn.parentElement.appendChild(badge);
+        }
+    });
+}
+
+loadDisagreements(1);
+</script>
+{% endblock %}

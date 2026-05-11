@@ -312,3 +312,15 @@ LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 # Labeler payment: default per-batch rate (can be overridden per BatchAssignment).
 LABELER_PAY_PER_BATCH = os.getenv("LABELER_PAY_PER_BATCH", "15.00")
+
+# Workforce management defaults (overridable per-batch on BatchAssignment).
+LABELER_DEFAULT_NUM_LABELERS = int(os.getenv("LABELER_DEFAULT_NUM_LABELERS", "2"))
+LABELER_DEFAULT_GOLD_PERCENTAGE = float(os.getenv("LABELER_DEFAULT_GOLD_PERCENTAGE", "5.0"))
+LABELER_DEFAULT_DEADLINE_WARNING = os.getenv("LABELER_DEFAULT_DEADLINE_WARNING", "medium")
+
+# Agreement: minimum agreement ratio (0.0–1.0) below which an asset enters
+# the adjudication queue.  1.0 = any disagreement triggers adjudication.
+LABELER_DISAGREEMENT_THRESHOLD = float(os.getenv("LABELER_DISAGREEMENT_THRESHOLD", "1.0"))
+
+# Number of days of inactivity after which a labeler is considered inactive.
+LABELER_INACTIVE_DAYS = int(os.getenv("LABELER_INACTIVE_DAYS", "30"))

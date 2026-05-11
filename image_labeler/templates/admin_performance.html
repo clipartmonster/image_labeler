@@ -1,0 +1,150 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+<div class="wf-page">
+    <div class="wf-nav">
+        <a href="/label_images/setup_session/">Session Setup</a>
+        <a href="/label_images/admin/labelers/">Labelers</a>
+        <a href="/label_images/admin/bulk_assign/">Bulk Assign</a>
+        <a href="/label_images/admin/performance/" class="active">Performance</a>
+        <a href="/label_images/admin/adjudication/">Adjudication</a>
+    </div>
+
+    <h1>Labeler Performance</h1>
+
+    <div class="wf-filters">
+        <label>Labeler</label>
+        <select id="labelerSelect" class="wf-select" onchange="loadPerformance()">
+            <option value="">— select —</option>
+        </select>
+        <button class="wf-btn wf-btn-primary wf-btn-sm" onclick="loadPerformance()">Refresh</button>
+    </div>
+
+    <div id="perfContent" style="display:none;">
+        <div class="wf-stats">
+            <div class="wf-stat">
+                <p class="label">Throughput</p>
+                <p class="value" id="statThroughput">—</p>
+                <p class="sub" id="statThroughputSub"></p>
+            </div>
+            <div class="wf-stat">
+                <p class="label">Gold Accuracy</p>
+                <p class="value" id="statAccuracy">—</p>
+                <p class="sub" id="statAccuracySub"></p>
+            </div>
+            <div class="wf-stat">
+                <p class="label">On-time Rate</p>
+                <p class="value" id="statOntime">—</p>
+                <p class="sub" id="statOntimeSub"></p>
+            </div>
+        </div>
+
+        <div class="wf-stats">
+            <div class="wf-stat">
+                <p class="label">Total Labels</p>
+                <p class="value" id="statLabels">—</p>
+            </div>
+            <div class="wf-stat">
+                <p class="label">Total Hours</p>
+                <p class="value" id="statHours">—</p>
+            </div>
+            <div class="wf-stat">
+                <p class="label">Assignments</p>
+                <p class="value" id="statAssignments">—</p>
+            </div>
+        </div>
+    </div>
+
+    <p id="perfStatus" style="font-size:.85rem; color:#a6adc8; margin-top:12px;"></p>
+
+    <!-- Gold import section -->
+    <div class="wf-card" style="margin-top:28px;">
+        <h2>Import Gold-Standard Labels</h2>
+        <p style="font-size:.85rem; color:#a6adc8; margin-bottom:12px;">
+            Import reconciled labels (from <code>assets_w_rule_labels</code>) as gold-standard answers for accuracy scoring.
+        </p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+            <div>
+                <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Task Type (optional)</label>
+                <input id="goldTaskType" class="wf-input" style="width:160px;" placeholder="e.g. asset_type">
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Rule Index (optional)</label>
+                <input id="goldRuleIndex" type="number" class="wf-input" style="width:80px;">
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Min Agreement</label>
+                <input id="goldMinAgreement" type="number" step="0.05" min="0" max="1" value="0.9" class="wf-input" style="width:80px;">
+            </div>
+            <button class="wf-btn wf-btn-success" onclick="importGold()">Import</button>
+        </div>
+        <p id="goldStatus" style="font-size:.85rem; color:#a6e3a1; min-height:1.4em; margin-top:8px;"></p>
+    </div>
+</div>
+
+<script>
+var _labelers = {{ labelers_json|safe }};
+
+(function() {
+    var sel = document.getElementById('labelerSelect');
+    _labelers.forEach(function(l) {
+        var o = document.createElement('option');
+        o.value = l.id; o.textContent = l.username;
+        sel.appendChild(o);
+    });
+})();
+
+function getCsrfToken() {
+    var c = document.cookie.match(/csrftoken=([^;]+)/);
+    return c ? c[1] : '';
+}
+
+function loadPerformance() {
+    var uid = document.getElementById('labelerSelect').value;
+    if (!uid) return;
+    document.getElementById('perfStatus').textContent = 'Loading…';
+    document.getElementById('perfContent').style.display = 'none';
+
+    fetch('/label_images/admin/performance/data/?user_id=' + uid)
+    .then(r => r.json())
+    .then(d => {
+        document.getElementById('perfStatus').textContent = '';
+        document.getElementById('perfContent').style.display = '';
+
+        document.getElementById('statThroughput').textContent = d.throughput_labels_per_hour != null ? d.throughput_labels_per_hour + '/hr' : '—';
+        document.getElementById('statThroughputSub').textContent = d.total_labels + ' labels in ' + d.total_hours + ' hrs';
+
+        document.getElementById('statAccuracy').textContent = d.accuracy_pct != null ? d.accuracy_pct + '%' : '—';
+        document.getElementById('statAccuracySub').textContent = d.gold_correct + ' / ' + d.gold_total + ' gold items';
+
+        document.getElementById('statOntime').textContent = d.on_time_pct != null ? d.on_time_pct + '%' : '—';
+        document.getElementById('statOntimeSub').textContent = d.on_time_count + ' / ' + d.total_completed + ' completed';
+
+        document.getElementById('statLabels').textContent = d.total_labels;
+        document.getElementById('statHours').textContent = d.total_hours;
+        document.getElementById('statAssignments').textContent = d.total_assignments;
+    });
+}
+
+function importGold() {
+    var body = {
+        task_type: document.getElementById('goldTaskType').value,
+        rule_index: document.getElementById('goldRuleIndex').value || null,
+        min_agreement: document.getElementById('goldMinAgreement').value,
+    };
+    document.getElementById('goldStatus').textContent = 'Importing…';
+    fetch('/label_images/admin/import_gold/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify(body),
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) { document.getElementById('goldStatus').style.color = '#f38ba8'; document.getElementById('goldStatus').textContent = d.error; return; }
+        document.getElementById('goldStatus').style.color = '#a6e3a1';
+        document.getElementById('goldStatus').textContent = 'Imported ' + d.imported + ' new gold labels (' + d.total_candidates + ' candidates matched).';
+    });
+}
+</script>
+{% endblock %}

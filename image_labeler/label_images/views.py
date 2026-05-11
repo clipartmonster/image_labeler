@@ -1,8 +1,9 @@
 from django.shortcuts import render, redirect
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.contrib.staticfiles import finders
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
+from django.db.models import Count, Q, Avg, F, Value, CharField
+from django.db.models.functions import Concat
 
 from django.conf import settings
 from django.http import FileResponse, Http404
@@ -255,7 +256,17 @@ def setup_session(request):
             )
 
         from django.contrib.auth.models import User
+        from labeling_api.models import labelling_rules, label_data_selected_assets_new
         labeler_users = User.objects.filter(profile__role="labeler").values_list("username", flat=True)
+
+        all_rules = list(labelling_rules.objects.exclude(task_type="color_type")
+                         .values("task_type", "rule_index", "title")
+                         .order_by("task_type", "rule_index"))
+
+        all_sub_batches = list(label_data_selected_assets_new.objects
+                               .values("task_type", "rule_index", "batch_id", "large_sub_batch")
+                               .distinct()
+                               .order_by("task_type", "rule_index", "batch_id", "large_sub_batch"))
 
         selected_options = {
             "labeler_id": labeler_id,
@@ -273,6 +284,8 @@ def setup_session(request):
                 "user_is_admin": True,
                 "labeler_users": list(labeler_users),
                 "default_pay": settings.LABELER_PAY_PER_BATCH,
+                "assign_rules_json": json.dumps(all_rules, default=str),
+                "assign_sub_batches_json": json.dumps(all_sub_batches, default=str),
             },
         )
     else:
@@ -321,6 +334,7 @@ def setup_session(request):
                 "payment_amount": a.payment_amount,
                 "deadline": a.deadline,
                 "deadline_status": deadline_status,
+                "warning_severity": a.deadline_warning_severity,
                 "total": total,
                 "completed": completed,
                 "progress_pct": int((completed / total * 100) if total > 0 else 0),
@@ -1831,3 +1845,463 @@ def label_search_results(request):
     # print(data)
 
     return render(request, "label_search_results.html", data)
+
+
+# ===========================================================================
+# Workforce management views
+# ===========================================================================
+
+from .decorators import admin_required, labeler_required, admin_required_ajax
+from .models import (
+    BatchAssignment, LabelingSession, GoldStandardLabel,
+    AdjudicationDecision, UserProfile,
+)
+
+
+# ---------------------------------------------------------------------------
+# Labeler: earnings view
+# ---------------------------------------------------------------------------
+
+@labeler_required
+def labeler_earnings(request):
+    assignments = BatchAssignment.objects.filter(user=request.user).order_by("-deadline")
+    completed = [a for a in assignments if a.completed_at]
+    pending = [a for a in assignments if not a.completed_at]
+
+    completed_total = sum(a.payment_amount for a in completed)
+    pending_total = sum(a.payment_amount for a in pending)
+
+    return render(request, "labeler_earnings.html", {
+        "completed_assignments": completed,
+        "pending_assignments": pending,
+        "completed_total": completed_total,
+        "pending_total": pending_total,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Admin: labeler list with search/filter
+# ---------------------------------------------------------------------------
+
+@admin_required
+def admin_labeler_list(request):
+    from django.contrib.auth.models import User
+    from django.utils import timezone
+    from datetime import timedelta
+
+    search = request.GET.get("search", "").strip()
+    status_filter = request.GET.get("status", "real")
+    show_test = request.GET.get("show_test", "0") == "1"
+
+    qs = User.objects.filter(profile__role="labeler").select_related("profile")
+
+    if search:
+        qs = qs.filter(Q(username__icontains=search) | Q(email__icontains=search)
+                       | Q(first_name__icontains=search) | Q(last_name__icontains=search))
+
+    cutoff = timezone.now() - timedelta(days=getattr(settings, "LABELER_INACTIVE_DAYS", 30))
+
+    if status_filter == "real":
+        qs = qs.filter(Q(is_staff=True) | Q(is_superuser=True))
+    elif status_filter == "test":
+        qs = qs.filter(is_staff=False, is_superuser=False)
+    elif status_filter == "active":
+        qs = qs.filter(labeling_sessions__ended_at__gte=cutoff).distinct()
+        if not show_test:
+            qs = qs.filter(Q(is_staff=True) | Q(is_superuser=True))
+    elif status_filter == "inactive":
+        qs = qs.exclude(labeling_sessions__ended_at__gte=cutoff)
+        if not show_test:
+            qs = qs.filter(Q(is_staff=True) | Q(is_superuser=True))
+    else:
+        if not show_test:
+            qs = qs.filter(Q(is_staff=True) | Q(is_superuser=True))
+
+    labelers = []
+    for u in qs.order_by("username"):
+        total_assignments = u.batch_assignments.count()
+        completed_assignments = u.batch_assignments.filter(completed_at__isnull=False).count()
+        labelers.append({
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "full_name": u.get_full_name(),
+            "is_staff": u.is_staff,
+            "is_active": u.is_active,
+            "total_assignments": total_assignments,
+            "completed_assignments": completed_assignments,
+        })
+
+    return render(request, "admin_labeler_list.html", {
+        "labelers": labelers,
+        "search": search,
+        "status_filter": status_filter,
+        "show_test": show_test,
+    })
+
+
+@admin_required_ajax
+def admin_toggle_staff(request):
+    """AJAX: toggle User.is_staff for a labeler."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    from django.contrib.auth.models import User
+
+    data = json.loads(request.body)
+    user_id = data.get("user_id")
+    try:
+        user = User.objects.get(pk=user_id, profile__role="labeler")
+    except User.DoesNotExist:
+        return JsonResponse({"error": "labeler not found"}, status=404)
+
+    user.is_staff = not user.is_staff
+    user.save(update_fields=["is_staff"])
+    return JsonResponse({"user_id": user.id, "is_staff": user.is_staff})
+
+
+# ---------------------------------------------------------------------------
+# Admin: bulk batch assignment
+# ---------------------------------------------------------------------------
+
+@admin_required
+def admin_bulk_assign(request):
+    from django.contrib.auth.models import User
+    from labeling_api.models import label_data_selected_assets_new, labelling_rules
+
+    labeler_users = list(
+        User.objects.filter(profile__role="labeler")
+        .filter(Q(is_staff=True) | Q(is_superuser=True))
+        .order_by("username")
+        .values("id", "username")
+    )
+
+    all_sub_batches = list(
+        label_data_selected_assets_new.objects
+        .values("task_type", "rule_index", "batch_id", "large_sub_batch")
+        .distinct()
+        .order_by("task_type", "rule_index", "batch_id", "large_sub_batch")
+    )
+
+    all_rules = list(
+        labelling_rules.objects.exclude(task_type="color_type")
+        .values("task_type", "rule_index", "title")
+        .order_by("task_type", "rule_index")
+    )
+
+    existing = list(
+        BatchAssignment.objects
+        .values("user_id", "task_type", "rule_index", "batch_id", "large_sub_batch")
+    )
+
+    return render(request, "admin_bulk_assign.html", {
+        "labeler_users_json": json.dumps(labeler_users, default=str),
+        "sub_batches_json": json.dumps(all_sub_batches, default=str),
+        "rules_json": json.dumps(all_rules, default=str),
+        "existing_json": json.dumps(existing, default=str),
+        "default_pay": settings.LABELER_PAY_PER_BATCH,
+        "default_num_labelers": getattr(settings, "LABELER_DEFAULT_NUM_LABELERS", 2),
+        "default_gold_pct": getattr(settings, "LABELER_DEFAULT_GOLD_PERCENTAGE", 5.0),
+    })
+
+
+@admin_required_ajax
+def admin_bulk_assign_save(request):
+    """AJAX: create BatchAssignments for each (sub-batch, labeler) pair."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    from django.contrib.auth.models import User
+    from django.utils.dateparse import parse_date
+    from django.utils import timezone
+    from datetime import datetime
+
+    data = json.loads(request.body)
+    sub_batches = data.get("sub_batches", [])
+    labeler_ids = data.get("labeler_ids", [])
+    payment = data.get("payment_amount", settings.LABELER_PAY_PER_BATCH)
+    deadline_str = data.get("deadline")
+    gold_pct = data.get("gold_percentage", getattr(settings, "LABELER_DEFAULT_GOLD_PERCENTAGE", 5.0))
+    num_labelers = data.get("num_labelers_target", getattr(settings, "LABELER_DEFAULT_NUM_LABELERS", 2))
+    severity = data.get("deadline_warning_severity", getattr(settings, "LABELER_DEFAULT_DEADLINE_WARNING", "medium"))
+
+    if not sub_batches or not labeler_ids or not deadline_str:
+        return JsonResponse({"error": "sub_batches, labeler_ids, and deadline are required"}, status=400)
+
+    deadline_date = parse_date(deadline_str)
+    if not deadline_date:
+        return JsonResponse({"error": "invalid deadline"}, status=400)
+    deadline_dt = timezone.make_aware(datetime.combine(deadline_date, datetime.max.time().replace(microsecond=0)))
+
+    users = {u.id: u for u in User.objects.filter(pk__in=labeler_ids)}
+    created = 0
+    skipped = 0
+
+    for sb in sub_batches:
+        for uid in labeler_ids:
+            user = users.get(uid)
+            if not user:
+                skipped += 1
+                continue
+            _, was_created = BatchAssignment.objects.update_or_create(
+                user=user,
+                task_type=sb["task_type"],
+                rule_index=sb["rule_index"],
+                batch_id=sb["batch_id"],
+                large_sub_batch=sb["large_sub_batch"],
+                defaults={
+                    "payment_amount": payment,
+                    "deadline": deadline_dt,
+                    "gold_percentage": gold_pct,
+                    "num_labelers_target": num_labelers,
+                    "deadline_warning_severity": severity,
+                },
+            )
+            if was_created:
+                created += 1
+            else:
+                skipped += 1
+
+    return JsonResponse({"created": created, "skipped": skipped})
+
+
+# ---------------------------------------------------------------------------
+# Admin: performance dashboard
+# ---------------------------------------------------------------------------
+
+@admin_required
+def admin_performance(request):
+    from django.contrib.auth.models import User
+
+    labelers = list(
+        User.objects.filter(profile__role="labeler")
+        .filter(Q(is_staff=True) | Q(is_superuser=True))
+        .order_by("username")
+        .values("id", "username")
+    )
+    return render(request, "admin_performance.html", {
+        "labelers_json": json.dumps(labelers, default=str),
+    })
+
+
+@admin_required_ajax
+def admin_performance_data(request):
+    """AJAX: return throughput, accuracy, on-time stats for a labeler."""
+    from django.contrib.auth.models import User
+    from labeling_api.models import prompt_responses
+
+    user_id = request.GET.get("user_id")
+    if not user_id:
+        return JsonResponse({"error": "user_id required"}, status=400)
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "user not found"}, status=404)
+
+    # --- Throughput ---
+    sessions = LabelingSession.objects.filter(user=user, ended_at__isnull=False)
+    total_labels = sum(s.labels_completed for s in sessions)
+    total_hours = sum((s.duration_hours or 0) for s in sessions)
+    throughput = round(total_labels / total_hours, 1) if total_hours > 0 else None
+
+    # --- Accuracy vs gold ---
+    labeler_id_str = user.username
+    gold_labels = {
+        (g.asset_id, g.task_type, g.rule_index): g.correct_response
+        for g in GoldStandardLabel.objects.all()
+    }
+    gold_total = 0
+    gold_correct = 0
+    if gold_labels:
+        responses = prompt_responses.objects.filter(labeler_id=labeler_id_str)
+        for r in responses:
+            key = (r.asset_id, r.task_type, r.rule_index)
+            if key in gold_labels:
+                gold_total += 1
+                if r.prompt_response == gold_labels[key]:
+                    gold_correct += 1
+    accuracy = round(gold_correct / gold_total * 100, 1) if gold_total > 0 else None
+
+    # --- On-time completion ---
+    assignments = BatchAssignment.objects.filter(user=user)
+    completed = assignments.filter(completed_at__isnull=False)
+    total_completed = completed.count()
+    on_time = completed.filter(completed_at__lte=F("deadline")).count()
+    on_time_rate = round(on_time / total_completed * 100, 1) if total_completed > 0 else None
+
+    return JsonResponse({
+        "username": user.username,
+        "throughput_labels_per_hour": throughput,
+        "total_labels": total_labels,
+        "total_hours": round(total_hours, 1),
+        "accuracy_pct": accuracy,
+        "gold_total": gold_total,
+        "gold_correct": gold_correct,
+        "on_time_pct": on_time_rate,
+        "total_completed": total_completed,
+        "on_time_count": on_time,
+        "total_assignments": assignments.count(),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Admin: adjudication queue
+# ---------------------------------------------------------------------------
+
+@admin_required
+def admin_adjudication(request):
+    return render(request, "admin_adjudication.html", {
+        "threshold": getattr(settings, "LABELER_DISAGREEMENT_THRESHOLD", 1.0),
+    })
+
+
+@admin_required_ajax
+def admin_adjudication_list(request):
+    """AJAX: return assets with labeler disagreements that haven't been adjudicated."""
+    from labeling_api.models import prompt_responses, label_data_selected_assets_new
+
+    task_type = request.GET.get("task_type", "")
+    rule_index = request.GET.get("rule_index", "")
+    page = int(request.GET.get("page", 1))
+    page_size = 50
+
+    threshold = getattr(settings, "LABELER_DISAGREEMENT_THRESHOLD", 1.0)
+
+    qs = prompt_responses.objects.all()
+    if task_type:
+        qs = qs.filter(task_type=task_type)
+    if rule_index:
+        qs = qs.filter(rule_index=int(rule_index))
+
+    # Group by (asset_id, task_type, rule_index), find disagreements
+    grouped = (
+        qs.values("asset_id", "task_type", "rule_index")
+        .annotate(
+            total=Count("id"),
+            yes_count=Count("id", filter=Q(prompt_response="yes")),
+        )
+        .filter(total__gte=2)
+    )
+
+    already_adjudicated = set(
+        AdjudicationDecision.objects.values_list("asset_id", "task_type", "rule_index")
+    )
+
+    disagreements = []
+    for row in grouped:
+        key = (row["asset_id"], row["task_type"], row["rule_index"])
+        if key in already_adjudicated:
+            continue
+        total = row["total"]
+        yes = row["yes_count"]
+        no = total - yes
+        majority = max(yes, no)
+        agreement = majority / total
+        if agreement < threshold:
+            # Fetch image_link for display
+            asset = label_data_selected_assets_new.objects.filter(
+                asset_id=row["asset_id"]
+            ).values("image_link").first()
+
+            responses = list(
+                prompt_responses.objects.filter(
+                    asset_id=row["asset_id"],
+                    task_type=row["task_type"],
+                    rule_index=row["rule_index"],
+                ).values("labeler_id", "prompt_response", "datetime_created")
+            )
+
+            disagreements.append({
+                "asset_id": row["asset_id"],
+                "task_type": row["task_type"],
+                "rule_index": row["rule_index"],
+                "total_responses": total,
+                "yes_count": yes,
+                "no_count": no,
+                "agreement_pct": round(agreement * 100, 1),
+                "image_link": (asset or {}).get("image_link", ""),
+                "responses": [
+                    {"labeler_id": r["labeler_id"], "response": r["prompt_response"],
+                     "datetime": str(r["datetime_created"])}
+                    for r in responses
+                ],
+            })
+
+    disagreements.sort(key=lambda x: x["agreement_pct"])
+    total_count = len(disagreements)
+    start = (page - 1) * page_size
+    end = start + page_size
+
+    return JsonResponse({
+        "total": total_count,
+        "page": page,
+        "page_size": page_size,
+        "items": disagreements[start:end],
+    })
+
+
+@admin_required_ajax
+def admin_adjudicate_save(request):
+    """AJAX: save an adjudication decision."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    data = json.loads(request.body)
+    asset_id = data.get("asset_id")
+    task_type = data.get("task_type")
+    rule_index = data.get("rule_index")
+    decision = data.get("decision")
+    notes = data.get("notes", "")
+
+    if not all([asset_id, task_type, rule_index is not None, decision]):
+        return JsonResponse({"error": "asset_id, task_type, rule_index, decision required"}, status=400)
+
+    obj, created = AdjudicationDecision.objects.update_or_create(
+        asset_id=asset_id,
+        task_type=task_type,
+        rule_index=rule_index,
+        defaults={
+            "decided_by": request.user,
+            "decision": decision,
+            "notes": notes,
+        },
+    )
+
+    return JsonResponse({"status": "saved", "created": created, "id": obj.id})
+
+
+# ---------------------------------------------------------------------------
+# Admin: gold-standard import from reconciled labels
+# ---------------------------------------------------------------------------
+
+@admin_required_ajax
+def admin_import_gold(request):
+    """AJAX: import reconciled labels from assets_w_rule_labels as gold standards."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    from labeling_api.models import assets_w_rule_labels
+
+    data = json.loads(request.body)
+    task_type = data.get("task_type", "")
+    rule_index = data.get("rule_index")
+    min_agreement = float(data.get("min_agreement", 0.9))
+
+    qs = assets_w_rule_labels.objects.filter(percent_agree__gte=min_agreement)
+    if task_type:
+        qs = qs.filter(task_type=task_type)
+    if rule_index is not None:
+        qs = qs.filter(rule_index=int(rule_index))
+
+    created = 0
+    for row in qs:
+        correct = "yes" if row.label == 1 else "no"
+        _, was_created = GoldStandardLabel.objects.update_or_create(
+            asset_id=row.asset_id,
+            task_type=row.task_type,
+            rule_index=row.rule_index,
+            defaults={"correct_response": correct},
+        )
+        if was_created:
+            created += 1
+
+    return JsonResponse({"imported": created, "total_candidates": qs.count()})

@@ -1,0 +1,77 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+<div class="wf-page">
+    <h1>Earnings</h1>
+
+    <div class="wf-stats">
+        <div class="wf-stat">
+            <p class="label">Completed</p>
+            <p class="value">${{ completed_total }}</p>
+            <p class="sub">{{ completed_assignments|length }} batch{{ completed_assignments|length|pluralize:"es" }}</p>
+        </div>
+        <div class="wf-stat">
+            <p class="label">Pending (in progress)</p>
+            <p class="value">${{ pending_total }}</p>
+            <p class="sub">{{ pending_assignments|length }} batch{{ pending_assignments|length|pluralize:"es" }}</p>
+        </div>
+    </div>
+
+    {% if completed_assignments %}
+    <h2>Completed Batches</h2>
+    <table class="wf-table">
+        <thead>
+            <tr>
+                <th>Task</th>
+                <th>Rule</th>
+                <th>Batch / Sub</th>
+                <th>Payment</th>
+                <th>Completed</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for a in completed_assignments %}
+            <tr>
+                <td>{{ a.task_type }}</td>
+                <td>{{ a.rule_index }}</td>
+                <td>{{ a.batch_id }} / {{ a.large_sub_batch }}</td>
+                <td style="color:#a6e3a1;">${{ a.payment_amount }}</td>
+                <td>{{ a.completed_at|date:"M d, Y" }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    {% if pending_assignments %}
+    <h2>In Progress</h2>
+    <table class="wf-table">
+        <thead>
+            <tr>
+                <th>Task</th>
+                <th>Rule</th>
+                <th>Batch / Sub</th>
+                <th>Payment</th>
+                <th>Deadline</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for a in pending_assignments %}
+            <tr>
+                <td>{{ a.task_type }}</td>
+                <td>{{ a.rule_index }}</td>
+                <td>{{ a.batch_id }} / {{ a.large_sub_batch }}</td>
+                <td style="color:#f9e2af;">${{ a.payment_amount }}</td>
+                <td>{{ a.deadline|date:"M d, Y" }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <div style="margin-top:24px;">
+        <a href="/label_images/setup_session/" class="wf-btn wf-btn-primary">Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}

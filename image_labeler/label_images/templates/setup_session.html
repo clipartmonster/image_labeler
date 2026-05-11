@@ -6,7 +6,10 @@
 {% if not user_is_admin %}
 <!-- ===== LABELER VIEW ===== -->
 <div class='light container' style='padding:20px;'>
-    <h1 class='listing_info label' style='margin-bottom:20px;'>Your Assigned Batches</h1>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h1 class='listing_info label' style='margin:0;'>Your Assigned Batches</h1>
+        <a href="/label_images/earnings/" style="padding:8px 18px; background:#313244; color:#cdd6f4; border-radius:6px; text-decoration:none; font-family:Roboto; font-size:14px; border:1px solid #45475a;">Earnings</a>
+    </div>
 
     {% if not assignments %}
         <p style='color:#a0b8b8; font-family:Roboto;'>No batches assigned yet. Check back later.</p>
@@ -15,8 +18,14 @@
     <div style='display:flex; flex-wrap:wrap; gap:16px;'>
     {% for a in assignments %}
         <div class='batch indicator container' style='padding:16px; min-width:260px; border-radius:10px;
-            {% if a.deadline_status == "overdue" %}border:2px solid #e06060;
-            {% elif a.deadline_status == "urgent" %}border:2px solid #e0c060;
+            {% if a.deadline_status == "overdue" %}
+                {% if a.warning_severity == "high" %}border:3px solid #e06060; background:rgba(224,96,96,0.08);
+                {% elif a.warning_severity == "low" %}border:1px solid #e0a060;
+                {% else %}border:2px solid #e06060;{% endif %}
+            {% elif a.deadline_status == "urgent" %}
+                {% if a.warning_severity == "high" %}border:2px solid #e0c060; background:rgba(224,192,96,0.06);
+                {% elif a.warning_severity == "low" %}border:1px solid #e0c060;
+                {% else %}border:2px solid #e0c060;{% endif %}
             {% else %}border:1px solid #4a5a5a;{% endif %}'>
 
             <h2 style='font-family:Roboto; color:#d2e2e2; margin:0 0 6px;'>
@@ -55,6 +64,13 @@
 
 {% else %}
 <!-- ===== ADMIN VIEW ===== -->
+<div class="wf-nav" style="padding:12px 20px 0;">
+    <a href="/label_images/setup_session/" class="active">Session Setup</a>
+    <a href="/label_images/admin/labelers/">Labelers</a>
+    <a href="/label_images/admin/bulk_assign/">Bulk Assign</a>
+    <a href="/label_images/admin/performance/">Performance</a>
+    <a href="/label_images/admin/adjudication/">Adjudication</a>
+</div>
 <div class = 'light container'>
 
         <div id = selected_options 
@@ -177,15 +193,6 @@
                                             </div>
                                         </div>
 
-                                        <div style='display:flex; gap:6px;'>
-                                            <div class = view_button  >
-                                                <h1 class = 'option title'>V</h1> 
-                                            </div>
-                                            <div class='view_button' style='background:#cba6f7; cursor:pointer;'
-                                                 onclick="openAssignModal('{{selected_options.task_type}}', '{{sub_batch.rule_index}}', '{{sub_batch.batch_id}}', '{{sub_batch.large_sub_batch}}')">
-                                                <h1 class='option title' style='color:#1e1e2e;'>A</h1>
-                                            </div>
-                                        </div>
                                         
 
                                 </div>
@@ -326,31 +333,51 @@
 <!-- ===== Assign Batch Modal (Admin only) ===== -->
 <div id="assign_batch_modal_overlay"
      style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:1001; align-items:center; justify-content:center;">
-    <div style="background:#1e1e2e; border-radius:12px; padding:28px 32px; width:400px; max-width:95vw; color:#cdd6f4; font-family:Roboto; position:relative;">
+    <div style="background:#1e1e2e; border-radius:12px; padding:28px 32px; width:440px; max-width:95vw; color:#cdd6f4; font-family:Roboto; position:relative;">
         <button onclick="document.getElementById('assign_batch_modal_overlay').style.display='none'"
                 style="position:absolute; top:12px; right:16px; background:none; border:none; color:#cdd6f4; font-size:1.4rem; cursor:pointer;">&#x2715;</button>
         <h2 style="margin:0 0 18px; font-size:1.1rem; color:#cba6f7;">Assign Batch to Labeler</h2>
         <form id="assign_batch_form" method="post" action="/label_images/assign_batch/">
             {% csrf_token %}
-            <input type="hidden" name="task_type" id="assign_task_type">
-            <input type="hidden" name="rule_index" id="assign_rule_index">
-            <input type="hidden" name="batch_id" id="assign_batch_id">
-            <input type="hidden" name="large_sub_batch" id="assign_large_sub_batch">
 
-            <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Labeler</label>
-            <select name="labeler_username" style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #7f849c; background:#313244; color:#cdd6f4; font-size:.85rem; margin-bottom:12px;">
+            <label class="assign-label">Task Type</label>
+            <select name="task_type" id="assign_task_type" class="assign-select" onchange="onAssignTaskTypeChange()">
+                <option value="">-- select --</option>
+                {% for tt in session_options.task_types %}
+                <option value="{{ tt.task_type }}">{{ tt.task_type }}</option>
+                {% endfor %}
+            </select>
+
+            <label class="assign-label">Rule</label>
+            <select name="rule_index" id="assign_rule_index" class="assign-select" onchange="onAssignRuleChange()">
+                <option value="">-- select task type first --</option>
+            </select>
+            <p id="assign_rule_name" style="margin:0 0 12px; font-size:.8rem; color:#a6e3a1; min-height:1.2em;"></p>
+
+            <label class="assign-label">Batch</label>
+            <select name="batch_id" id="assign_batch_id" class="assign-select" onchange="onAssignBatchChange()">
+                <option value="">-- select rule first --</option>
+            </select>
+
+            <label class="assign-label">Sub-batch</label>
+            <select name="large_sub_batch" id="assign_large_sub_batch" class="assign-select">
+                <option value="">-- select batch first --</option>
+            </select>
+
+            <label class="assign-label">Labeler</label>
+            <select name="labeler_username" class="assign-select">
                 {% for lu in labeler_users %}
                 <option value="{{ lu }}">{{ lu }}</option>
                 {% endfor %}
             </select>
 
-            <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Payment ($)</label>
+            <label class="assign-label">Payment ($)</label>
             <input type="number" name="payment_amount" step="0.01" value="{{ default_pay }}"
-                   style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #7f849c; background:#313244; color:#cdd6f4; font-size:.85rem; margin-bottom:12px; box-sizing:border-box;">
+                   class="assign-select" style="margin-bottom:12px; box-sizing:border-box;">
 
-            <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Deadline</label>
+            <label class="assign-label">Deadline</label>
             <input type="date" name="deadline"
-                   style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #7f849c; background:#313244; color:#cdd6f4; font-size:.85rem; margin-bottom:16px; box-sizing:border-box;">
+                   class="assign-select" style="margin-bottom:16px; box-sizing:border-box;">
 
             <button type="submit"
                     style="width:100%; padding:10px; border-radius:8px; border:none; background:#cba6f7; color:#1e1e2e; font-weight:700; font-size:.9rem; cursor:pointer;">
@@ -360,13 +387,93 @@
     </div>
 </div>
 
+<style>
+.assign-label { display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px; }
+.assign-select { width:100%; padding:7px 10px; border-radius:6px; border:1px solid #7f849c; background:#313244; color:#cdd6f4; font-size:.85rem; margin-bottom:12px; }
+</style>
+
 <script>
+var _assignRules = {{ assign_rules_json|safe }};
+var _assignSubBatches = {{ assign_sub_batches_json|safe }};
+
 function openAssignModal(taskType, ruleIndex, batchId, largeSubBatch) {
-    document.getElementById('assign_task_type').value = taskType;
-    document.getElementById('assign_rule_index').value = ruleIndex;
-    document.getElementById('assign_batch_id').value = batchId;
-    document.getElementById('assign_large_sub_batch').value = largeSubBatch;
+    if (taskType) {
+        document.getElementById('assign_task_type').value = taskType;
+        onAssignTaskTypeChange();
+        if (ruleIndex) {
+            document.getElementById('assign_rule_index').value = ruleIndex;
+            onAssignRuleChange();
+            if (batchId) {
+                document.getElementById('assign_batch_id').value = batchId;
+                onAssignBatchChange();
+                if (largeSubBatch) {
+                    document.getElementById('assign_large_sub_batch').value = largeSubBatch;
+                }
+            }
+        }
+    }
     document.getElementById('assign_batch_modal_overlay').style.display = 'flex';
+}
+
+function onAssignTaskTypeChange() {
+    var tt = document.getElementById('assign_task_type').value;
+    var ruleSel = document.getElementById('assign_rule_index');
+    var ruleName = document.getElementById('assign_rule_name');
+    ruleSel.innerHTML = '<option value="">-- select --</option>';
+    ruleName.textContent = '';
+    document.getElementById('assign_batch_id').innerHTML = '<option value="">-- select rule first --</option>';
+    document.getElementById('assign_large_sub_batch').innerHTML = '<option value="">-- select batch first --</option>';
+
+    var seen = {};
+    _assignRules.forEach(function(r) {
+        if (r.task_type === tt && !seen[r.rule_index]) {
+            seen[r.rule_index] = r.title || '';
+            var opt = document.createElement('option');
+            opt.value = r.rule_index;
+            opt.textContent = 'Rule ' + r.rule_index + (r.title ? ' — ' + r.title : '');
+            ruleSel.appendChild(opt);
+        }
+    });
+}
+
+function onAssignRuleChange() {
+    var tt = document.getElementById('assign_task_type').value;
+    var ri = document.getElementById('assign_rule_index').value;
+    var ruleName = document.getElementById('assign_rule_name');
+    var batchSel = document.getElementById('assign_batch_id');
+    batchSel.innerHTML = '<option value="">-- select --</option>';
+    document.getElementById('assign_large_sub_batch').innerHTML = '<option value="">-- select batch first --</option>';
+
+    var rule = _assignRules.find(function(r) { return r.task_type === tt && String(r.rule_index) === ri; });
+    ruleName.textContent = rule && rule.title ? rule.title : '';
+
+    var seen = {};
+    _assignSubBatches.forEach(function(sb) {
+        if (sb.task_type === tt && String(sb.rule_index) === ri && !seen[sb.batch_id]) {
+            seen[sb.batch_id] = true;
+            var opt = document.createElement('option');
+            opt.value = sb.batch_id;
+            opt.textContent = 'Batch ' + sb.batch_id;
+            batchSel.appendChild(opt);
+        }
+    });
+}
+
+function onAssignBatchChange() {
+    var tt = document.getElementById('assign_task_type').value;
+    var ri = document.getElementById('assign_rule_index').value;
+    var bid = document.getElementById('assign_batch_id').value;
+    var subSel = document.getElementById('assign_large_sub_batch');
+    subSel.innerHTML = '<option value="">-- select --</option>';
+
+    _assignSubBatches.forEach(function(sb) {
+        if (sb.task_type === tt && String(sb.rule_index) === ri && String(sb.batch_id) === bid) {
+            var opt = document.createElement('option');
+            opt.value = sb.large_sub_batch;
+            opt.textContent = 'Sub-batch ' + sb.large_sub_batch;
+            subSel.appendChild(opt);
+        }
+    });
 }
 </script>
 
