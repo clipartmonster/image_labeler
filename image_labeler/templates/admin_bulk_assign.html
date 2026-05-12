@@ -8,7 +8,6 @@
         <a href="/label_images/admin/labelers/">Labelers</a>
         <a href="/label_images/admin/bulk_assign/" class="active">Bulk Assign</a>
         <a href="/label_images/admin/performance/">Performance</a>
-        <a href="/label_images/admin/adjudication/">Adjudication</a>
     </div>
 
     <h1>Bulk Batch Assignment</h1>
@@ -69,19 +68,27 @@
             <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Target Labelers</label>
             <input id="numLabelersInput" type="number" min="1" max="20" value="{{ default_num_labelers }}" class="wf-input" style="width:80px;">
         </div>
-        <div>
-            <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Warning Severity</label>
-            <select id="severityInput" class="wf-select">
-                <option value="low">Low</option>
-                <option value="medium" selected>Medium</option>
-                <option value="high">High</option>
-            </select>
-        </div>
         <button id="assignBtn" class="wf-btn wf-btn-primary" onclick="submitAssignments()" style="height:36px;">
             Assign Selected
         </button>
     </div>
     <p id="assignStatus" class="wf-muted" style="min-height:1.4em; margin-top:8px;"></p>
+
+    <!-- Existing assignments with removal -->
+    <div class="wf-section" style="margin-top:24px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <h2 style="margin:0;">Existing Assignments</h2>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <label class="wf-muted" style="font-size:.8rem;">Filter by labeler:</label>
+                <select id="existingLabelerFilter" class="wf-select" onchange="renderExisting()" style="width:160px;">
+                    <option value="">All</option>
+                </select>
+                <button id="removeBtn" class="wf-btn wf-btn-danger wf-btn-sm" onclick="removeSelected()" style="display:none;">Remove Selected</button>
+            </div>
+        </div>
+        <div id="existingContainer" style="margin-top:12px; max-height:400px; overflow-y:auto;"></div>
+        <p id="removeStatus" class="wf-muted" style="min-height:1.4em; margin-top:8px;"></p>
+    </div>
 </div>
 
 <script>
@@ -247,7 +254,6 @@ function submitAssignments() {
         payment_amount: document.getElementById('payInput').value,
         deadline: deadline,
         num_labelers_target: parseInt(document.getElementById('numLabelersInput').value),
-        deadline_warning_severity: document.getElementById('severityInput').value,
     };
 
     document.getElementById('assignBtn').disabled = true;
@@ -269,6 +275,88 @@ function submitAssignments() {
     });
 }
 
+var selectedRemove = new Set();
+
+function initExisting() {
+    var labelerSet = new Set();
+    _existing.forEach(function(e) { if (e.user__username) labelerSet.add(e.user__username); });
+    var sel = document.getElementById('existingLabelerFilter');
+    Array.from(labelerSet).sort().forEach(function(u) {
+        var o = document.createElement('option'); o.value = u; o.textContent = u; sel.appendChild(o);
+    });
+    renderExisting();
+}
+
+function renderExisting() {
+    var filter = document.getElementById('existingLabelerFilter').value;
+    var filtered = _existing.filter(function(e) { return !filter || e.user__username === filter; });
+    selectedRemove.clear();
+    var container = document.getElementById('existingContainer');
+
+    if (!filtered.length) {
+        container.innerHTML = '<p class="wf-muted">No assignments found.</p>';
+        document.getElementById('removeBtn').style.display = 'none';
+        return;
+    }
+
+    var html = '<table class="wf-table"><thead><tr>' +
+        '<th><input type="checkbox" id="selectAllExisting" onchange="toggleAllExisting(this.checked)"></th>' +
+        '<th>Labeler</th><th>Task Type</th><th>Rule</th><th>Batch</th><th>Sub</th><th>Payment</th><th>Deadline</th><th>Status</th>' +
+        '</tr></thead><tbody>';
+    filtered.forEach(function(e) {
+        var status = e.completed_at ? '<span class="wf-badge wf-badge-green">Done</span>' : '<span class="wf-badge wf-badge-gray">Active</span>';
+        var dl = e.deadline ? new Date(e.deadline).toLocaleDateString() : '';
+        html += '<tr><td><input type="checkbox" class="ex-cb" value="' + e.id + '" onchange="onExistingCheck()"></td>' +
+            '<td>' + (e.user__username || '') + '</td>' +
+            '<td>' + e.task_type + '</td>' +
+            '<td>' + e.rule_index + '</td>' +
+            '<td>' + e.batch_id + '</td>' +
+            '<td>' + e.large_sub_batch + '</td>' +
+            '<td>$' + e.payment_amount + '</td>' +
+            '<td>' + dl + '</td>' +
+            '<td>' + status + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+    document.getElementById('removeBtn').style.display = 'none';
+}
+
+function toggleAllExisting(checked) {
+    document.querySelectorAll('.ex-cb').forEach(function(cb) { cb.checked = checked; });
+    onExistingCheck();
+}
+
+function onExistingCheck() {
+    selectedRemove.clear();
+    document.querySelectorAll('.ex-cb:checked').forEach(function(cb) { selectedRemove.add(parseInt(cb.value)); });
+    document.getElementById('removeBtn').style.display = selectedRemove.size > 0 ? '' : 'none';
+}
+
+function removeSelected() {
+    if (!selectedRemove.size) return;
+    if (!confirm('Remove ' + selectedRemove.size + ' assignment(s)? This cannot be undone.')) return;
+
+    document.getElementById('removeBtn').disabled = true;
+    document.getElementById('removeStatus').textContent = 'Removing\u2026';
+
+    fetch('/label_images/admin/bulk_assign/remove/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({ids: Array.from(selectedRemove)}),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        document.getElementById('removeBtn').disabled = false;
+        if (data.error) { document.getElementById('removeStatus').style.color = '#bd4444'; document.getElementById('removeStatus').textContent = data.error; return; }
+        document.getElementById('removeStatus').style.color = '#5a8a5a';
+        document.getElementById('removeStatus').textContent = 'Removed ' + data.deleted + ' assignment(s).';
+        _existing = _existing.filter(function(e) { return !selectedRemove.has(e.id); });
+        selectedRemove.clear();
+        renderExisting();
+    });
+}
+
 init();
+initExisting();
 </script>
 {% endblock %}

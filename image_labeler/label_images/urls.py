@@ -40,11 +40,9 @@ urlpatterns = [
     path('admin/labelers/toggle_staff/', views.admin_toggle_staff, name='admin_toggle_staff'),
     path('admin/bulk_assign/', views.admin_bulk_assign, name='admin_bulk_assign'),
     path('admin/bulk_assign/save/', views.admin_bulk_assign_save, name='admin_bulk_assign_save'),
+    path('admin/bulk_assign/remove/', views.admin_remove_assignments, name='admin_remove_assignments'),
     path('admin/performance/', views.admin_performance, name='admin_performance'),
     path('admin/performance/data/', views.admin_performance_data, name='admin_performance_data'),
-    path('admin/adjudication/', views.admin_adjudication, name='admin_adjudication'),
-    path('admin/adjudication/list/', views.admin_adjudication_list, name='admin_adjudication_list'),
-    path('admin/adjudication/save/', views.admin_adjudicate_save, name='admin_adjudicate_save'),
     path('admin/import_gold/', views.admin_import_gold, name='admin_import_gold'),
     path('admin/subbatch_completion/', views.admin_subbatch_completion, name='admin_subbatch_completion'),
 ]

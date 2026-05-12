@@ -1,4 +1,4 @@
-"""Tests for workforce management: permissions, accuracy, agreement/adjudication."""
+"""Tests for workforce management: permissions, accuracy, is_staff filtering."""
 
 import json
 from datetime import timedelta
@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from .models import (
     BatchAssignment, LabelingSession,
-    GoldStandardLabel, AdjudicationDecision,
+    GoldStandardLabel,
 )
 
 
@@ -57,11 +57,6 @@ class PermissionTests(_UserMixin, TestCase):
     def test_admin_performance_forbidden_for_labeler(self):
         self.client.login(username="labeler1", password="pass1234")
         resp = self.client.get("/label_images/admin/performance/")
-        self.assertEqual(resp.status_code, 403)
-
-    def test_admin_adjudication_forbidden_for_labeler(self):
-        self.client.login(username="labeler1", password="pass1234")
-        resp = self.client.get("/label_images/admin/adjudication/")
         self.assertEqual(resp.status_code, 403)
 
     # --- Admin pages allow admins ---
@@ -206,123 +201,6 @@ class AccuracyComputationTests(_UserMixin, TestCase):
         self.assertEqual(total, 2)
         self.assertEqual(correct, 0)
         self.assertEqual(pct, 0.0)
-
-
-# ======================================================================
-# Agreement / adjudication logic
-# ======================================================================
-
-class AgreementAdjudicationTests(_UserMixin, TestCase):
-    """Test the disagreement detection logic and adjudication saves."""
-
-    def setUp(self):
-        self.admin = self._make_admin()
-        self.client = Client()
-
-    def _compute_agreement(self, responses_by_asset):
-        """Replicate disagreement detection from admin_adjudication_list.
-
-        `responses_by_asset` is a dict:
-            {(asset_id, task_type, rule_index): [response1, response2, ...]}
-        Returns list of disagreement dicts.
-        """
-        disagreements = []
-        for (asset_id, task_type, rule_index), responses in responses_by_asset.items():
-            total = len(responses)
-            if total < 2:
-                continue
-            yes_count = sum(1 for r in responses if r == "yes")
-            no_count = total - yes_count
-            majority = max(yes_count, no_count)
-            agreement = majority / total
-            if agreement < 1.0:
-                disagreements.append({
-                    "asset_id": asset_id,
-                    "task_type": task_type,
-                    "rule_index": rule_index,
-                    "yes_count": yes_count,
-                    "no_count": no_count,
-                    "agreement_pct": round(agreement * 100, 1),
-                })
-        return disagreements
-
-    def test_full_agreement_no_disagreement(self):
-        data = {
-            (1, "asset_type", 1): ["yes", "yes"],
-            (2, "asset_type", 1): ["no", "no"],
-        }
-        self.assertEqual(self._compute_agreement(data), [])
-
-    def test_simple_disagreement(self):
-        data = {
-            (1, "asset_type", 1): ["yes", "no"],
-        }
-        result = self._compute_agreement(data)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["asset_id"], 1)
-        self.assertEqual(result[0]["agreement_pct"], 50.0)
-
-    def test_three_labelers_majority(self):
-        data = {
-            (1, "asset_type", 1): ["yes", "yes", "no"],
-        }
-        result = self._compute_agreement(data)
-        self.assertEqual(len(result), 1)
-        self.assertAlmostEqual(result[0]["agreement_pct"], 66.7, places=1)
-
-    def test_single_response_ignored(self):
-        data = {
-            (1, "asset_type", 1): ["yes"],
-        }
-        self.assertEqual(self._compute_agreement(data), [])
-
-    def test_adjudication_save_creates_decision(self):
-        self.client.login(username="admin1", password="pass1234")
-        resp = self.client.post(
-            "/label_images/admin/adjudication/save/",
-            data=json.dumps({
-                "asset_id": 12345,
-                "task_type": "asset_type",
-                "rule_index": 1,
-                "decision": "yes",
-                "notes": "clearly a yes",
-            }),
-            content_type="application/json",
-        )
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertTrue(data["created"])
-
-        obj = AdjudicationDecision.objects.get(
-            asset_id=12345, task_type="asset_type", rule_index=1,
-        )
-        self.assertEqual(obj.decision, "yes")
-        self.assertEqual(obj.decided_by, self.admin)
-        self.assertEqual(obj.notes, "clearly a yes")
-
-    def test_adjudication_save_updates_existing(self):
-        AdjudicationDecision.objects.create(
-            asset_id=12345, task_type="asset_type", rule_index=1,
-            decided_by=self.admin, decision="no",
-        )
-        self.client.login(username="admin1", password="pass1234")
-        resp = self.client.post(
-            "/label_images/admin/adjudication/save/",
-            data=json.dumps({
-                "asset_id": 12345,
-                "task_type": "asset_type",
-                "rule_index": 1,
-                "decision": "yes",
-            }),
-            content_type="application/json",
-        )
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertFalse(data["created"])
-        obj = AdjudicationDecision.objects.get(
-            asset_id=12345, task_type="asset_type", rule_index=1,
-        )
-        self.assertEqual(obj.decision, "yes")
 
 
 # ======================================================================

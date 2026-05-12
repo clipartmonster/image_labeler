@@ -131,23 +131,3 @@ class GoldStandardLabel(models.Model):
     def __str__(self):
         return f"Gold {self.asset_id} {self.task_type}/r{self.rule_index}={self.correct_response}"
 
-
-
-# ---------------------------------------------------------------------------
-# Adjudication decisions on labeler disagreements
-# ---------------------------------------------------------------------------
-
-class AdjudicationDecision(models.Model):
-    asset_id = models.BigIntegerField()
-    task_type = models.CharField(max_length=100)
-    rule_index = models.IntegerField()
-    decided_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="adjudications")
-    decision = models.CharField(max_length=10)
-    decided_at = models.DateTimeField(auto_now_add=True)
-    notes = models.TextField(blank=True, default="")
-
-    class Meta:
-        unique_together = ("asset_id", "task_type", "rule_index")
-
-    def __str__(self):
-        return f"Adjudication {self.asset_id} {self.task_type}/r{self.rule_index}→{self.decision}"

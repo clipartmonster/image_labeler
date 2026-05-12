@@ -331,7 +331,6 @@ def setup_session(request):
                 "payment_amount": a.payment_amount,
                 "deadline": a.deadline,
                 "deadline_status": deadline_status,
-                "warning_severity": a.deadline_warning_severity,
                 "total": total,
                 "completed": completed,
                 "progress_pct": int((completed / total * 100) if total > 0 else 0),
@@ -1851,7 +1850,7 @@ def label_search_results(request):
 from .decorators import admin_required, labeler_required, admin_required_ajax
 from .models import (
     BatchAssignment, LabelingSession, GoldStandardLabel,
-    AdjudicationDecision, UserProfile,
+    UserProfile,
 )
 
 
@@ -1986,7 +1985,10 @@ def admin_bulk_assign(request):
 
     existing = list(
         BatchAssignment.objects
-        .values("user_id", "task_type", "rule_index", "batch_id", "large_sub_batch")
+        .select_related("user")
+        .values("id", "user_id", "user__username", "task_type", "rule_index",
+                "batch_id", "large_sub_batch", "payment_amount", "deadline",
+                "completed_at")
     )
 
     return render(request, "admin_bulk_assign.html", {
@@ -2016,7 +2018,6 @@ def admin_bulk_assign_save(request):
     payment = data.get("payment_amount", settings.LABELER_PAY_PER_BATCH)
     deadline_str = data.get("deadline")
     num_labelers = data.get("num_labelers_target", getattr(settings, "LABELER_DEFAULT_NUM_LABELERS", 2))
-    severity = data.get("deadline_warning_severity", getattr(settings, "LABELER_DEFAULT_DEADLINE_WARNING", "medium"))
 
     if not sub_batches or not labeler_ids or not deadline_str:
         return JsonResponse({"error": "sub_batches, labeler_ids, and deadline are required"}, status=400)
@@ -2046,7 +2047,6 @@ def admin_bulk_assign_save(request):
                     "payment_amount": payment,
                     "deadline": deadline_dt,
                     "num_labelers_target": num_labelers,
-                    "deadline_warning_severity": severity,
                 },
             )
             if was_created:
@@ -2055,6 +2055,19 @@ def admin_bulk_assign_save(request):
                 skipped += 1
 
     return JsonResponse({"created": created, "skipped": skipped})
+
+
+@admin_required_ajax
+def admin_remove_assignments(request):
+    """AJAX: delete BatchAssignment rows by ID."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    data = json.loads(request.body)
+    ids = data.get("ids", [])
+    if not ids:
+        return JsonResponse({"error": "No assignment IDs provided"}, status=400)
+    deleted, _ = BatchAssignment.objects.filter(id__in=ids).delete()
+    return JsonResponse({"deleted": deleted})
 
 
 # ---------------------------------------------------------------------------
@@ -2133,132 +2146,6 @@ def admin_performance_data(request):
         "on_time_count": on_time,
         "total_assignments": assignments.count(),
     })
-
-
-# ---------------------------------------------------------------------------
-# Admin: adjudication queue
-# ---------------------------------------------------------------------------
-
-@admin_required
-def admin_adjudication(request):
-    return render(request, "admin_adjudication.html", {
-        "threshold": getattr(settings, "LABELER_DISAGREEMENT_THRESHOLD", 1.0),
-    })
-
-
-@admin_required_ajax
-def admin_adjudication_list(request):
-    """AJAX: return assets with labeler disagreements that haven't been adjudicated."""
-    from labeling_api.models import prompt_responses, label_data_selected_assets_new
-
-    task_type = request.GET.get("task_type", "")
-    rule_index = request.GET.get("rule_index", "")
-    page = int(request.GET.get("page", 1))
-    page_size = 50
-
-    threshold = getattr(settings, "LABELER_DISAGREEMENT_THRESHOLD", 1.0)
-
-    qs = prompt_responses.objects.all()
-    if task_type:
-        qs = qs.filter(task_type=task_type)
-    if rule_index:
-        qs = qs.filter(rule_index=int(rule_index))
-
-    # Group by (asset_id, task_type, rule_index), find disagreements
-    grouped = (
-        qs.values("asset_id", "task_type", "rule_index")
-        .annotate(
-            total=Count("id"),
-            yes_count=Count("id", filter=Q(prompt_response="yes")),
-        )
-        .filter(total__gte=2)
-    )
-
-    already_adjudicated = set(
-        AdjudicationDecision.objects.values_list("asset_id", "task_type", "rule_index")
-    )
-
-    disagreements = []
-    for row in grouped:
-        key = (row["asset_id"], row["task_type"], row["rule_index"])
-        if key in already_adjudicated:
-            continue
-        total = row["total"]
-        yes = row["yes_count"]
-        no = total - yes
-        majority = max(yes, no)
-        agreement = majority / total
-        if agreement < threshold:
-            # Fetch image_link for display
-            asset = label_data_selected_assets_new.objects.filter(
-                asset_id=row["asset_id"]
-            ).values("image_link").first()
-
-            responses = list(
-                prompt_responses.objects.filter(
-                    asset_id=row["asset_id"],
-                    task_type=row["task_type"],
-                    rule_index=row["rule_index"],
-                ).values("labeler_id", "prompt_response", "datetime_created")
-            )
-
-            disagreements.append({
-                "asset_id": row["asset_id"],
-                "task_type": row["task_type"],
-                "rule_index": row["rule_index"],
-                "total_responses": total,
-                "yes_count": yes,
-                "no_count": no,
-                "agreement_pct": round(agreement * 100, 1),
-                "image_link": (asset or {}).get("image_link", ""),
-                "responses": [
-                    {"labeler_id": r["labeler_id"], "response": r["prompt_response"],
-                     "datetime": str(r["datetime_created"])}
-                    for r in responses
-                ],
-            })
-
-    disagreements.sort(key=lambda x: x["agreement_pct"])
-    total_count = len(disagreements)
-    start = (page - 1) * page_size
-    end = start + page_size
-
-    return JsonResponse({
-        "total": total_count,
-        "page": page,
-        "page_size": page_size,
-        "items": disagreements[start:end],
-    })
-
-
-@admin_required_ajax
-def admin_adjudicate_save(request):
-    """AJAX: save an adjudication decision."""
-    if request.method != "POST":
-        return JsonResponse({"error": "POST required"}, status=405)
-
-    data = json.loads(request.body)
-    asset_id = data.get("asset_id")
-    task_type = data.get("task_type")
-    rule_index = data.get("rule_index")
-    decision = data.get("decision")
-    notes = data.get("notes", "")
-
-    if not all([asset_id, task_type, rule_index is not None, decision]):
-        return JsonResponse({"error": "asset_id, task_type, rule_index, decision required"}, status=400)
-
-    obj, created = AdjudicationDecision.objects.update_or_create(
-        asset_id=asset_id,
-        task_type=task_type,
-        rule_index=rule_index,
-        defaults={
-            "decided_by": request.user,
-            "decision": decision,
-            "notes": notes,
-        },
-    )
-
-    return JsonResponse({"status": "saved", "created": created, "id": obj.id})
 
 
 # ---------------------------------------------------------------------------
