@@ -1996,7 +1996,6 @@ def admin_bulk_assign(request):
         "existing_json": json.dumps(existing, default=str),
         "default_pay": settings.LABELER_PAY_PER_BATCH,
         "default_num_labelers": getattr(settings, "LABELER_DEFAULT_NUM_LABELERS", 2),
-        "default_gold_pct": getattr(settings, "LABELER_DEFAULT_GOLD_PERCENTAGE", 5.0),
     })
 
 
@@ -2016,7 +2015,6 @@ def admin_bulk_assign_save(request):
     labeler_ids = data.get("labeler_ids", [])
     payment = data.get("payment_amount", settings.LABELER_PAY_PER_BATCH)
     deadline_str = data.get("deadline")
-    gold_pct = data.get("gold_percentage", getattr(settings, "LABELER_DEFAULT_GOLD_PERCENTAGE", 5.0))
     num_labelers = data.get("num_labelers_target", getattr(settings, "LABELER_DEFAULT_NUM_LABELERS", 2))
     severity = data.get("deadline_warning_severity", getattr(settings, "LABELER_DEFAULT_DEADLINE_WARNING", "medium"))
 
@@ -2047,7 +2045,6 @@ def admin_bulk_assign_save(request):
                 defaults={
                     "payment_amount": payment,
                     "deadline": deadline_dt,
-                    "gold_percentage": gold_pct,
                     "num_labelers_target": num_labelers,
                     "deadline_warning_severity": severity,
                 },

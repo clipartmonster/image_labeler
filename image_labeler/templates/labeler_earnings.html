@@ -19,43 +19,47 @@
     </div>
 
     {% if completed_assignments %}
-    <h2>Completed Batches</h2>
-    <table class="wf-table">
-        <thead>
-            <tr><th>Task</th><th>Rule</th><th>Batch / Sub</th><th>Payment</th><th>Completed</th></tr>
-        </thead>
-        <tbody>
-        {% for a in completed_assignments %}
-            <tr>
-                <td>{{ a.task_type }}</td>
-                <td>{{ a.rule_index }}</td>
-                <td>{{ a.batch_id }} / {{ a.large_sub_batch }}</td>
-                <td><strong style="color:#5a8a5a;">${{ a.payment_amount }}</strong></td>
-                <td>{{ a.completed_at|date:"M d, Y" }}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    <div class="wf-section">
+        <h2>Completed Batches</h2>
+        <table class="wf-table">
+            <thead>
+                <tr><th>Task</th><th>Rule</th><th>Batch / Sub</th><th>Payment</th><th>Completed</th></tr>
+            </thead>
+            <tbody>
+            {% for a in completed_assignments %}
+                <tr>
+                    <td>{{ a.task_type }}</td>
+                    <td>{{ a.rule_index }}</td>
+                    <td>{{ a.batch_id }} / {{ a.large_sub_batch }}</td>
+                    <td><strong style="color:#5a8a5a;">${{ a.payment_amount }}</strong></td>
+                    <td>{{ a.completed_at|date:"M d, Y" }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% endif %}
 
     {% if pending_assignments %}
-    <h2>In Progress</h2>
-    <table class="wf-table">
-        <thead>
-            <tr><th>Task</th><th>Rule</th><th>Batch / Sub</th><th>Payment</th><th>Deadline</th></tr>
-        </thead>
-        <tbody>
-        {% for a in pending_assignments %}
-            <tr>
-                <td>{{ a.task_type }}</td>
-                <td>{{ a.rule_index }}</td>
-                <td>{{ a.batch_id }} / {{ a.large_sub_batch }}</td>
-                <td><strong>${{ a.payment_amount }}</strong></td>
-                <td>{{ a.deadline|date:"M d, Y" }}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    <div class="wf-section">
+        <h2>In Progress</h2>
+        <table class="wf-table">
+            <thead>
+                <tr><th>Task</th><th>Rule</th><th>Batch / Sub</th><th>Payment</th><th>Deadline</th></tr>
+            </thead>
+            <tbody>
+            {% for a in pending_assignments %}
+                <tr>
+                    <td>{{ a.task_type }}</td>
+                    <td>{{ a.rule_index }}</td>
+                    <td>{{ a.batch_id }} / {{ a.large_sub_batch }}</td>
+                    <td><strong>${{ a.payment_amount }}</strong></td>
+                    <td>{{ a.deadline|date:"M d, Y" }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% endif %}
 
     <div style="margin-top:24px;">

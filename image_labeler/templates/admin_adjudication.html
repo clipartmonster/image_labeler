@@ -12,7 +12,7 @@
     </div>
 
     <h1>Disagreement Adjudication</h1>
-    <p style="font-size:.85rem; color:#6f7a7a; margin-bottom:18px;">
+    <p class="wf-muted" style="margin-bottom:18px;">
         Assets where labelers disagreed (agreement &lt; {{ threshold|floatformat:0 }}%). Review and decide the correct label.
     </p>
 
@@ -22,11 +22,13 @@
         <label>Rule Index</label>
         <input id="filterRI" type="number" class="wf-input" style="width:80px;">
         <button class="wf-btn wf-btn-primary wf-btn-sm" onclick="loadDisagreements(1)">Load</button>
-        <span id="totalCount" style="font-size:.85rem; color:#6f7a7a;"></span>
+        <span id="totalCount" class="wf-muted"></span>
     </div>
 
-    <div id="itemsContainer"></div>
-    <div id="pagination" style="display:flex; gap:10px; margin-top:14px;"></div>
+    <div class="wf-section">
+        <div id="itemsContainer"></div>
+        <div id="pagination" style="display:flex; gap:10px; margin-top:14px;"></div>
+    </div>
 </div>
 
 <script>
@@ -41,7 +43,7 @@ function loadDisagreements(page) {
     if (tt) url += '&task_type=' + encodeURIComponent(tt);
     if (ri) url += '&rule_index=' + ri;
 
-    document.getElementById('itemsContainer').innerHTML = '<p style="color:#6f7a7a;">Loading\u2026</p>';
+    document.getElementById('itemsContainer').innerHTML = '<p class="wf-muted">Loading\u2026</p>';
 
     fetch(url).then(function(r){return r.json();}).then(function(data) {
         document.getElementById('totalCount').textContent = data.total + ' disagreements';
@@ -62,7 +64,7 @@ function loadDisagreements(page) {
             var imgUrl = item.image_link || '';
             var imgTag = imgUrl
                 ? '<img src="' + imgUrl + '" alt="asset ' + item.asset_id + '">'
-                : '<div style="width:140px;height:140px;background:#a9b9b9;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#6f7a7a;">No image</div>';
+                : '<div style="width:140px;height:140px;background:#c8d2d2;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#6f7a7a;">No image</div>';
 
             var rows = '';
             item.responses.forEach(function(r) {

@@ -12,7 +12,7 @@
     </div>
 
     <h1>Bulk Batch Assignment</h1>
-    <p style="font-size:.85rem; color:#6f7a7a; margin-bottom:18px;">
+    <p class="wf-muted" style="margin-bottom:18px;">
         Select sub-batches and labelers, then assign all combinations at once.
         <span class="wf-kbd">Space</span> toggles,
         <span class="wf-kbd">&#8593;/&#8595;</span> navigate,
@@ -39,40 +39,38 @@
         </label>
     </div>
 
-    <div style="display:flex; gap:20px; flex-wrap:wrap;">
-        <!-- Left: sub-batches -->
-        <div style="flex:1; min-width:320px;">
-            <h2>Sub-batches <span id="sbCount" style="font-weight:400; font-size:.8rem; color:#6f7a7a;"></span></h2>
-            <div class="wf-panel" id="sbPanel" tabindex="0"></div>
-        </div>
+    <div class="wf-section">
+        <div style="display:flex; gap:20px; flex-wrap:wrap;">
+            <!-- Left: sub-batches -->
+            <div style="flex:1; min-width:320px;">
+                <h2>Sub-batches <span id="sbCount" style="font-weight:400; font-size:.8rem; color:#6f7a7a;"></span></h2>
+                <div class="wf-panel" id="sbPanel" tabindex="0"></div>
+            </div>
 
-        <!-- Right: labelers -->
-        <div style="flex:1; min-width:260px;">
-            <h2>Labelers <span id="labelerCount" style="font-weight:400; font-size:.8rem; color:#6f7a7a;"></span></h2>
-            <div class="wf-panel" id="labelerPanel" tabindex="0"></div>
+            <!-- Right: labelers -->
+            <div style="flex:1; min-width:260px;">
+                <h2>Labelers <span id="labelerCount" style="font-weight:400; font-size:.8rem; color:#6f7a7a;"></span></h2>
+                <div class="wf-panel" id="labelerPanel" tabindex="0"></div>
+            </div>
         </div>
     </div>
 
     <!-- Assignment options -->
-    <div class="wf-card" style="margin-top:18px; display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end;">
+    <div class="wf-card" style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end;">
         <div>
-            <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Payment ($)</label>
+            <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Payment ($)</label>
             <input id="payInput" type="number" step="0.01" value="{{ default_pay }}" class="wf-input" style="width:100px;">
         </div>
         <div>
-            <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Deadline</label>
+            <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Deadline</label>
             <input id="deadlineInput" type="date" class="wf-input" style="width:160px;">
         </div>
         <div>
-            <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Gold %</label>
-            <input id="goldInput" type="number" step="0.5" min="0" max="100" value="{{ default_gold_pct }}" class="wf-input" style="width:80px;">
-        </div>
-        <div>
-            <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Target Labelers</label>
+            <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Target Labelers</label>
             <input id="numLabelersInput" type="number" min="1" max="20" value="{{ default_num_labelers }}" class="wf-input" style="width:80px;">
         </div>
         <div>
-            <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Warning Severity</label>
+            <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Warning Severity</label>
             <select id="severityInput" class="wf-select">
                 <option value="low">Low</option>
                 <option value="medium" selected>Medium</option>
@@ -83,7 +81,7 @@
             Assign Selected
         </button>
     </div>
-    <p id="assignStatus" style="font-size:.85rem; color:#5a8a5a; min-height:1.4em; margin-top:8px;"></p>
+    <p id="assignStatus" class="wf-muted" style="min-height:1.4em; margin-top:8px;"></p>
 </div>
 
 <script>
@@ -248,7 +246,6 @@ function submitAssignments() {
         labeler_ids: Array.from(selectedLabelers).map(Number),
         payment_amount: document.getElementById('payInput').value,
         deadline: deadline,
-        gold_percentage: parseFloat(document.getElementById('goldInput').value),
         num_labelers_target: parseInt(document.getElementById('numLabelersInput').value),
         deadline_warning_severity: document.getElementById('severityInput').value,
     };

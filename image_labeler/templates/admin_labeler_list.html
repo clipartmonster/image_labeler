@@ -31,45 +31,47 @@
         <button type="submit" class="wf-btn wf-btn-primary wf-btn-sm">Search</button>
     </form>
 
-    <table class="wf-table" id="labelerTable">
-        <thead>
-            <tr>
-                <th>Username</th>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Status</th>
-                <th>Assignments</th>
-                <th>Completed</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for l in labelers %}
-            <tr id="row-{{ l.id }}">
-                <td>{{ l.username }}</td>
-                <td>{{ l.full_name }}</td>
-                <td>{{ l.email }}</td>
-                <td>
-                    {% if l.is_staff %}
-                        <span class="wf-badge wf-badge-green">Real</span>
-                    {% else %}
-                        <span class="wf-badge wf-badge-gray">Test</span>
-                    {% endif %}
-                </td>
-                <td>{{ l.total_assignments }}</td>
-                <td>{{ l.completed_assignments }}</td>
-                <td>
-                    <button class="wf-btn wf-btn-sm {% if l.is_staff %}wf-btn-danger{% else %}wf-btn-success{% endif %}"
-                            onclick="toggleStaff({{ l.id }}, this)">
-                        {% if l.is_staff %}Mark Test{% else %}Mark Real{% endif %}
-                    </button>
-                </td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="7" style="color:#969d9d;">No labelers match filters.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    <div class="wf-section">
+        <table class="wf-table" id="labelerTable">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Assignments</th>
+                    <th>Completed</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for l in labelers %}
+                <tr id="row-{{ l.id }}">
+                    <td>{{ l.username }}</td>
+                    <td>{{ l.full_name }}</td>
+                    <td>{{ l.email }}</td>
+                    <td>
+                        {% if l.is_staff %}
+                            <span class="wf-badge wf-badge-green">Real</span>
+                        {% else %}
+                            <span class="wf-badge wf-badge-gray">Test</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ l.total_assignments }}</td>
+                    <td>{{ l.completed_assignments }}</td>
+                    <td>
+                        <button class="wf-btn wf-btn-sm {% if l.is_staff %}wf-btn-danger{% else %}wf-btn-success{% endif %}"
+                                onclick="toggleStaff({{ l.id }}, this)">
+                            {% if l.is_staff %}Mark Test{% else %}Mark Real{% endif %}
+                        </button>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="7" class="wf-muted">No labelers match filters.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <script>

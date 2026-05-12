@@ -56,25 +56,25 @@
         </div>
     </div>
 
-    <p id="perfStatus" style="font-size:.85rem; color:#6f7a7a; margin-top:12px;"></p>
+    <p id="perfStatus" class="wf-muted" style="margin-top:12px;"></p>
 
     <!-- Gold import section -->
-    <div class="wf-card" style="margin-top:28px;">
+    <div class="wf-section" style="margin-top:28px;">
         <h2>Import Gold-Standard Labels</h2>
-        <p style="font-size:.85rem; color:#6f7a7a; margin-bottom:12px;">
+        <p class="wf-muted" style="margin-bottom:12px;">
             Import reconciled labels (from <code>assets_w_rule_labels</code>) as gold-standard answers for accuracy scoring.
         </p>
         <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
             <div>
-                <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Task Type (optional)</label>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Task Type (optional)</label>
                 <input id="goldTaskType" class="wf-input" style="width:160px;" placeholder="e.g. asset_type">
             </div>
             <div>
-                <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Rule Index (optional)</label>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Rule Index (optional)</label>
                 <input id="goldRuleIndex" type="number" class="wf-input" style="width:80px;">
             </div>
             <div>
-                <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Min Agreement</label>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Min Agreement</label>
                 <input id="goldMinAgreement" type="number" step="0.05" min="0" max="1" value="0.9" class="wf-input" style="width:80px;">
             </div>
             <button class="wf-btn wf-btn-success" onclick="importGold()">Import</button>
