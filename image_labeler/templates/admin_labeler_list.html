@@ -66,7 +66,7 @@
                 </td>
             </tr>
         {% empty %}
-            <tr><td colspan="7" style="color:#a6adc8;">No labelers match filters.</td></tr>
+            <tr><td colspan="7" style="color:#969d9d;">No labelers match filters.</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -79,27 +79,19 @@ function toggleStaff(userId, btn) {
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
         body: JSON.stringify({user_id: userId}),
     })
-    .then(r => r.json())
-    .then(data => {
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
         if (data.error) { alert(data.error); return; }
         var badge = btn.closest('tr').querySelector('.wf-badge');
         if (data.is_staff) {
-            badge.className = 'wf-badge wf-badge-green';
-            badge.textContent = 'Real';
-            btn.textContent = 'Mark Test';
-            btn.className = 'wf-btn wf-btn-sm wf-btn-danger';
+            badge.className = 'wf-badge wf-badge-green'; badge.textContent = 'Real';
+            btn.textContent = 'Mark Test'; btn.className = 'wf-btn wf-btn-sm wf-btn-danger';
         } else {
-            badge.className = 'wf-badge wf-badge-gray';
-            badge.textContent = 'Test';
-            btn.textContent = 'Mark Real';
-            btn.className = 'wf-btn wf-btn-sm wf-btn-success';
+            badge.className = 'wf-badge wf-badge-gray'; badge.textContent = 'Test';
+            btn.textContent = 'Mark Real'; btn.className = 'wf-btn wf-btn-sm wf-btn-success';
         }
     });
 }
-
-function getCsrfToken() {
-    var c = document.cookie.match(/csrftoken=([^;]+)/);
-    return c ? c[1] : '';
-}
+function getCsrfToken() { var c = document.cookie.match(/csrftoken=([^;]+)/); return c ? c[1] : ''; }
 </script>
 {% endblock %}

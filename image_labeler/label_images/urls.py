@@ -46,5 +46,6 @@ urlpatterns = [
     path('admin/adjudication/list/', views.admin_adjudication_list, name='admin_adjudication_list'),
     path('admin/adjudication/save/', views.admin_adjudicate_save, name='admin_adjudicate_save'),
     path('admin/import_gold/', views.admin_import_gold, name='admin_import_gold'),
+    path('admin/subbatch_completion/', views.admin_subbatch_completion, name='admin_subbatch_completion'),
 ]
 

@@ -21,13 +21,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 def is_admin(request):
-    """Return True if the logged-in user has the admin role."""
+    """Return True if the logged-in user is a superuser (admin)."""
     if not request.user.is_authenticated:
         return False
-    profile = getattr(request.user, "profile", None)
-    if profile is None:
-        return request.user.is_superuser
-    return profile.role == "admin" or request.user.is_superuser
+    return request.user.is_superuser
 
 
 @login_required
@@ -257,7 +254,7 @@ def setup_session(request):
 
         from django.contrib.auth.models import User
         from labeling_api.models import labelling_rules, label_data_selected_assets_new
-        labeler_users = User.objects.filter(profile__role="labeler").values_list("username", flat=True)
+        labeler_users = User.objects.filter(is_staff=True, is_superuser=False).values_list("username", flat=True)
 
         all_rules = list(labelling_rules.objects.exclude(task_type="color_type")
                          .values("task_type", "rule_index", "title")
@@ -1893,7 +1890,7 @@ def admin_labeler_list(request):
     status_filter = request.GET.get("status", "real")
     show_test = request.GET.get("show_test", "0") == "1"
 
-    qs = User.objects.filter(profile__role="labeler").select_related("profile")
+    qs = User.objects.filter(is_superuser=False)
 
     if search:
         qs = qs.filter(Q(username__icontains=search) | Q(email__icontains=search)
@@ -1950,7 +1947,7 @@ def admin_toggle_staff(request):
     data = json.loads(request.body)
     user_id = data.get("user_id")
     try:
-        user = User.objects.get(pk=user_id, profile__role="labeler")
+        user = User.objects.get(pk=user_id, is_superuser=False)
     except User.DoesNotExist:
         return JsonResponse({"error": "labeler not found"}, status=404)
 
@@ -1969,8 +1966,7 @@ def admin_bulk_assign(request):
     from labeling_api.models import label_data_selected_assets_new, labelling_rules
 
     labeler_users = list(
-        User.objects.filter(profile__role="labeler")
-        .filter(Q(is_staff=True) | Q(is_superuser=True))
+        User.objects.filter(is_staff=True, is_superuser=False)
         .order_by("username")
         .values("id", "username")
     )
@@ -2073,8 +2069,7 @@ def admin_performance(request):
     from django.contrib.auth.models import User
 
     labelers = list(
-        User.objects.filter(profile__role="labeler")
-        .filter(Q(is_staff=True) | Q(is_superuser=True))
+        User.objects.filter(is_staff=True, is_superuser=False)
         .order_by("username")
         .values("id", "username")
     )
@@ -2305,3 +2300,46 @@ def admin_import_gold(request):
             created += 1
 
     return JsonResponse({"imported": created, "total_candidates": qs.count()})
+
+
+# ---------------------------------------------------------------------------
+# Admin: sub-batch completion stats (AJAX, scoped by task_type for speed)
+# ---------------------------------------------------------------------------
+
+@admin_required_ajax
+def admin_subbatch_completion(request):
+    """Return completion stats for sub-batches filtered by task_type."""
+    from labeling_api.models import label_data_selected_assets_new, prompt_responses
+    from collections import defaultdict
+
+    task_type = request.GET.get("task_type", "")
+    if not task_type:
+        return JsonResponse({"error": "task_type required"}, status=400)
+
+    # Assets with 2+ responses for this task_type
+    done_ids = set(
+        prompt_responses.objects
+        .filter(task_type=task_type)
+        .values("asset_id", "rule_index")
+        .annotate(cnt=Count("id"))
+        .filter(cnt__gte=2)
+        .values_list("asset_id", flat=True)
+    )
+
+    # Tally per sub-batch
+    stats = defaultdict(lambda: [0, 0])  # [total, done]
+    for row in (
+        label_data_selected_assets_new.objects
+        .filter(task_type=task_type)
+        .values_list("asset_id", "rule_index", "batch_id", "large_sub_batch")
+    ):
+        key = f"{task_type}|{row[1]}|{row[2]}|{row[3]}"
+        stats[key][0] += 1
+        if row[0] in done_ids:
+            stats[key][1] += 1
+
+    result = {}
+    for key, (total, done) in stats.items():
+        result[key] = {"total": total, "done": done, "complete": done >= total and total > 0}
+
+    return JsonResponse(result)

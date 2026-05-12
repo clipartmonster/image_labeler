@@ -12,9 +12,9 @@
     </div>
 
     <h1>Bulk Batch Assignment</h1>
-    <p style="font-size:.85rem; color:#a6adc8; margin-bottom:18px;">
+    <p style="font-size:.85rem; color:#6f7a7a; margin-bottom:18px;">
         Select sub-batches and labelers, then assign all combinations at once.
-        <span class="wf-kbd">Space</span> toggles selection,
+        <span class="wf-kbd">Space</span> toggles,
         <span class="wf-kbd">&#8593;/&#8595;</span> navigate,
         <span class="wf-kbd">Tab</span> switches panels.
     </p>
@@ -22,7 +22,7 @@
     <!-- Filters -->
     <div class="wf-filters">
         <label>Task Type</label>
-        <select id="filterTaskType" class="wf-select" onchange="applyFilters()">
+        <select id="filterTaskType" class="wf-select" onchange="onTaskTypeChange()">
             <option value="">All</option>
         </select>
         <label>Rule</label>
@@ -33,18 +33,22 @@
         <select id="filterBatch" class="wf-select" onchange="applyFilters()">
             <option value="">All</option>
         </select>
+        <label class="wf-toggle" style="margin-left:12px;">
+            <input type="checkbox" id="hideCompleted" onchange="applyFilters()">
+            Hide completed sub-batches
+        </label>
     </div>
 
     <div style="display:flex; gap:20px; flex-wrap:wrap;">
         <!-- Left: sub-batches -->
         <div style="flex:1; min-width:320px;">
-            <h2>Sub-batches <span id="sbCount" style="font-weight:400; font-size:.8rem; color:#a6adc8;"></span></h2>
+            <h2>Sub-batches <span id="sbCount" style="font-weight:400; font-size:.8rem; color:#6f7a7a;"></span></h2>
             <div class="wf-panel" id="sbPanel" tabindex="0"></div>
         </div>
 
         <!-- Right: labelers -->
         <div style="flex:1; min-width:260px;">
-            <h2>Labelers <span id="labelerCount" style="font-weight:400; font-size:.8rem; color:#a6adc8;"></span></h2>
+            <h2>Labelers <span id="labelerCount" style="font-weight:400; font-size:.8rem; color:#6f7a7a;"></span></h2>
             <div class="wf-panel" id="labelerPanel" tabindex="0"></div>
         </div>
     </div>
@@ -52,23 +56,23 @@
     <!-- Assignment options -->
     <div class="wf-card" style="margin-top:18px; display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end;">
         <div>
-            <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Payment ($)</label>
+            <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Payment ($)</label>
             <input id="payInput" type="number" step="0.01" value="{{ default_pay }}" class="wf-input" style="width:100px;">
         </div>
         <div>
-            <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Deadline</label>
+            <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Deadline</label>
             <input id="deadlineInput" type="date" class="wf-input" style="width:160px;">
         </div>
         <div>
-            <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Gold %</label>
+            <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Gold %</label>
             <input id="goldInput" type="number" step="0.5" min="0" max="100" value="{{ default_gold_pct }}" class="wf-input" style="width:80px;">
         </div>
         <div>
-            <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Target Labelers</label>
+            <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Target Labelers</label>
             <input id="numLabelersInput" type="number" min="1" max="20" value="{{ default_num_labelers }}" class="wf-input" style="width:80px;">
         </div>
         <div>
-            <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Warning Severity</label>
+            <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Warning Severity</label>
             <select id="severityInput" class="wf-select">
                 <option value="low">Low</option>
                 <option value="medium" selected>Medium</option>
@@ -79,7 +83,7 @@
             Assign Selected
         </button>
     </div>
-    <p id="assignStatus" style="font-size:.85rem; color:#a6e3a1; min-height:1.4em; margin-top:8px;"></p>
+    <p id="assignStatus" style="font-size:.85rem; color:#5a8a5a; min-height:1.4em; margin-top:8px;"></p>
 </div>
 
 <script>
@@ -87,56 +91,63 @@ var _subBatches = {{ sub_batches_json|safe }};
 var _labelers = {{ labeler_users_json|safe }};
 var _rules = {{ rules_json|safe }};
 var _existing = {{ existing_json|safe }};
+var _completionData = {};
 
 var selectedSB = new Set();
 var selectedLabelers = new Set();
 
-function getCsrfToken() {
-    var c = document.cookie.match(/csrftoken=([^;]+)/);
-    return c ? c[1] : '';
-}
-
+function getCsrfToken() { var c = document.cookie.match(/csrftoken=([^;]+)/); return c ? c[1] : ''; }
 function sbKey(sb) { return sb.task_type + '|' + sb.rule_index + '|' + sb.batch_id + '|' + sb.large_sub_batch; }
 
 function init() {
-    var ttSet = new Set(_subBatches.map(sb => sb.task_type));
+    var ttSet = new Set(_subBatches.map(function(sb) { return sb.task_type; }));
     var sel = document.getElementById('filterTaskType');
-    ttSet.forEach(tt => { var o = document.createElement('option'); o.value = tt; o.textContent = tt; sel.appendChild(o); });
+    ttSet.forEach(function(tt) { var o = document.createElement('option'); o.value = tt; o.textContent = tt; sel.appendChild(o); });
     applyFilters();
     renderLabelers();
-    setupKeyboard('sbPanel', selectedSB, 'sb');
-    setupKeyboard('labelerPanel', selectedLabelers, 'labeler');
+    setupKeyboard('sbPanel', selectedSB);
+    setupKeyboard('labelerPanel', selectedLabelers);
+}
+
+function onTaskTypeChange() {
+    var tt = document.getElementById('filterTaskType').value;
+    _completionData = {};
+    if (tt) {
+        fetch('/label_images/admin/subbatch_completion/?task_type=' + encodeURIComponent(tt))
+        .then(function(r) { return r.json(); })
+        .then(function(data) { _completionData = data; applyFilters(); });
+    }
+    applyFilters();
 }
 
 function applyFilters() {
     var tt = document.getElementById('filterTaskType').value;
     var ri = document.getElementById('filterRule').value;
     var bid = document.getElementById('filterBatch').value;
+    var hideComplete = document.getElementById('hideCompleted').checked;
 
-    // Populate rule filter
     var ruleSet = new Set();
-    _subBatches.forEach(sb => { if (!tt || sb.task_type === tt) ruleSet.add(String(sb.rule_index)); });
+    _subBatches.forEach(function(sb) { if (!tt || sb.task_type === tt) ruleSet.add(String(sb.rule_index)); });
     var ruleSel = document.getElementById('filterRule');
     var curRule = ruleSel.value;
     ruleSel.innerHTML = '<option value="">All</option>';
-    Array.from(ruleSet).sort((a,b) => a-b).forEach(r => {
+    Array.from(ruleSet).sort(function(a,b){return a-b;}).forEach(function(r) {
         var o = document.createElement('option'); o.value = r;
-        var title = (_rules.find(x => x.task_type === tt && String(x.rule_index) === r) || {}).title || '';
-        o.textContent = 'Rule ' + r + (title ? ' — ' + title : '');
+        var title = (_rules.find(function(x){return x.task_type===tt && String(x.rule_index)===r;}) || {}).title || '';
+        o.textContent = 'Rule ' + r + (title ? ' \u2014 ' + title : '');
         if (r === curRule) o.selected = true;
         ruleSel.appendChild(o);
     });
 
-    // Populate batch filter
     var batchSet = new Set();
-    _subBatches.forEach(sb => {
+    _subBatches.forEach(function(sb) {
         if ((!tt || sb.task_type === tt) && (!ri || String(sb.rule_index) === ri))
             batchSet.add(String(sb.batch_id));
     });
     var batchSel = document.getElementById('filterBatch');
     var curBatch = batchSel.value;
     batchSel.innerHTML = '<option value="">All</option>';
-    Array.from(batchSet).sort((a,b) => a-b).forEach(b => {
+    Array.from(batchSet).sort(function(a,b){return a-b;}).forEach(function(b) {
         var o = document.createElement('option'); o.value = b; o.textContent = 'Batch ' + b;
         if (b === curBatch) o.selected = true;
         batchSel.appendChild(o);
@@ -145,23 +156,33 @@ function applyFilters() {
     ri = document.getElementById('filterRule').value;
     bid = document.getElementById('filterBatch').value;
 
-    var filtered = _subBatches.filter(sb => {
+    var filtered = _subBatches.filter(function(sb) {
         if (tt && sb.task_type !== tt) return false;
         if (ri && String(sb.rule_index) !== ri) return false;
         if (bid && String(sb.batch_id) !== bid) return false;
+        if (hideComplete) {
+            var key = sb.task_type + '|' + sb.rule_index + '|' + sb.batch_id + '|' + sb.large_sub_batch;
+            var comp = _completionData[key];
+            if (comp && comp.complete) return false;
+        }
         return true;
     });
 
     var panel = document.getElementById('sbPanel');
     panel.innerHTML = '';
-    filtered.forEach(sb => {
+    filtered.forEach(function(sb) {
         var key = sbKey(sb);
+        var comp = _completionData[key];
+        var isComplete = comp && comp.complete;
         var div = document.createElement('div');
-        div.className = 'wf-panel-item' + (selectedSB.has(key) ? ' selected' : '');
+        div.className = 'wf-panel-item' + (selectedSB.has(key) ? ' selected' : '') + (isComplete ? ' completed' : '');
         div.dataset.key = key;
-        div.innerHTML = '<input type="checkbox" ' + (selectedSB.has(key) ? 'checked' : '') + '>'
-            + '<span>' + sb.task_type + ' / Rule ' + sb.rule_index + ' / Batch ' + sb.batch_id + ' / Sub ' + sb.large_sub_batch + '</span>';
-        div.onclick = function(e) {
+
+        var label = sb.task_type + ' / Rule ' + sb.rule_index + ' / Batch ' + sb.batch_id + ' / Sub ' + sb.large_sub_batch;
+        if (comp) label += '  (' + comp.done + '/' + comp.total + ')';
+
+        div.innerHTML = '<input type="checkbox" ' + (selectedSB.has(key) ? 'checked' : '') + '><span>' + label + '</span>';
+        div.onclick = function() {
             if (selectedSB.has(key)) { selectedSB.delete(key); } else { selectedSB.add(key); }
             div.classList.toggle('selected');
             div.querySelector('input').checked = selectedSB.has(key);
@@ -175,7 +196,7 @@ function applyFilters() {
 function renderLabelers() {
     var panel = document.getElementById('labelerPanel');
     panel.innerHTML = '';
-    _labelers.forEach(l => {
+    _labelers.forEach(function(l) {
         var div = document.createElement('div');
         div.className = 'wf-panel-item';
         div.dataset.key = String(l.id);
@@ -196,7 +217,7 @@ function updateCounts() {
     document.getElementById('labelerCount').textContent = '(' + selectedLabelers.size + ' selected)';
 }
 
-function setupKeyboard(panelId, selectedSet, type) {
+function setupKeyboard(panelId, selectedSet) {
     var panel = document.getElementById(panelId);
     var focusIdx = -1;
     panel.addEventListener('keydown', function(e) {
@@ -206,7 +227,7 @@ function setupKeyboard(panelId, selectedSet, type) {
         else if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); focusIdx = Math.max(focusIdx - 1, 0); }
         else if (e.key === ' ') { e.preventDefault(); if (focusIdx >= 0) items[focusIdx].click(); return; }
         else return;
-        items.forEach((it, i) => { it.style.outline = i === focusIdx ? '2px solid #89b4fa' : ''; });
+        items.forEach(function(it, i) { it.style.outline = i === focusIdx ? '2px solid #799494' : ''; });
         items[focusIdx].scrollIntoView({block: 'nearest'});
     });
 }
@@ -217,7 +238,7 @@ function submitAssignments() {
     if (!deadline) { alert('Set a deadline.'); return; }
 
     var sbList = [];
-    selectedSB.forEach(k => {
+    selectedSB.forEach(function(k) {
         var parts = k.split('|');
         sbList.push({task_type: parts[0], rule_index: parseInt(parts[1]), batch_id: parseInt(parts[2]), large_sub_batch: parseInt(parts[3])});
     });
@@ -233,18 +254,18 @@ function submitAssignments() {
     };
 
     document.getElementById('assignBtn').disabled = true;
-    document.getElementById('assignStatus').textContent = 'Assigning…';
+    document.getElementById('assignStatus').textContent = 'Assigning\u2026';
 
     fetch('/label_images/admin/bulk_assign/save/', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
         body: JSON.stringify(body),
     })
-    .then(r => r.json())
-    .then(data => {
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
         document.getElementById('assignBtn').disabled = false;
-        if (data.error) { document.getElementById('assignStatus').style.color = '#f38ba8'; document.getElementById('assignStatus').textContent = data.error; return; }
-        document.getElementById('assignStatus').style.color = '#a6e3a1';
+        if (data.error) { document.getElementById('assignStatus').style.color = '#bd4444'; document.getElementById('assignStatus').textContent = data.error; return; }
+        document.getElementById('assignStatus').style.color = '#5a8a5a';
         document.getElementById('assignStatus').textContent = 'Created ' + data.created + ' assignments (' + data.skipped + ' already existed).';
         selectedSB.clear(); selectedLabelers.clear();
         applyFilters(); renderLabelers();

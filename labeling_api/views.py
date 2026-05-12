@@ -1337,8 +1337,7 @@ def get_asset_batch(request: Request) -> JsonResponse:
 
     # Scoped visibility: labelers can only access their assigned batches.
     if hasattr(request, "user") and request.user.is_authenticated:
-        profile = getattr(request.user, "profile", None)
-        if profile and profile.role == "labeler":
+        if request.user.is_staff and not request.user.is_superuser:
             from label_images.models import BatchAssignment
             has_assignment = BatchAssignment.objects.filter(
                 user=request.user,

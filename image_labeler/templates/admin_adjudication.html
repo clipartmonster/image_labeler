@@ -12,7 +12,7 @@
     </div>
 
     <h1>Disagreement Adjudication</h1>
-    <p style="font-size:.85rem; color:#a6adc8; margin-bottom:18px;">
+    <p style="font-size:.85rem; color:#6f7a7a; margin-bottom:18px;">
         Assets where labelers disagreed (agreement &lt; {{ threshold|floatformat:0 }}%). Review and decide the correct label.
     </p>
 
@@ -22,21 +22,16 @@
         <label>Rule Index</label>
         <input id="filterRI" type="number" class="wf-input" style="width:80px;">
         <button class="wf-btn wf-btn-primary wf-btn-sm" onclick="loadDisagreements(1)">Load</button>
-        <span id="totalCount" style="font-size:.85rem; color:#a6adc8;"></span>
+        <span id="totalCount" style="font-size:.85rem; color:#6f7a7a;"></span>
     </div>
 
     <div id="itemsContainer"></div>
-
     <div id="pagination" style="display:flex; gap:10px; margin-top:14px;"></div>
 </div>
 
 <script>
 var _currentPage = 1;
-
-function getCsrfToken() {
-    var c = document.cookie.match(/csrftoken=([^;]+)/);
-    return c ? c[1] : '';
-}
+function getCsrfToken() { var c = document.cookie.match(/csrftoken=([^;]+)/); return c ? c[1] : ''; }
 
 function loadDisagreements(page) {
     _currentPage = page || 1;
@@ -46,15 +41,15 @@ function loadDisagreements(page) {
     if (tt) url += '&task_type=' + encodeURIComponent(tt);
     if (ri) url += '&rule_index=' + ri;
 
-    document.getElementById('itemsContainer').innerHTML = '<p style="color:#a6adc8;">Loading…</p>';
+    document.getElementById('itemsContainer').innerHTML = '<p style="color:#6f7a7a;">Loading\u2026</p>';
 
-    fetch(url).then(r => r.json()).then(function(data) {
+    fetch(url).then(function(r){return r.json();}).then(function(data) {
         document.getElementById('totalCount').textContent = data.total + ' disagreements';
         var container = document.getElementById('itemsContainer');
         container.innerHTML = '';
 
         if (!data.items.length) {
-            container.innerHTML = '<p style="color:#a6e3a1;">No disagreements found.</p>';
+            container.innerHTML = '<p style="color:#5a8a5a;">No disagreements found.</p>';
             document.getElementById('pagination').innerHTML = '';
             return;
         }
@@ -65,45 +60,45 @@ function loadDisagreements(page) {
             card.id = 'card-' + item.asset_id + '-' + item.task_type + '-' + item.rule_index;
 
             var imgUrl = item.image_link || '';
-            var imgTag = imgUrl ? '<img src="' + imgUrl + '" alt="asset ' + item.asset_id + '">' : '<div style="width:140px;height:140px;background:#313244;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#a6adc8;">No image</div>';
+            var imgTag = imgUrl
+                ? '<img src="' + imgUrl + '" alt="asset ' + item.asset_id + '">'
+                : '<div style="width:140px;height:140px;background:#a9b9b9;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#6f7a7a;">No image</div>';
 
-            var responsesHtml = '<table class="wf-table" style="margin:8px 0;"><thead><tr><th>Labeler</th><th>Response</th><th>Time</th></tr></thead><tbody>';
+            var rows = '';
             item.responses.forEach(function(r) {
-                var color = r.response === 'yes' ? '#a6e3a1' : '#f38ba8';
-                responsesHtml += '<tr><td>' + r.labeler_id + '</td><td style="color:' + color + ';">' + r.response + '</td><td style="font-size:.8rem;">' + (r.datetime || '') + '</td></tr>';
+                var color = r.response === 'yes' ? '#5a8a5a' : '#bd4444';
+                rows += '<tr><td>' + r.labeler_id + '</td><td style="color:'+color+';font-weight:600;">' + r.response + '</td><td style="font-size:.8rem;">' + (r.datetime||'') + '</td></tr>';
             });
-            responsesHtml += '</tbody></table>';
 
             card.innerHTML = imgTag +
                 '<div class="wf-asset-meta">' +
-                    '<p style="margin:0 0 4px; font-size:.9rem; font-weight:600;">Asset ' + item.asset_id + '</p>' +
-                    '<p style="margin:0 0 4px; font-size:.8rem; color:#a6adc8;">' + item.task_type + ' / Rule ' + item.rule_index + '</p>' +
-                    '<p style="margin:0 0 8px; font-size:.8rem;">' +
+                    '<p style="margin:0 0 4px;font-size:.9rem;font-weight:600;color:#3a4a4a;">Asset ' + item.asset_id + '</p>' +
+                    '<p style="margin:0 0 4px;font-size:.8rem;color:#6f7a7a;">' + item.task_type + ' / Rule ' + item.rule_index + '</p>' +
+                    '<p style="margin:0 0 8px;font-size:.8rem;">' +
                         '<span class="wf-badge wf-badge-green">' + item.yes_count + ' yes</span> ' +
                         '<span class="wf-badge wf-badge-red">' + item.no_count + ' no</span> ' +
                         '<span class="wf-badge wf-badge-gray">' + item.agreement_pct + '% agree</span>' +
                     '</p>' +
-                    responsesHtml +
-                    '<div style="display:flex; gap:8px; align-items:center; margin-top:8px;">' +
-                        '<button class="wf-btn wf-btn-success wf-btn-sm" onclick="adjudicate(' + item.asset_id + ',\'' + item.task_type + '\',' + item.rule_index + ',\'yes\',this)">Yes</button>' +
-                        '<button class="wf-btn wf-btn-danger wf-btn-sm" onclick="adjudicate(' + item.asset_id + ',\'' + item.task_type + '\',' + item.rule_index + ',\'no\',this)">No</button>' +
-                        '<input type="text" placeholder="Notes (optional)" class="wf-input" style="flex:1; font-size:.8rem;" id="notes-' + item.asset_id + '-' + item.rule_index + '">' +
+                    '<table class="wf-table" style="margin:8px 0;"><thead><tr><th>Labeler</th><th>Response</th><th>Time</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+                    '<div style="display:flex;gap:8px;align-items:center;margin-top:8px;">' +
+                        '<button class="wf-btn wf-btn-success wf-btn-sm" onclick="adjudicate('+item.asset_id+',\''+item.task_type+'\','+item.rule_index+',\'yes\',this)">Yes</button>' +
+                        '<button class="wf-btn wf-btn-danger wf-btn-sm" onclick="adjudicate('+item.asset_id+',\''+item.task_type+'\','+item.rule_index+',\'no\',this)">No</button>' +
+                        '<input type="text" placeholder="Notes (optional)" class="wf-input" style="flex:1;font-size:.8rem;" id="notes-'+item.asset_id+'-'+item.rule_index+'">' +
                     '</div>' +
                 '</div>';
             container.appendChild(card);
         });
 
-        // Pagination
         var pagDiv = document.getElementById('pagination');
         pagDiv.innerHTML = '';
         var totalPages = Math.ceil(data.total / data.page_size);
         for (var p = 1; p <= totalPages; p++) {
             var btn = document.createElement('button');
-            btn.className = 'wf-btn wf-btn-sm ' + (p === data.page ? 'wf-btn-primary' : '');
+            btn.className = 'wf-btn wf-btn-sm';
+            if (p === data.page) { btn.classList.add('wf-btn-primary'); }
+            else { btn.style.background = '#a9b9b9'; btn.style.color = '#596767'; }
             btn.textContent = p;
-            btn.style.background = p === data.page ? '' : '#313244';
-            btn.style.color = p === data.page ? '' : '#cdd6f4';
-            (function(pp) { btn.onclick = function() { loadDisagreements(pp); }; })(p);
+            (function(pp){btn.onclick = function(){loadDisagreements(pp);};})(p);
             pagDiv.appendChild(btn);
         }
     });
@@ -111,25 +106,21 @@ function loadDisagreements(page) {
 
 function adjudicate(assetId, taskType, ruleIndex, decision, btn) {
     var notesEl = document.getElementById('notes-' + assetId + '-' + ruleIndex);
-    var notes = notesEl ? notesEl.value : '';
-
     fetch('/label_images/admin/adjudication/save/', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
-        body: JSON.stringify({asset_id: assetId, task_type: taskType, rule_index: ruleIndex, decision: decision, notes: notes}),
+        body: JSON.stringify({asset_id: assetId, task_type: taskType, rule_index: ruleIndex, decision: decision, notes: notesEl ? notesEl.value : ''}),
     })
-    .then(r => r.json())
+    .then(function(r){return r.json();})
     .then(function(data) {
         if (data.error) { alert(data.error); return; }
         var card = document.getElementById('card-' + assetId + '-' + taskType + '-' + ruleIndex);
         if (card) {
-            card.style.opacity = '0.4';
-            card.style.pointerEvents = 'none';
+            card.style.opacity = '0.4'; card.style.pointerEvents = 'none';
             var badge = document.createElement('span');
             badge.className = 'wf-badge ' + (decision === 'yes' ? 'wf-badge-green' : 'wf-badge-red');
             badge.textContent = 'Decided: ' + decision;
-            badge.style.fontSize = '.9rem';
-            badge.style.marginLeft = '12px';
+            badge.style.fontSize = '.9rem'; badge.style.marginLeft = '12px';
             btn.parentElement.appendChild(badge);
         }
     });

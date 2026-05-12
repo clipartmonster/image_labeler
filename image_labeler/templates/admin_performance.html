@@ -56,71 +56,61 @@
         </div>
     </div>
 
-    <p id="perfStatus" style="font-size:.85rem; color:#a6adc8; margin-top:12px;"></p>
+    <p id="perfStatus" style="font-size:.85rem; color:#6f7a7a; margin-top:12px;"></p>
 
     <!-- Gold import section -->
     <div class="wf-card" style="margin-top:28px;">
         <h2>Import Gold-Standard Labels</h2>
-        <p style="font-size:.85rem; color:#a6adc8; margin-bottom:12px;">
+        <p style="font-size:.85rem; color:#6f7a7a; margin-bottom:12px;">
             Import reconciled labels (from <code>assets_w_rule_labels</code>) as gold-standard answers for accuracy scoring.
         </p>
         <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
             <div>
-                <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Task Type (optional)</label>
+                <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Task Type (optional)</label>
                 <input id="goldTaskType" class="wf-input" style="width:160px;" placeholder="e.g. asset_type">
             </div>
             <div>
-                <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Rule Index (optional)</label>
+                <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Rule Index (optional)</label>
                 <input id="goldRuleIndex" type="number" class="wf-input" style="width:80px;">
             </div>
             <div>
-                <label style="display:block; font-size:.8rem; color:#a6adc8; margin-bottom:4px;">Min Agreement</label>
+                <label style="display:block; font-size:.8rem; color:#596767; margin-bottom:4px;">Min Agreement</label>
                 <input id="goldMinAgreement" type="number" step="0.05" min="0" max="1" value="0.9" class="wf-input" style="width:80px;">
             </div>
             <button class="wf-btn wf-btn-success" onclick="importGold()">Import</button>
         </div>
-        <p id="goldStatus" style="font-size:.85rem; color:#a6e3a1; min-height:1.4em; margin-top:8px;"></p>
+        <p id="goldStatus" style="font-size:.85rem; color:#5a8a5a; min-height:1.4em; margin-top:8px;"></p>
     </div>
 </div>
 
 <script>
 var _labelers = {{ labelers_json|safe }};
-
 (function() {
     var sel = document.getElementById('labelerSelect');
     _labelers.forEach(function(l) {
-        var o = document.createElement('option');
-        o.value = l.id; o.textContent = l.username;
-        sel.appendChild(o);
+        var o = document.createElement('option'); o.value = l.id; o.textContent = l.username; sel.appendChild(o);
     });
 })();
 
-function getCsrfToken() {
-    var c = document.cookie.match(/csrftoken=([^;]+)/);
-    return c ? c[1] : '';
-}
+function getCsrfToken() { var c = document.cookie.match(/csrftoken=([^;]+)/); return c ? c[1] : ''; }
 
 function loadPerformance() {
     var uid = document.getElementById('labelerSelect').value;
     if (!uid) return;
-    document.getElementById('perfStatus').textContent = 'Loading…';
+    document.getElementById('perfStatus').textContent = 'Loading\u2026';
     document.getElementById('perfContent').style.display = 'none';
 
     fetch('/label_images/admin/performance/data/?user_id=' + uid)
-    .then(r => r.json())
-    .then(d => {
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
         document.getElementById('perfStatus').textContent = '';
         document.getElementById('perfContent').style.display = '';
-
-        document.getElementById('statThroughput').textContent = d.throughput_labels_per_hour != null ? d.throughput_labels_per_hour + '/hr' : '—';
+        document.getElementById('statThroughput').textContent = d.throughput_labels_per_hour != null ? d.throughput_labels_per_hour + '/hr' : '\u2014';
         document.getElementById('statThroughputSub').textContent = d.total_labels + ' labels in ' + d.total_hours + ' hrs';
-
-        document.getElementById('statAccuracy').textContent = d.accuracy_pct != null ? d.accuracy_pct + '%' : '—';
+        document.getElementById('statAccuracy').textContent = d.accuracy_pct != null ? d.accuracy_pct + '%' : '\u2014';
         document.getElementById('statAccuracySub').textContent = d.gold_correct + ' / ' + d.gold_total + ' gold items';
-
-        document.getElementById('statOntime').textContent = d.on_time_pct != null ? d.on_time_pct + '%' : '—';
+        document.getElementById('statOntime').textContent = d.on_time_pct != null ? d.on_time_pct + '%' : '\u2014';
         document.getElementById('statOntimeSub').textContent = d.on_time_count + ' / ' + d.total_completed + ' completed';
-
         document.getElementById('statLabels').textContent = d.total_labels;
         document.getElementById('statHours').textContent = d.total_hours;
         document.getElementById('statAssignments').textContent = d.total_assignments;
@@ -133,16 +123,16 @@ function importGold() {
         rule_index: document.getElementById('goldRuleIndex').value || null,
         min_agreement: document.getElementById('goldMinAgreement').value,
     };
-    document.getElementById('goldStatus').textContent = 'Importing…';
+    document.getElementById('goldStatus').textContent = 'Importing\u2026';
     fetch('/label_images/admin/import_gold/', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
         body: JSON.stringify(body),
     })
-    .then(r => r.json())
-    .then(d => {
-        if (d.error) { document.getElementById('goldStatus').style.color = '#f38ba8'; document.getElementById('goldStatus').textContent = d.error; return; }
-        document.getElementById('goldStatus').style.color = '#a6e3a1';
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.error) { document.getElementById('goldStatus').style.color = '#bd4444'; document.getElementById('goldStatus').textContent = d.error; return; }
+        document.getElementById('goldStatus').style.color = '#5a8a5a';
         document.getElementById('goldStatus').textContent = 'Imported ' + d.imported + ' new gold labels (' + d.total_candidates + ' candidates matched).';
     });
 }

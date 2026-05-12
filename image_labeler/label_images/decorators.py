@@ -4,21 +4,13 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden, JsonResponse
 
 
-def _get_role(user):
-    profile = getattr(user, "profile", None)
-    if profile is None:
-        return "admin" if user.is_superuser else None
-    return profile.role
-
-
 def admin_required(view_func):
-    """Allow only authenticated users with the *admin* role (or superuser)."""
+    """Allow only authenticated superusers (admins)."""
 
     @wraps(view_func)
     @login_required
     def _wrapped(request, *args, **kwargs):
-        role = _get_role(request.user)
-        if role == "admin" or request.user.is_superuser:
+        if request.user.is_superuser:
             return view_func(request, *args, **kwargs)
         return HttpResponseForbidden("Admin access required.")
 
@@ -26,13 +18,12 @@ def admin_required(view_func):
 
 
 def labeler_required(view_func):
-    """Allow only authenticated users with the *labeler* role."""
+    """Allow only authenticated staff users who are not superusers (labelers)."""
 
     @wraps(view_func)
     @login_required
     def _wrapped(request, *args, **kwargs):
-        role = _get_role(request.user)
-        if role == "labeler":
+        if request.user.is_staff and not request.user.is_superuser:
             return view_func(request, *args, **kwargs)
         return HttpResponseForbidden("Labeler access required.")
 
@@ -45,8 +36,7 @@ def admin_required_ajax(view_func):
     @wraps(view_func)
     @login_required
     def _wrapped(request, *args, **kwargs):
-        role = _get_role(request.user)
-        if role == "admin" or request.user.is_superuser:
+        if request.user.is_superuser:
             return view_func(request, *args, **kwargs)
         return JsonResponse({"error": "admin access required"}, status=403)
 

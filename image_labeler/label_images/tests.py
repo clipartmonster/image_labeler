@@ -9,7 +9,7 @@ from django.test import TestCase, Client, override_settings
 from django.utils import timezone
 
 from .models import (
-    UserProfile, BatchAssignment, LabelingSession,
+    BatchAssignment, LabelingSession,
     GoldStandardLabel, AdjudicationDecision,
 )
 
@@ -19,7 +19,6 @@ class _UserMixin:
 
     def _make_admin(self, username="admin1"):
         user = User.objects.create_user(username=username, password="pass1234")
-        UserProfile.objects.create(user=user, role="admin", must_change_password=False)
         user.is_superuser = True
         user.is_staff = True
         user.save()
@@ -27,7 +26,6 @@ class _UserMixin:
 
     def _make_labeler(self, username="labeler1", is_staff=True):
         user = User.objects.create_user(username=username, password="pass1234")
-        UserProfile.objects.create(user=user, role="labeler", must_change_password=False)
         user.is_staff = is_staff
         user.save()
         return user
@@ -338,8 +336,8 @@ class StaffFilterTests(_UserMixin, TestCase):
         test = self._make_labeler("test_labeler", is_staff=False)
 
         real_qs = User.objects.filter(
-            profile__role="labeler",
-        ).filter(is_staff=True)
+            is_staff=True, is_superuser=False,
+        )
 
         self.assertIn(real, real_qs)
         self.assertNotIn(test, real_qs)
@@ -349,7 +347,7 @@ class StaffFilterTests(_UserMixin, TestCase):
         test = self._make_labeler("test_labeler", is_staff=False)
 
         test_qs = User.objects.filter(
-            profile__role="labeler", is_staff=False, is_superuser=False,
+            is_staff=False, is_superuser=False,
         )
 
         self.assertIn(test, test_qs)
