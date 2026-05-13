@@ -1955,6 +1955,37 @@ def admin_toggle_staff(request):
     return JsonResponse({"user_id": user.id, "is_staff": user.is_staff})
 
 
+@admin_required_ajax
+def admin_create_labeler(request):
+    """AJAX: create a new labeler User account."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    from django.contrib.auth.models import User
+
+    data = json.loads(request.body)
+    username = (data.get("username") or "").strip()
+    email = (data.get("email") or "").strip()
+    password = (data.get("password") or "").strip()
+
+    if not username or not password:
+        return JsonResponse({"error": "Username and password are required."}, status=400)
+    if len(password) < 8:
+        return JsonResponse({"error": "Password must be at least 8 characters."}, status=400)
+    if User.objects.filter(username=username).exists():
+        return JsonResponse({"error": f"Username '{username}' already exists."}, status=400)
+
+    user = User.objects.create_user(username=username, email=email, password=password)
+    user.is_staff = True
+    user.save(update_fields=["is_staff"])
+
+    return JsonResponse({
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_staff": user.is_staff,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Admin: bulk batch assignment
 # ---------------------------------------------------------------------------

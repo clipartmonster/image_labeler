@@ -10,7 +10,30 @@
         <a href="/label_images/admin/performance/">Performance</a>
     </div>
 
-    <h1>Labelers</h1>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <h1 style="margin:0;">Labelers</h1>
+        <button class="wf-btn wf-btn-primary wf-btn-sm" onclick="document.getElementById('createLabelerSection').style.display = document.getElementById('createLabelerSection').style.display === 'none' ? '' : 'none'">+ New Labeler</button>
+    </div>
+
+    <div id="createLabelerSection" class="wf-card" style="display:none; margin-top:12px;">
+        <h2 style="margin-top:0;">Create Labeler</h2>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Username</label>
+                <input id="newUsername" class="wf-input" style="width:160px;" placeholder="e.g. jsmith">
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Email (optional)</label>
+                <input id="newEmail" type="email" class="wf-input" style="width:200px;" placeholder="labeler@example.com">
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Temporary Password</label>
+                <input id="newPassword" type="text" class="wf-input" style="width:160px;" placeholder="min 8 chars">
+            </div>
+            <button class="wf-btn wf-btn-success" onclick="createLabeler()">Create</button>
+        </div>
+        <p id="createStatus" class="wf-muted" style="min-height:1.4em; margin-top:8px;"></p>
+    </div>
 
     <form method="get" class="wf-filters" id="filterForm">
         <input type="text" name="search" value="{{ search }}" placeholder="Search name / email…" class="wf-input" style="width:240px;">
@@ -94,5 +117,38 @@ function toggleStaff(userId, btn) {
     });
 }
 function getCsrfToken() { var c = document.cookie.match(/csrftoken=([^;]+)/); return c ? c[1] : ''; }
+
+function createLabeler() {
+    var username = document.getElementById('newUsername').value.trim();
+    var email = document.getElementById('newEmail').value.trim();
+    var password = document.getElementById('newPassword').value.trim();
+    var status = document.getElementById('createStatus');
+
+    if (!username || !password) { status.style.color = '#bd4444'; status.textContent = 'Username and password are required.'; return; }
+    status.style.color = '#6f7a7a'; status.textContent = 'Creating\u2026';
+
+    fetch('/label_images/admin/labelers/create/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({username: username, email: email, password: password}),
+    })
+    .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+    .then(function(res) {
+        if (!res.ok) { status.style.color = '#bd4444'; status.textContent = res.data.error || 'Failed.'; return; }
+        status.style.color = '#5a8a5a';
+        status.textContent = 'Created "' + res.data.username + '". They will be prompted to set their own password on first login.';
+        document.getElementById('newUsername').value = '';
+        document.getElementById('newEmail').value = '';
+        document.getElementById('newPassword').value = '';
+
+        var tbody = document.querySelector('#labelerTable tbody');
+        var tr = document.createElement('tr');
+        tr.id = 'row-' + res.data.id;
+        tr.innerHTML = '<td>' + res.data.username + '</td><td></td><td>' + (res.data.email || '') + '</td>' +
+            '<td><span class="wf-badge wf-badge-green">Real</span></td><td>0</td><td>0</td>' +
+            '<td><button class="wf-btn wf-btn-sm wf-btn-danger" onclick="toggleStaff(' + res.data.id + ', this)">Mark Test</button></td>';
+        tbody.insertBefore(tr, tbody.firstChild);
+    });
+}
 </script>
 {% endblock %}

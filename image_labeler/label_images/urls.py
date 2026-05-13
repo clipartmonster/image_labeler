@@ -38,6 +38,7 @@ urlpatterns = [
     # Admin workforce views
     path('admin/labelers/', views.admin_labeler_list, name='admin_labeler_list'),
     path('admin/labelers/toggle_staff/', views.admin_toggle_staff, name='admin_toggle_staff'),
+    path('admin/labelers/create/', views.admin_create_labeler, name='admin_create_labeler'),
     path('admin/bulk_assign/', views.admin_bulk_assign, name='admin_bulk_assign'),
     path('admin/bulk_assign/save/', views.admin_bulk_assign_save, name='admin_bulk_assign_save'),
     path('admin/bulk_assign/remove/', views.admin_remove_assignments, name='admin_remove_assignments'),

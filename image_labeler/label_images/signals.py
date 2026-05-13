@@ -13,6 +13,18 @@ BATCHES_PER_FEATURE = 2
 
 
 @receiver(post_save, sender=User)
+def create_profile_for_new_user(sender, instance, created, **kwargs):
+    """Auto-create a UserProfile with must_change_password=True for new users."""
+    if not created or instance.is_superuser:
+        return
+    from .models import UserProfile
+    UserProfile.objects.get_or_create(
+        user=instance,
+        defaults={"must_change_password": True},
+    )
+
+
+@receiver(post_save, sender=User)
 def auto_assign_test_batches(sender, instance, created, **kwargs):
     """When a new labeler is created, assign 2 existing sub-batches per feature.
 
