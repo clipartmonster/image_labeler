@@ -6,35 +6,40 @@
 {% if not user_is_admin %}
 <!-- ===== LABELER VIEW ===== -->
 <style>
-/* ── Page ── */
+/* ── Page container ── */
 .lb-page {
+    background: #bdc7c7;
+    border-radius: 10px;
+    margin: 10px;
+    padding: 24px 28px 32px;
+    font-family: Roboto, 'Segoe UI', sans-serif;
+}
+.lb-inner {
     max-width: 720px;
     margin: 0 auto;
-    padding: 32px 20px 48px;
-    font-family: Roboto, 'Segoe UI', sans-serif;
 }
 /* ── Top bar ── */
 .lb-top {
     display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 28px;
+    margin-bottom: 24px;
 }
 .lb-top h1 {
-    font-size: 22px; font-weight: 700; color: #fff; margin: 0;
+    font-size: 22px; font-weight: 700; color: #3a4a4a; margin: 0;
     letter-spacing: -.3px;
 }
 .lb-links { display: flex; gap: 8px; }
 .lb-links a {
     padding: 6px 16px; border-radius: 6px;
     font-size: 13px; font-weight: 600; text-decoration: none;
-    color: #d2e2e2; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18);
+    color: #d2e2e2; background: #799494; border: 1px solid #6a8a8a;
     transition: background .15s;
 }
-.lb-links a:hover { background: rgba(255,255,255,.22); }
+.lb-links a:hover { background: #7cbebe; }
 
 /* ── Section header (Training / Work Assignments) ── */
 .lb-section-hd {
-    font-size: 15px; font-weight: 700; color: #fff;
-    margin: 28px 0 12px; padding: 0;
+    font-size: 15px; font-weight: 700; color: #3a4a4a;
+    margin: 24px 0 10px; padding: 0;
     letter-spacing: -.2px;
 }
 .lb-section-hd:first-of-type { margin-top: 0; }
@@ -131,6 +136,7 @@
 </style>
 
 <div class="lb-page">
+<div class="lb-inner">
     <div class="lb-top">
         <h1>My Batches</h1>
         <div class="lb-links">
@@ -192,6 +198,7 @@
     </div>
     {% endfor %}
     {% endif %}
+</div>
 </div>
 
 {% else %}
