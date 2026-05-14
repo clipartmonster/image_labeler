@@ -2,19 +2,220 @@
 {% load static %}
 
 {% block content %}
-<div class="wf-page" style="max-width:960px; margin:20px auto;">
+<style>
+.rg-page {
+    max-width: 880px;
+    margin: 20px auto;
+    padding: 28px 32px;
+    font-family: 'Roboto', sans-serif;
+}
+.rg-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+.rg-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #e8f0f0;
+}
+.rg-back {
+    padding: 8px 18px;
+    background: #2a3a3a;
+    color: #c0d0d0;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 14px;
+    border: 1px solid #4a5a5a;
+}
+.rg-back:hover { background: #3a4a4a; }
 
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
-        <h1 style="margin:0; font-family:Roboto; font-size:1.4rem; color:#d2e2e2;">Labeling Rules Reference</h1>
-        <a href="/label_images/setup_session/" style="padding:8px 18px; background:#313244; color:#cdd6f4; border-radius:6px; text-decoration:none; font-family:Roboto; font-size:14px; border:1px solid #45475a;">Back to Dashboard</a>
+/* Category tabs */
+.rg-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 28px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #3a4a4a;
+}
+.rg-tab {
+    padding: 10px 22px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 600;
+    transition: background 0.15s;
+}
+.rg-tab--active {
+    background: #799494;
+    color: #0e1a1a;
+}
+.rg-tab--inactive {
+    background: #1e2e2e;
+    color: #90a8a8;
+    border: 1px solid #3a4a4a;
+}
+.rg-tab--inactive:hover { background: #2a3a3a; color: #c0d0d0; }
+
+/* Rule card */
+.rg-card {
+    background: #1e2e2e;
+    border: 1px solid #3a4a4a;
+    border-radius: 10px;
+    padding: 24px 28px;
+    margin-bottom: 24px;
+}
+.rg-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+.rg-card h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #e8f0f0;
+}
+.rg-card .rg-tag {
+    font-size: 13px;
+    color: #799494;
+    font-weight: 400;
+    margin-left: 10px;
+}
+.rg-description {
+    font-size: 15px;
+    color: #b8cece;
+    line-height: 1.7;
+    margin: 0 0 18px;
+    padding: 14px 18px;
+    background: #243434;
+    border-radius: 8px;
+    border-left: 3px solid #799494;
+}
+
+/* Directives list */
+.rg-directives {
+    padding-left: 24px;
+    margin: 0;
+    counter-reset: directive;
+}
+.rg-directives li {
+    font-size: 15px;
+    color: #c8d8d8;
+    line-height: 1.8;
+    margin-bottom: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.rg-directives li:last-child { border-bottom: none; }
+
+/* Reference images */
+.rg-img-wrap {
+    display: inline-block;
+    margin: 6px 10px 6px 0;
+    text-align: center;
+    vertical-align: top;
+}
+.rg-img-wrap img {
+    max-width: 160px;
+    max-height: 120px;
+    border-radius: 6px;
+    display: block;
+}
+.rg-img-caption {
+    font-size: 12px;
+    color: #90a8a8;
+    margin-top: 4px;
+}
+.rg-border-yes { border: 3px solid #5aaa5a; }
+.rg-border-no { border: 3px solid #aa5a5a; }
+.rg-border-neutral { border: 2px solid #4a5a5a; }
+
+/* Admin buttons */
+.rg-btn-sm {
+    background: none;
+    border: 1px solid #4a5a5a;
+    color: #90a8a8;
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: 'Roboto', sans-serif;
+}
+.rg-btn-sm:hover { background: #2a3a3a; color: #c0d0d0; }
+.rg-btn-danger { border-color: #6a4040; color: #e06060; }
+.rg-btn-danger:hover { background: #3a2020; }
+.rg-btn-save {
+    background: #799494;
+    color: #0e1a1a;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 18px;
+    cursor: pointer;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+}
+.rg-btn-add {
+    background: #799494;
+    color: #0e1a1a;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 18px;
+    cursor: pointer;
+    font-family: 'Roboto', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+}
+.rg-edit-form {
+    display: none;
+    margin: 10px 0;
+    padding: 14px;
+    background: #162626;
+    border-radius: 6px;
+}
+.rg-edit-label {
+    display: block;
+    font-size: 12px;
+    color: #90a8a8;
+    margin-bottom: 4px;
+}
+.rg-edit-input {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #3a4a4a;
+    background: #1e2e2e;
+    color: #d2e2e2;
+    font-size: 14px;
+    font-family: 'Roboto', sans-serif;
+    box-sizing: border-box;
+    margin-bottom: 8px;
+}
+.rg-edit-input:focus {
+    outline: none;
+    border-color: #799494;
+}
+.rg-inline-edit { color: #799494; cursor: pointer; font-size: 12px; margin-left: 6px; background: none; border: none; }
+.rg-inline-del { color: #e06060; cursor: pointer; font-size: 12px; background: none; border: none; }
+</style>
+
+<div class="rg-page">
+
+    <div class="rg-header">
+        <h1>Labeling Rules Reference</h1>
+        <a href="/label_images/setup_session/" class="rg-back">Back to Dashboard</a>
     </div>
 
     <!-- Category tabs -->
-    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:24px;">
+    <div class="rg-tabs">
         {% for cat in categories %}
         <a href="?category={{ cat|urlencode }}"
-           style="padding:10px 20px; border-radius:6px; text-decoration:none; font-family:Roboto; font-size:14px; font-weight:600;
-                  {% if cat == selected_category %}background:#799494; color:#1a2a2a;{% else %}background:#2a3a3a; color:#a0b8b8; border:1px solid #4a5a5a;{% endif %}">
+           class="rg-tab {% if cat == selected_category %}rg-tab--active{% else %}rg-tab--inactive{% endif %}">
             {{ cat }}
         </a>
         {% endfor %}
@@ -22,126 +223,116 @@
 
     {% if user_is_admin %}
     <!-- Admin: add new rule -->
-    <div class="wf-section" style="margin-bottom:20px;">
-        <button onclick="toggleNewGuideForm()" style="background:#799494; color:#1a2a2a; border:none; border-radius:6px; padding:8px 18px; cursor:pointer; font-family:Roboto; font-size:13px; font-weight:600;">+ Add New Rule</button>
-        <div id="newGuideForm" style="display:none; margin-top:14px;">
+    <div style="margin-bottom:24px;">
+        <button onclick="toggleNewGuideForm()" class="rg-btn-add">+ Add New Rule</button>
+        <div id="newGuideForm" class="rg-edit-form">
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
                 <div>
-                    <label style="display:block; font-size:12px; color:#a0b8b8; margin-bottom:3px;">Task Type</label>
-                    <input id="ng_task_type" type="text" placeholder="e.g. asset_type" class="wf-input" style="width:100%; box-sizing:border-box;">
+                    <label class="rg-edit-label">Task Type</label>
+                    <input id="ng_task_type" type="text" placeholder="e.g. asset_type" class="rg-edit-input">
                 </div>
                 <div>
-                    <label style="display:block; font-size:12px; color:#a0b8b8; margin-bottom:3px;">Rule Index</label>
-                    <input id="ng_rule_index" type="number" min="1" class="wf-input" style="width:100%; box-sizing:border-box;">
+                    <label class="rg-edit-label">Rule Index</label>
+                    <input id="ng_rule_index" type="number" min="1" class="rg-edit-input">
                 </div>
             </div>
-            <div style="margin-bottom:10px;">
-                <label style="display:block; font-size:12px; color:#a0b8b8; margin-bottom:3px;">Title</label>
-                <input id="ng_title" type="text" class="wf-input" style="width:100%; box-sizing:border-box;">
+            <div>
+                <label class="rg-edit-label">Title</label>
+                <input id="ng_title" type="text" class="rg-edit-input">
             </div>
-            <div style="margin-bottom:10px;">
-                <label style="display:block; font-size:12px; color:#a0b8b8; margin-bottom:3px;">Category</label>
-                <input id="ng_category" type="text" value="{{ selected_category }}" class="wf-input" style="width:100%; box-sizing:border-box;">
+            <div>
+                <label class="rg-edit-label">Category</label>
+                <input id="ng_category" type="text" value="{{ selected_category }}" class="rg-edit-input">
             </div>
-            <div style="margin-bottom:10px;">
-                <label style="display:block; font-size:12px; color:#a0b8b8; margin-bottom:3px;">Description</label>
-                <textarea id="ng_description" rows="3" class="wf-input" style="width:100%; box-sizing:border-box; resize:vertical;"></textarea>
+            <div>
+                <label class="rg-edit-label">Description</label>
+                <textarea id="ng_description" rows="3" class="rg-edit-input" style="resize:vertical;"></textarea>
             </div>
-            <button onclick="createGuide()" style="background:#a0e0a0; color:#1a2a2a; border:none; border-radius:6px; padding:8px 20px; cursor:pointer; font-family:Roboto; font-weight:600;">Save Rule</button>
+            <button onclick="createGuide()" class="rg-btn-save" style="margin-top:4px;">Save Rule</button>
         </div>
     </div>
     {% endif %}
 
     <!-- Rules list -->
     {% for guide in guides %}
-    <div class="wf-section" style="margin-bottom:24px;" id="guide_{{ guide.id }}">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-            <div>
-                <h2 style="margin:0 0 4px; font-family:Roboto; font-size:1.15rem; color:#d2e2e2;">
-                    {{ guide.title }}
-                    <span style="font-size:12px; color:#799494; font-weight:400; margin-left:8px;">({{ guide.task_type }}, {{ guide.rule_index }})</span>
-                </h2>
-            </div>
+    <div class="rg-card" id="guide_{{ guide.id }}">
+        <div class="rg-card-header">
+            <h2>
+                {{ guide.title }}
+                <span class="rg-tag">({{ guide.task_type }}, rule {{ guide.rule_index }})</span>
+            </h2>
             {% if user_is_admin %}
-            <div style="display:flex; gap:6px;">
-                <button onclick="toggleEditGuide({{ guide.id }})" style="background:none; border:1px solid #4a5a5a; color:#a0b8b8; border-radius:4px; padding:4px 10px; cursor:pointer; font-size:12px;">Edit</button>
-                <button onclick="deleteGuide({{ guide.id }})" style="background:none; border:1px solid #6a4040; color:#e06060; border-radius:4px; padding:4px 10px; cursor:pointer; font-size:12px;">Delete</button>
+            <div style="display:flex; gap:6px; flex-shrink:0;">
+                <button onclick="toggleEditGuide({{ guide.id }})" class="rg-btn-sm">Edit</button>
+                <button onclick="deleteGuide({{ guide.id }})" class="rg-btn-sm rg-btn-danger">Delete</button>
             </div>
             {% endif %}
         </div>
 
         {% if user_is_admin %}
-        <!-- Edit guide form (hidden) -->
-        <div id="editGuide_{{ guide.id }}" style="display:none; margin-bottom:14px; padding:12px; background:#1a2a2a; border-radius:6px;">
-            <div style="margin-bottom:8px;">
-                <label style="display:block; font-size:12px; color:#a0b8b8; margin-bottom:3px;">Title</label>
-                <input id="eg_title_{{ guide.id }}" type="text" value="{{ guide.title }}" class="wf-input" style="width:100%; box-sizing:border-box;">
-            </div>
-            <div style="margin-bottom:8px;">
-                <label style="display:block; font-size:12px; color:#a0b8b8; margin-bottom:3px;">Category</label>
-                <input id="eg_category_{{ guide.id }}" type="text" value="{{ guide.category }}" class="wf-input" style="width:100%; box-sizing:border-box;">
-            </div>
-            <div style="margin-bottom:8px;">
-                <label style="display:block; font-size:12px; color:#a0b8b8; margin-bottom:3px;">Description</label>
-                <textarea id="eg_description_{{ guide.id }}" rows="3" class="wf-input" style="width:100%; box-sizing:border-box; resize:vertical;">{{ guide.description }}</textarea>
-            </div>
-            <button onclick="saveGuide({{ guide.id }})" style="background:#a0e0a0; color:#1a2a2a; border:none; border-radius:6px; padding:6px 16px; cursor:pointer; font-family:Roboto; font-size:13px; font-weight:600;">Save</button>
+        <div id="editGuide_{{ guide.id }}" class="rg-edit-form">
+            <label class="rg-edit-label">Title</label>
+            <input id="eg_title_{{ guide.id }}" type="text" value="{{ guide.title }}" class="rg-edit-input">
+            <label class="rg-edit-label">Category</label>
+            <input id="eg_category_{{ guide.id }}" type="text" value="{{ guide.category }}" class="rg-edit-input">
+            <label class="rg-edit-label">Description</label>
+            <textarea id="eg_description_{{ guide.id }}" rows="3" class="rg-edit-input" style="resize:vertical;">{{ guide.description }}</textarea>
+            <button onclick="saveGuide({{ guide.id }})" class="rg-btn-save">Save</button>
         </div>
         {% endif %}
 
-        <p style="font-family:Roboto; font-size:14px; color:#c0d0d0; line-height:1.6; margin:0 0 14px;">{{ guide.description }}</p>
+        <div class="rg-description">{{ guide.description }}</div>
 
         <!-- Reference images at guide level -->
         {% for img in guide.reference_images.all %}
             {% if not img.directive %}
-            <div style="display:inline-block; margin:4px 8px 8px 0; text-align:center; vertical-align:top;">
-                <img src="{{ img.image_url }}" style="max-width:160px; max-height:120px; border-radius:4px; border:2px solid {% if img.label == 'yes' %}#4a8a4a{% elif img.label == 'no' %}#8a4a4a{% else %}#4a5a5a{% endif %};">
-                {% if img.caption %}<div style="font-size:11px; color:#a0b8b8; margin-top:2px;">{{ img.caption }}</div>{% endif %}
+            <div class="rg-img-wrap">
+                <img src="{{ img.image_url }}" class="{% if img.label == 'yes' %}rg-border-yes{% elif img.label == 'no' %}rg-border-no{% else %}rg-border-neutral{% endif %}">
+                {% if img.caption %}<div class="rg-img-caption">{{ img.caption }}</div>{% endif %}
                 {% if user_is_admin %}
-                <button onclick="deleteImage({{ img.id }}, {{ guide.id }})" style="background:none; border:none; color:#e06060; cursor:pointer; font-size:11px; margin-top:2px;">remove</button>
+                <button onclick="deleteImage({{ img.id }}, {{ guide.id }})" class="rg-inline-del">remove</button>
                 {% endif %}
             </div>
             {% endif %}
         {% endfor %}
 
         <!-- Directives -->
-        <ol style="padding-left:22px; margin:0;">
+        <ol class="rg-directives">
             {% for d in guide.directives.all %}
-            <li style="font-family:Roboto; font-size:14px; color:#c0d0d0; line-height:1.7; margin-bottom:6px;" id="directive_{{ d.id }}">
+            <li id="directive_{{ d.id }}">
                 {% if user_is_admin %}
-                <span class="directive-text" id="dt_{{ d.id }}">{{ d.text }}</span>
-                <button onclick="toggleEditDirective({{ d.id }})" style="background:none; border:none; color:#799494; cursor:pointer; font-size:11px; margin-left:6px;">edit</button>
-                <button onclick="deleteDirective({{ d.id }}, {{ guide.id }})" style="background:none; border:none; color:#e06060; cursor:pointer; font-size:11px;">x</button>
-                <div id="editDir_{{ d.id }}" style="display:none; margin:6px 0;">
-                    <textarea id="edText_{{ d.id }}" rows="2" class="wf-input" style="width:100%; box-sizing:border-box; resize:vertical;">{{ d.text }}</textarea>
-                    <button onclick="saveDirective({{ d.id }})" style="background:#a0e0a0; color:#1a2a2a; border:none; border-radius:4px; padding:4px 12px; cursor:pointer; font-size:12px; margin-top:4px;">Save</button>
+                <span id="dt_{{ d.id }}">{{ d.text }}</span>
+                <button onclick="toggleEditDirective({{ d.id }})" class="rg-inline-edit">edit</button>
+                <button onclick="deleteDirective({{ d.id }}, {{ guide.id }})" class="rg-inline-del">x</button>
+                <div id="editDir_{{ d.id }}" class="rg-edit-form">
+                    <textarea id="edText_{{ d.id }}" rows="2" class="rg-edit-input" style="resize:vertical;">{{ d.text }}</textarea>
+                    <button onclick="saveDirective({{ d.id }})" class="rg-btn-save">Save</button>
                 </div>
                 {% else %}
                 {{ d.text }}
                 {% endif %}
 
-                <!-- Reference images for this directive -->
                 {% for img in d.reference_images.all %}
-                <div style="display:inline-block; margin:4px 8px 4px 0; vertical-align:top;">
-                    <img src="{{ img.image_url }}" style="max-width:140px; max-height:100px; border-radius:4px; border:2px solid {% if img.label == 'yes' %}#4a8a4a{% elif img.label == 'no' %}#8a4a4a{% else %}#4a5a5a{% endif %};">
-                    {% if img.caption %}<div style="font-size:11px; color:#a0b8b8;">{{ img.caption }}</div>{% endif %}
+                <div class="rg-img-wrap">
+                    <img src="{{ img.image_url }}" class="{% if img.label == 'yes' %}rg-border-yes{% elif img.label == 'no' %}rg-border-no{% else %}rg-border-neutral{% endif %}">
+                    {% if img.caption %}<div class="rg-img-caption">{{ img.caption }}</div>{% endif %}
                     {% if user_is_admin %}
-                    <button onclick="deleteImage({{ img.id }}, {{ guide.id }})" style="background:none; border:none; color:#e06060; cursor:pointer; font-size:11px;">remove</button>
+                    <button onclick="deleteImage({{ img.id }}, {{ guide.id }})" class="rg-inline-del">remove</button>
                     {% endif %}
                 </div>
                 {% endfor %}
 
                 {% if user_is_admin %}
-                <button onclick="toggleAddImage({{ guide.id }}, {{ d.id }})" style="background:none; border:none; color:#799494; cursor:pointer; font-size:11px;">+ image</button>
-                <div id="addImg_{{ guide.id }}_{{ d.id }}" style="display:none; margin:6px 0; padding:8px; background:#1a2a2a; border-radius:4px;">
-                    <input id="imgUrl_{{ guide.id }}_{{ d.id }}" type="text" placeholder="Image URL" class="wf-input" style="width:70%; box-sizing:border-box; margin-right:6px;">
-                    <input id="imgCap_{{ guide.id }}_{{ d.id }}" type="text" placeholder="Caption (optional)" class="wf-input" style="width:50%; box-sizing:border-box; margin-right:6px; margin-top:4px;">
-                    <select id="imgLbl_{{ guide.id }}_{{ d.id }}" class="wf-input" style="margin-right:6px; margin-top:4px;">
+                <button onclick="toggleAddImage({{ guide.id }}, {{ d.id }})" class="rg-inline-edit">+ image</button>
+                <div id="addImg_{{ guide.id }}_{{ d.id }}" class="rg-edit-form" style="display:none;">
+                    <input id="imgUrl_{{ guide.id }}_{{ d.id }}" type="text" placeholder="Image URL" class="rg-edit-input" style="width:70%;">
+                    <input id="imgCap_{{ guide.id }}_{{ d.id }}" type="text" placeholder="Caption (optional)" class="rg-edit-input" style="width:50%;">
+                    <select id="imgLbl_{{ guide.id }}_{{ d.id }}" class="rg-edit-input" style="width:auto;">
                         <option value="">--</option>
                         <option value="yes">Yes</option>
                         <option value="no">No</option>
                     </select>
-                    <button onclick="saveImage({{ guide.id }}, {{ d.id }})" style="background:#a0e0a0; color:#1a2a2a; border:none; border-radius:4px; padding:4px 12px; cursor:pointer; font-size:12px; margin-top:4px;">Add</button>
+                    <button onclick="saveImage({{ guide.id }}, {{ d.id }})" class="rg-btn-save">Add</button>
                 </div>
                 {% endif %}
             </li>
@@ -149,32 +340,30 @@
         </ol>
 
         {% if user_is_admin %}
-        <!-- Add directive -->
-        <div style="margin-top:10px;">
-            <button onclick="toggleAddDirective({{ guide.id }})" style="background:none; border:1px solid #4a5a5a; color:#a0b8b8; border-radius:4px; padding:4px 12px; cursor:pointer; font-size:12px;">+ Add Directive</button>
-            <div id="addDir_{{ guide.id }}" style="display:none; margin-top:8px;">
-                <textarea id="newDirText_{{ guide.id }}" rows="2" class="wf-input" style="width:100%; box-sizing:border-box; resize:vertical;" placeholder="New directive text"></textarea>
-                <button onclick="addDirective({{ guide.id }})" style="background:#a0e0a0; color:#1a2a2a; border:none; border-radius:4px; padding:4px 14px; cursor:pointer; font-size:12px; margin-top:4px;">Save</button>
-            </div>
+        <div style="margin-top:14px; display:flex; gap:10px;">
+            <button onclick="toggleAddDirective({{ guide.id }})" class="rg-btn-sm">+ Add Directive</button>
+            <button onclick="toggleAddImage({{ guide.id }}, 0)" class="rg-btn-sm">+ Add Reference Image</button>
         </div>
-        <!-- Add image at guide level -->
-        <div style="margin-top:8px;">
-            <button onclick="toggleAddImage({{ guide.id }}, 0)" style="background:none; border:1px solid #4a5a5a; color:#a0b8b8; border-radius:4px; padding:4px 12px; cursor:pointer; font-size:12px;">+ Add Reference Image</button>
-            <div id="addImg_{{ guide.id }}_0" style="display:none; margin-top:8px; padding:8px; background:#1a2a2a; border-radius:4px;">
-                <input id="imgUrl_{{ guide.id }}_0" type="text" placeholder="Image URL" class="wf-input" style="width:70%; box-sizing:border-box; margin-right:6px;">
-                <input id="imgCap_{{ guide.id }}_0" type="text" placeholder="Caption (optional)" class="wf-input" style="width:50%; box-sizing:border-box; margin-right:6px; margin-top:4px;">
-                <select id="imgLbl_{{ guide.id }}_0" class="wf-input" style="margin-right:6px; margin-top:4px;">
-                    <option value="">--</option>
-                    <option value="yes">Yes</option>
-                    <option value="no">No</option>
-                </select>
-                <button onclick="saveImage({{ guide.id }}, 0)" style="background:#a0e0a0; color:#1a2a2a; border:none; border-radius:4px; padding:4px 12px; cursor:pointer; font-size:12px; margin-top:4px;">Add</button>
-            </div>
+        <div id="addDir_{{ guide.id }}" class="rg-edit-form">
+            <textarea id="newDirText_{{ guide.id }}" rows="2" class="rg-edit-input" style="resize:vertical;" placeholder="New directive text"></textarea>
+            <button onclick="addDirective({{ guide.id }})" class="rg-btn-save">Save</button>
+        </div>
+        <div id="addImg_{{ guide.id }}_0" class="rg-edit-form">
+            <input id="imgUrl_{{ guide.id }}_0" type="text" placeholder="Image URL" class="rg-edit-input" style="width:70%;">
+            <input id="imgCap_{{ guide.id }}_0" type="text" placeholder="Caption (optional)" class="rg-edit-input" style="width:50%;">
+            <select id="imgLbl_{{ guide.id }}_0" class="rg-edit-input" style="width:auto;">
+                <option value="">--</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+            </select>
+            <button onclick="saveImage({{ guide.id }}, 0)" class="rg-btn-save">Add</button>
         </div>
         {% endif %}
     </div>
     {% empty %}
-    <p style="color:#a0b8b8; font-family:Roboto;">No rules found for this category.</p>
+    <div class="rg-card" style="text-align:center; padding:40px;">
+        <p style="color:#90a8a8; font-size:16px; margin:0;">No rules found for this category.</p>
+    </div>
     {% endfor %}
 </div>
 
@@ -187,34 +376,28 @@ function toggleNewGuideForm() {
     var f = document.getElementById('newGuideForm');
     f.style.display = f.style.display === 'none' ? 'block' : 'none';
 }
-
 function toggleEditGuide(id) {
     var f = document.getElementById('editGuide_' + id);
     f.style.display = f.style.display === 'none' ? 'block' : 'none';
 }
-
 function toggleEditDirective(id) {
     var f = document.getElementById('editDir_' + id);
     f.style.display = f.style.display === 'none' ? 'block' : 'none';
 }
-
 function toggleAddDirective(guideId) {
     var f = document.getElementById('addDir_' + guideId);
     f.style.display = f.style.display === 'none' ? 'block' : 'none';
 }
-
 function toggleAddImage(guideId, directiveId) {
     var f = document.getElementById('addImg_' + guideId + '_' + directiveId);
     f.style.display = f.style.display === 'none' ? 'block' : 'none';
 }
-
 function _post(data) {
     var fd = new FormData();
     fd.append('csrfmiddlewaretoken', csrfToken);
     for (var k in data) fd.append(k, data[k]);
     return fetch(apiUrl, { method: 'POST', body: fd }).then(function(r) { return r.json(); });
 }
-
 function createGuide() {
     _post({
         action: 'save_guide',
@@ -225,7 +408,6 @@ function createGuide() {
         description: document.getElementById('ng_description').value
     }).then(function() { location.reload(); });
 }
-
 function saveGuide(id) {
     _post({
         action: 'save_guide',
@@ -235,12 +417,10 @@ function saveGuide(id) {
         description: document.getElementById('eg_description_' + id).value
     }).then(function() { location.reload(); });
 }
-
 function deleteGuide(id) {
     if (!confirm('Delete this entire rule and all its directives?')) return;
     _post({ action: 'delete_guide', guide_id: id }).then(function() { location.reload(); });
 }
-
 function saveDirective(id) {
     _post({
         action: 'save_directive',
@@ -248,12 +428,10 @@ function saveDirective(id) {
         text: document.getElementById('edText_' + id).value
     }).then(function() { location.reload(); });
 }
-
 function deleteDirective(id, guideId) {
     if (!confirm('Delete this directive?')) return;
     _post({ action: 'delete_directive', directive_id: id }).then(function() { location.reload(); });
 }
-
 function addDirective(guideId) {
     _post({
         action: 'save_directive',
@@ -261,7 +439,6 @@ function addDirective(guideId) {
         text: document.getElementById('newDirText_' + guideId).value
     }).then(function() { location.reload(); });
 }
-
 function saveImage(guideId, directiveId) {
     var data = {
         action: 'save_image',
@@ -273,7 +450,6 @@ function saveImage(guideId, directiveId) {
     if (directiveId && directiveId !== 0) data.directive_id = directiveId;
     _post(data).then(function() { location.reload(); });
 }
-
 function deleteImage(imgId, guideId) {
     if (!confirm('Remove this image?')) return;
     _post({ action: 'delete_image', image_id: imgId }).then(function() { location.reload(); });

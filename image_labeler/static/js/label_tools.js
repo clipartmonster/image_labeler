@@ -574,6 +574,8 @@ document.addEventListener('DOMContentLoaded', function(){
              .listing.light.container.active, \
              .listing.light.container.test_question');
 
+    if (listing_containers.length === 0) return;
+
     activate_listing_container(listing_containers[0])
 
 
@@ -588,17 +590,21 @@ document.addEventListener('DOMContentLoaded', function(){
 
 //function to show the listings when a user hits the ready button
 function show_listings(){
-    const listing_containers = 
+    const listing_containers =
          document.querySelectorAll('.listing.light.container.open, \
                                     .listing.light.container.active, \
                                     .listing.light.container.test_question');
 
+    if (listing_containers.length === 0) return;
+
     listing_containers.forEach(listing_container =>{
-        listing_container.style.display = 'grid'        
+        listing_container.style.display = 'grid'
     })
 
     first_listing_container = document.querySelector('.listing.light.container.active')
-    first_listing_container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (first_listing_container) {
+        first_listing_container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 }
 
 //Utiltiy Functions
