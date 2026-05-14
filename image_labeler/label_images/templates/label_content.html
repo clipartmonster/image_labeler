@@ -123,6 +123,12 @@
         </div><!-- .labeling-main -->
     </div><!-- .labeling-layout -->
 
+    {% if is_training %}
+    <script>
+    window._trainingAnswers = {{ training_answers_json|safe }};
+    </script>
+    {% endif %}
+
     <script>
     // Load dynamic examples from RuleExample model
     (function() {

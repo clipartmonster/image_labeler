@@ -185,15 +185,11 @@ function direct_hotkey_action(hotkey) {
 }
 
 document.addEventListener('keydown', function(event) {
-    const hotkey = event.key;  // Get the pressed key (e.g., '1', '2', '3')
-
+    const hotkey = event.key;
+    if (document.querySelector('.training-paused')) return;
     if (hotkey === '1' || hotkey === '2') {
-
-        console.log('hello')
         direct_hotkey_action(hotkey)
-       
     }
-
 })
 
 
@@ -305,6 +301,18 @@ function update_prompt(hotkey, element, response) {
 }
 
 
+function _advanceAfterClose() {
+    var open_listing_containers = document
+        .querySelectorAll('.listing.light.container.open, .listing.light.container.test_question');
+
+    if (open_listing_containers.length > 0) {
+        activate_listing_container(open_listing_containers[0]);
+    } else {
+        document.querySelector('.submit.button.container').style.display = 'grid';
+        document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
 function close_listing_container(element){
 
     prompts = element
@@ -322,36 +330,53 @@ function close_listing_container(element){
     prompt_container = element
     .closest('.label_option.prompt.container.active')
 
+    var listingContainer = element.closest('.listing.light.container.active');
 
     prompt_container.className = 'label_option prompt container closed'
     prompt_container.style.opacity = .35        
 
-    // element
-    // .closest('.label_option.prompt.container.active')
-    // .style.opacity = .25
+    // Training feedback: show correct answer before advancing
+    if (window._trainingAnswers && listingContainer) {
+        var assetId = listingContainer.querySelector('.collection_data').getAttribute('asset_id');
+        var correctLabel = window._trainingAnswers[assetId];
+        if (correctLabel !== undefined) {
+            var userResponses = prompt_container.querySelectorAll('.label_option.rule_validator.closed');
+            var userAnswer = null;
+            if (userResponses.length > 0) {
+                var checked = userResponses[0].querySelector('input.radio_button:checked');
+                if (checked) userAnswer = checked.getAttribute('prompt_response');
+            }
+            var correctText = correctLabel === 1 ? 'YES' : 'NO';
+            var isCorrect = (correctLabel === 1 && userAnswer === 'yes') || (correctLabel === 0 && userAnswer === 'no');
 
-    element
-    .closest('.listing.light.container.active')
-    .className = 'listing light container closed'
+            var fb = document.createElement('div');
+            fb.className = 'training-feedback-overlay';
+            fb.style.cssText = 'position:absolute; inset:0; z-index:50; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,0.75); border-radius:8px;';
+            fb.innerHTML = '<div style="text-align:center; padding:24px;">'
+                + '<p style="font-size:22px; font-weight:700; margin:0 0 8px; color:' + (isCorrect ? '#a0e0a0' : '#e06060') + ';">'
+                + (isCorrect ? 'Correct!' : 'Incorrect') + '</p>'
+                + '<p style="font-size:16px; color:#d2e2e2; margin:0 0 16px;">The correct answer is <strong>' + correctText + '</strong></p>'
+                + '<p style="font-size:13px; color:#a0b8b8; margin:0;">Press any key to continue</p>'
+                + '</div>';
 
-    // element
-    // .className = 'label_option button container'
+            listingContainer.style.position = 'relative';
+            listingContainer.appendChild(fb);
+            listingContainer.className = 'listing light container training-paused';
+            listingContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-    open_listing_containers = document
-    .querySelectorAll('.listing.light.container.open, .listing.light.container.test_question')
-
-    if (open_listing_containers.length > 0) {
-
-        open_listing_container = open_listing_containers[0]
-        activate_listing_container(open_listing_container)
-
-    } else {
-
-        //wiht no more open listing containers show the sumbit button for leaving page
-        document.querySelector('.submit.button.container').style.display = 'grid'
-        document.querySelector('.submit.button.container').scrollIntoView({ behavior: 'smooth', block: 'center' });
-
+            function onTrainingContinue(e) {
+                document.removeEventListener('keydown', onTrainingContinue);
+                fb.remove();
+                listingContainer.className = 'listing light container closed';
+                _advanceAfterClose();
+            }
+            document.addEventListener('keydown', onTrainingContinue);
+            return;
+        }
     }
+
+    listingContainer.className = 'listing light container closed';
+    _advanceAfterClose();
 
     
     // if (is_test_question == 'yes'){

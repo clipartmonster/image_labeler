@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import UserProfile, BatchAssignment, LabelingSession, RuleExample
+from .models import (
+    UserProfile, BatchAssignment, LabelingSession, RuleExample,
+    RuleGuide, RuleDirective, RuleReferenceImage,
+)
 
 
 @admin.register(UserProfile)
@@ -37,3 +40,20 @@ class LabelingSessionAdmin(admin.ModelAdmin):
 class RuleExampleAdmin(admin.ModelAdmin):
     list_display = ("task_type", "rule_index", "label", "caption")
     list_filter = ("task_type", "rule_index", "label")
+
+
+class RuleDirectiveInline(admin.TabularInline):
+    model = RuleDirective
+    extra = 1
+
+
+class RuleReferenceImageInline(admin.TabularInline):
+    model = RuleReferenceImage
+    extra = 0
+
+
+@admin.register(RuleGuide)
+class RuleGuideAdmin(admin.ModelAdmin):
+    list_display = ("category", "title", "task_type", "rule_index")
+    list_filter = ("category", "task_type")
+    inlines = [RuleDirectiveInline, RuleReferenceImageInline]

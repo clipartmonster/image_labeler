@@ -65,6 +65,10 @@ class BatchAssignment(models.Model):
         default=5.0,
         help_text="Percent of gold-standard assets to inject when serving this batch.",
     )
+    is_training = models.BooleanField(
+        default=False,
+        help_text="Training batch — shows correct answers after labeler responds.",
+    )
 
     class Meta:
         unique_together = ("user", "task_type", "rule_index", "batch_id", "large_sub_batch")
@@ -109,6 +113,72 @@ class RuleExample(models.Model):
 
     def __str__(self):
         return f"{self.task_type} rule {self.rule_index} — {self.label}"
+
+
+# ---------------------------------------------------------------------------
+# Rule Guide — editable rule reference content
+# ---------------------------------------------------------------------------
+
+class RuleGuide(models.Model):
+    """Top-level rule for a given feature (task_type + rule_index).
+    Stores the human-readable title, overview description, and display order.
+    """
+    task_type = models.CharField(max_length=100)
+    rule_index = models.IntegerField()
+    title = models.CharField(max_length=200)
+    category = models.CharField(
+        max_length=100, blank=True,
+        help_text="Grouping label shown as a tab, e.g. 'Asset Type', 'Clip Art Type'.",
+    )
+    description = models.TextField(blank=True)
+    display_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("task_type", "rule_index")
+        ordering = ["category", "display_order", "rule_index"]
+
+    def __str__(self):
+        return f"{self.category} — {self.title} ({self.task_type}, {self.rule_index})"
+
+
+class RuleDirective(models.Model):
+    """A numbered directive within a RuleGuide."""
+    guide = models.ForeignKey(RuleGuide, on_delete=models.CASCADE, related_name="directives")
+    number = models.PositiveIntegerField()
+    text = models.TextField()
+
+    class Meta:
+        ordering = ["number"]
+        unique_together = ("guide", "number")
+
+    def __str__(self):
+        return f"#{self.number}: {self.text[:60]}"
+
+
+class RuleReferenceImage(models.Model):
+    """An optional reference image attached to a RuleGuide or a specific directive."""
+    guide = models.ForeignKey(RuleGuide, on_delete=models.CASCADE, related_name="reference_images")
+    directive = models.ForeignKey(
+        RuleDirective, on_delete=models.CASCADE, null=True, blank=True,
+        related_name="reference_images",
+        help_text="If set, image is shown next to this specific directive.",
+    )
+    image_url = models.URLField()
+    caption = models.CharField(max_length=255, blank=True)
+    label = models.CharField(
+        max_length=10, choices=[("yes", "Yes"), ("no", "No")], blank=True,
+        help_text="Whether this image is a YES or NO example.",
+    )
+    display_order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ["display_order"]
+
+    def __str__(self):
+        tag = f" (directive #{self.directive.number})" if self.directive else ""
+        return f"Image for {self.guide}{tag}"
 
 
 # ---------------------------------------------------------------------------

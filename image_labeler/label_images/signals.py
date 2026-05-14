@@ -92,5 +92,6 @@ def _assign_test_batches(user):
                 defaults={
                     "payment_amount": 0,
                     "deadline": deadline,
+                    "is_training": True,
                 },
             )

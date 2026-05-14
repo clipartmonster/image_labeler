@@ -8,7 +8,10 @@
 <div class='light container' style='padding:20px;'>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
         <h1 class='listing_info label' style='margin:0;'>Your Assigned Batches</h1>
-        <a href="/label_images/earnings/" style="padding:8px 18px; background:#313244; color:#cdd6f4; border-radius:6px; text-decoration:none; font-family:Roboto; font-size:14px; border:1px solid #45475a;">Earnings</a>
+        <div style="display:flex; gap:10px;">
+            <a href="/label_images/rules/" style="padding:8px 18px; background:#313244; color:#cdd6f4; border-radius:6px; text-decoration:none; font-family:Roboto; font-size:14px; border:1px solid #45475a;">Rules</a>
+            <a href="/label_images/earnings/" style="padding:8px 18px; background:#313244; color:#cdd6f4; border-radius:6px; text-decoration:none; font-family:Roboto; font-size:14px; border:1px solid #45475a;">Earnings</a>
+        </div>
     </div>
 
     {% if not assignments %}
@@ -24,6 +27,7 @@
 
             <h2 style='font-family:Roboto; color:#d2e2e2; margin:0 0 6px;'>
                 {{ a.task_type }} &mdash; Rule {{ a.rule_index }}
+                {% if a.is_training %}<span style="display:inline-block; background:#a0e0a0; color:#1a2a2a; font-size:11px; font-weight:700; padding:2px 8px; border-radius:4px; margin-left:8px; vertical-align:middle;">TRAINING</span>{% endif %}
             </h2>
             <p style='font-family:Roboto; color:#a0b8b8; font-size:13px; margin:0 0 4px;'>
                 Batch {{ a.batch_id }} / Sub-batch {{ a.large_sub_batch }}
@@ -47,9 +51,9 @@
                 <div style='background:#799494; border-radius:4px; height:8px; width:{{ a.progress_pct }}%;'></div>
             </div>
 
-            <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}"
+            <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}{% if a.is_training %}&is_training=1{% endif %}"
                style='display:inline-block; padding:8px 20px; background:#799494; color:#d2e2e2; border-radius:5px; text-decoration:none; font-family:Roboto; font-size:14px;'>
-                Start Labeling
+                {% if a.is_training %}Start Training{% else %}Start Labeling{% endif %}
             </a>
         </div>
     {% endfor %}
@@ -63,6 +67,7 @@
     <a href="/label_images/admin/labelers/">Labelers</a>
     <a href="/label_images/admin/bulk_assign/">Bulk Assign</a>
     <a href="/label_images/admin/performance/">Performance</a>
+    <a href="/label_images/rules/">Rules</a>
 </div>
 <div class = 'light container'>
 

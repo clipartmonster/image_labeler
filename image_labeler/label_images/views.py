@@ -334,6 +334,7 @@ def setup_session(request):
                 "total": total,
                 "completed": completed,
                 "progress_pct": int((completed / total * 100) if total > 0 else 0),
+                "is_training": a.is_training,
             })
 
         return render(
@@ -404,8 +405,15 @@ def mturk_redirect(request):
     batch_id = request.GET.get("batch_id", None)
     large_sub_batch = request.GET.get("large_sub_batch", None)
     mturk_batch_id = request.GET.get("mturk_batch_id", 0)
-    rule_indexes = json.loads(request.GET.get("rule_indexes", None))
+    rule_indexes_raw = request.GET.get("rule_indexes", "[]")
+    try:
+        rule_indexes = json.loads(rule_indexes_raw)
+    except (json.JSONDecodeError, TypeError):
+        rule_indexes = rule_indexes_raw
+    if not isinstance(rule_indexes, list):
+        rule_indexes = [rule_indexes]
     add_lure_questions = request.GET.get("add_lure_questions", None)
+    is_training = request.GET.get("is_training", "0") == "1"
 
     rule_index = int(rule_indexes[0])
 
@@ -484,8 +492,17 @@ def mturk_redirect(request):
 
     assets_to_label = assets_content["asset_batch"]
 
-    # print('|-------assets to label----------|')
-    # print(pd.DataFrame(assets_to_label))
+    training_answers = {}
+    if is_training:
+        from labeling_api.models import assets_w_rule_labels
+        asset_ids = [a["asset_id"] for a in assets_to_label]
+        for row in assets_w_rule_labels.objects.filter(
+            task_type=task_type,
+            rule_index=rule_index,
+            asset_id__in=asset_ids,
+            percent_agree__gte=0.9,
+        ).values("asset_id", "label"):
+            training_answers[str(row["asset_id"])] = row["label"]
 
     collection_data = {
         "task_type": task_type,
@@ -497,8 +514,6 @@ def mturk_redirect(request):
         "mturk_batch_id": mturk_batch_id,
         "rule_index": rule_indexes[0],
     }
-
-    # Test questions are already fetched in parallel above
 
     return render(
         request,
@@ -516,6 +531,8 @@ def mturk_redirect(request):
             "sandbox_flag": sandbox_flag,
             "test_the_labeler": test_the_labeler,
             "test_questions": test_questions,
+            "is_training": is_training,
+            "training_answers_json": json.dumps(training_answers),
         },
     )
 
@@ -2258,3 +2275,112 @@ def admin_subbatch_completion(request):
         result[key] = {"total": total, "done": done, "complete": done >= total and total > 0}
 
     return JsonResponse(result)
+
+
+# ===========================================================================
+# Rule Guide — Reference pages
+# ===========================================================================
+
+@login_required
+def rule_guide(request):
+    from .models import RuleGuide
+    guides = RuleGuide.objects.prefetch_related("directives", "reference_images").all()
+    categories = []
+    seen = set()
+    for g in guides:
+        if g.category not in seen:
+            seen.add(g.category)
+            categories.append(g.category)
+
+    selected = request.GET.get("category", categories[0] if categories else "")
+    filtered = [g for g in guides if g.category == selected]
+
+    return render(request, "rule_guide.html", {
+        "categories": categories,
+        "selected_category": selected,
+        "guides": filtered,
+        "user_is_admin": is_admin(request),
+    })
+
+
+@login_required
+def rule_guide_api(request):
+    """AJAX endpoints for admin CRUD on rule guides, directives, and reference images."""
+    from .models import RuleGuide, RuleDirective, RuleReferenceImage
+
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "forbidden"}, status=403)
+
+    action = request.POST.get("action") or request.GET.get("action")
+
+    if action == "save_guide":
+        guide_id = request.POST.get("guide_id")
+        if guide_id:
+            guide = RuleGuide.objects.get(id=guide_id)
+            guide.title = request.POST.get("title", guide.title)
+            guide.description = request.POST.get("description", guide.description)
+            guide.category = request.POST.get("category", guide.category)
+            guide.save()
+        else:
+            guide = RuleGuide.objects.create(
+                task_type=request.POST["task_type"],
+                rule_index=request.POST["rule_index"],
+                title=request.POST["title"],
+                category=request.POST.get("category", ""),
+                description=request.POST.get("description", ""),
+            )
+        return JsonResponse({"ok": True, "id": guide.id})
+
+    elif action == "delete_guide":
+        RuleGuide.objects.filter(id=request.POST["guide_id"]).delete()
+        return JsonResponse({"ok": True})
+
+    elif action == "save_directive":
+        d_id = request.POST.get("directive_id")
+        if d_id:
+            d = RuleDirective.objects.get(id=d_id)
+            d.text = request.POST.get("text", d.text)
+            if request.POST.get("number"):
+                d.number = int(request.POST["number"])
+            d.save()
+        else:
+            guide = RuleGuide.objects.get(id=request.POST["guide_id"])
+            max_num = guide.directives.order_by("-number").values_list("number", flat=True).first() or 0
+            d = RuleDirective.objects.create(
+                guide=guide,
+                number=int(request.POST.get("number", max_num + 1)),
+                text=request.POST["text"],
+            )
+        return JsonResponse({"ok": True, "id": d.id})
+
+    elif action == "delete_directive":
+        RuleDirective.objects.filter(id=request.POST["directive_id"]).delete()
+        return JsonResponse({"ok": True})
+
+    elif action == "save_image":
+        img_id = request.POST.get("image_id")
+        if img_id:
+            img = RuleReferenceImage.objects.get(id=img_id)
+            img.image_url = request.POST.get("image_url", img.image_url)
+            img.caption = request.POST.get("caption", img.caption)
+            img.label = request.POST.get("label", img.label)
+            img.save()
+        else:
+            guide = RuleGuide.objects.get(id=request.POST["guide_id"])
+            directive = None
+            if request.POST.get("directive_id"):
+                directive = RuleDirective.objects.get(id=request.POST["directive_id"])
+            img = RuleReferenceImage.objects.create(
+                guide=guide,
+                directive=directive,
+                image_url=request.POST["image_url"],
+                caption=request.POST.get("caption", ""),
+                label=request.POST.get("label", ""),
+            )
+        return JsonResponse({"ok": True, "id": img.id})
+
+    elif action == "delete_image":
+        RuleReferenceImage.objects.filter(id=request.POST["image_id"]).delete()
+        return JsonResponse({"ok": True})
+
+    return JsonResponse({"error": "unknown action"}, status=400)

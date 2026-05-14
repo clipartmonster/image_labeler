@@ -46,5 +46,9 @@ urlpatterns = [
     path('admin/performance/data/', views.admin_performance_data, name='admin_performance_data'),
     path('admin/import_gold/', views.admin_import_gold, name='admin_import_gold'),
     path('admin/subbatch_completion/', views.admin_subbatch_completion, name='admin_subbatch_completion'),
+
+    # Rule guide
+    path('rules/', views.rule_guide, name='rule_guide'),
+    path('rules/api/', views.rule_guide_api, name='rule_guide_api'),
 ]
 
