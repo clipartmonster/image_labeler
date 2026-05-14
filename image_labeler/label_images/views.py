@@ -1341,128 +1341,107 @@ def label_testing(request):
 
 @login_required
 def view_model_results(request):
+    from labeling_api.models import (
+        model_results_table, production_models_table,
+        rule_index_thresholds_table, labelling_rules as LR,
+    )
 
-    api_url = f"{settings.LABELING_API_BASE_URL}/get_labelling_rules/"
+    _db = "prod" if "prod" in settings.DATABASES else "default"
 
-    header = {
-        "Content-Type": "application/json",
-        "Authorization": settings.API_ACCESS_KEY,
-    }
+    rule_titles = {}
+    for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
+        rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
 
-    response = requests.get(api_url, json={}, headers=header)
-    label_rules = json.loads(response.content)
+    prod_rows = list(
+        production_models_table.objects.using(_db)
+        .filter(active=True)
+        .values("version_id", "dev_id")
+    )
+    prod_dev_ids = {r["dev_id"] for r in prod_rows}
+    prod_version_map = {r["dev_id"]: r["version_id"] for r in prod_rows}
 
-    label_rules = label_rules["labelling_rules"]
-
-    label_rules = [
-        {
-            "rule_index": entry["rule_index"],
-            "task_type": entry["task_type"],
-            "title": entry["title"],
+    # Threshold data keyed by model_version
+    thresholds = {}
+    for t in rule_index_thresholds_table.objects.using(_db).values():
+        key = (t["model_version"], t["task_type"], t["rule_index"])
+        thresholds[key] = {
+            "thresh_precision": round(t["precision"], 3) if t["precision"] else None,
+            "thresh_recall": round(t["recall"], 3) if t["recall"] else None,
+            "percent_kept": round(t["percent_kept"] * 100, 1) if t["percent_kept"] else None,
+            "min_threshold": round(t["min_threshold"], 3) if t["min_threshold"] is not None else None,
+            "max_threshold": round(t["max_threshold"], 3) if t["max_threshold"] is not None else None,
         }
-        for entry in label_rules
-    ]
-    label_rules = pd.DataFrame(label_rules)
 
-    # print('------label_rules-------')
-    # print(label_rules)
-
-    api_url = f"{settings.LABELING_API_BASE_URL}/get_model_results/"
-
-    header = {
-        "Content-Type": "application/json",
-        "Authorization": settings.API_ACCESS_KEY,
-    }
-
-    response = requests.get(api_url, json={}, headers=header)
-    model_results = json.loads(response.content)
-
-    model_results = pd.DataFrame(model_results["model_results"]).merge(
-        label_rules, on=["rule_index", "task_type"], how="left"
+    all_results = list(
+        model_results_table.objects.using(_db)
+        .order_by("-created_at")
+        .values()
     )
 
-    # print('------model_results------')
-    # print(model_results)
+    for row in all_results:
+        row["is_prod"] = row["id"] in prod_dev_ids
+        row["title"] = rule_titles.get((row["task_type"], row["rule_index"]), "")
+        row["score"] = round((row["val_precision"] + row["val_recall"]) - abs(row["val_precision"] - row["val_recall"]), 3)
+        row["total_samples"] = row["train_samples"] + row["val_samples"]
+        row["date"] = row["created_at"].strftime("%b %d, %Y") if row["created_at"] else ""
+        for f in ("val_recall", "val_precision", "val_auc", "val_loss", "val_mae", "learning_rate"):
+            if row.get(f) is not None:
+                row[f] = round(row[f], 3)
+        # Attach threshold data if this model is in production
+        mv = prod_version_map.get(row["id"])
+        if mv:
+            tkey = (mv, row["task_type"], row["rule_index"])
+            row["threshold"] = thresholds.get(tkey)
+        else:
+            row["threshold"] = None
 
-    model_results["label"] = model_results["task_type"].str[
-        0:2
-    ].str.upper() + model_results["rule_index"].astype(str)
+    features = {}
+    for row in all_results:
+        key = (row["task_type"], row["rule_index"])
+        if key not in features:
+            features[key] = {
+                "task_type": row["task_type"],
+                "rule_index": row["rule_index"],
+                "title": row["title"],
+                "prod_model": None,
+                "models": [],
+            }
+        if row["is_prod"]:
+            features[key]["prod_model"] = row
+        features[key]["models"].append(row)
 
-    model_results = model_results.sort_values(
-        by=["label", "status"], ascending=[True, False]
-    )
-
-    model_result = model_results["date"] = pd.to_datetime(
-        model_results["created_at"]
-    ).dt.date
-
-    best_models = (
-        model_results.assign(
-            performant=lambda x: np.where(
-                (x.val_recall > 0.88) & (x.val_precision > 0.88), "close", "no"
+    for feat in features.values():
+        feat["models"].sort(key=lambda m: m["score"], reverse=True)
+        feat["models"] = feat["models"][:20]
+        for i, m in enumerate(feat["models"]):
+            m["rank"] = i + 1
+        p = feat["prod_model"]
+        if p:
+            t = p.get("threshold") or {}
+            pr = t.get("thresh_precision") or p["val_precision"]
+            rc = t.get("thresh_recall") or p["val_recall"]
+            feat["perf"] = "yes" if rc > 0.9 and pr > 0.9 else (
+                "close" if rc > 0.88 and pr > 0.88 else "no"
             )
+        else:
+            feat["perf"] = "none"
+
+    task_types = sorted(set(k[0] for k in features))
+    grouped = []
+    for tt in task_types:
+        items = sorted(
+            [f for f in features.values() if f["task_type"] == tt],
+            key=lambda f: f["rule_index"],
         )
-        .assign(
-            performant=lambda x: np.where(
-                (x.val_recall > 0.9) & (x.val_precision > 0.9), "yes", x.performant
-            )
-        )
-        .sort_values(["task_type", "rule_index", "score"], ascending=False)
-        .groupby(["task_type", "rule_index"])
-        .head(1)
-        .reset_index()
-        .filter(
-            [
-                "task_type",
-                "label",
-                "val_recall",
-                "val_precision",
-                "performant",
-                "val_mae",
-            ]
-        )
-    )
-
-    # print('-----best_models------')
-    # print(best_models)
-    # print(best_models.columns)
-
-    model_results = (
-        model_results.groupby(["task_type", "rule_index"])
-        .head(20)
-        .sort_values(
-            by=["task_type", "rule_index", "score"], ascending=[True, True, False]
-        )
-        .assign(
-            index_column=lambda x: x.groupby(["task_type", "rule_index"]).cumcount() + 1
-        )
-        .reset_index(drop=True)
-    )
-
-    model_type_options = model_results["model_type"].unique()
-    task_type_options = model_results["task_type"].unique()
-    rule_index_options = model_results["title"].unique()
-    model_labels = model_results["label"].unique()
-
-    # print(model_results)
-
-    model_labels = (
-        model_results.filter(["title", "label", "task_type"])
-        .drop_duplicates()
-        .merge(best_models, on=["label", "task_type"], how="left")
-    )
-
-    # print('-----model_labels------')
-    # print(model_labels)
+        grouped.append({"task_type": tt, "features": items})
 
     data = {
-        "model_results": model_results.to_dict(orient="records"),
-        "model_labels": model_labels.to_dict(orient="records"),
-        "model_type_options": model_type_options,
-        "task_type_options": task_type_options,
-        "rule_index_options": rule_index_options,
+        "grouped_features": grouped,
+        "features_json": json.dumps(
+            {f"{f['task_type']}_{f['rule_index']}": f["models"] for f in features.values()},
+            default=str,
+        ),
     }
-
     return render(request, "view_model_results.html", data)
 
 

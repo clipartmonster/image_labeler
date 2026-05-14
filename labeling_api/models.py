@@ -629,7 +629,7 @@ class label_testing_batches(models.Model):
 class model_results_table(models.Model):
     """Training/validation metrics and hyperparameters for a model run.
 
-    **Table:** ``label_data.model_results``
+    **Table:** ``models.model_results``
 
     **Inputs (ORM):** ``id``, ``model_type``, ``task_type``, ``rule_index``.
 
@@ -667,13 +667,13 @@ class model_results_table(models.Model):
 
     class Meta:
         managed = False
-        db_table = "label_data.model_results"
+        db_table = '"models"."model_results"'
 
 
 class production_models_table(models.Model):
     """Production model registry (active flag, artifact link).
 
-    **Table:** ``label_data.model_results_prod``
+    **Table:** ``models.model_results_prod``
 
     **Inputs (ORM):** ``version_id`` primary key, ``active``, ``dev_id``.
 
@@ -687,7 +687,28 @@ class production_models_table(models.Model):
 
     class Meta:
         managed = False
-        db_table = "label_data.model_results_prod"
+        db_table = '"models"."model_results_prod"'
+
+
+class rule_index_thresholds_table(models.Model):
+    """Post-threshold metrics per model version and rule.
+
+    **Table:** ``models.rule_index_thresholds``
+    """
+
+    date_time_created = models.TextField()
+    rule_index = models.BigIntegerField()
+    min_threshold = models.FloatField()
+    max_threshold = models.FloatField()
+    precision = models.FloatField()
+    recall = models.FloatField()
+    percent_kept = models.FloatField()
+    model_version = models.CharField(max_length=100)
+    task_type = models.CharField(max_length=100)
+
+    class Meta:
+        managed = False
+        db_table = '"models"."rule_index_thresholds"'
 
 
 class color_type_table(models.Model):

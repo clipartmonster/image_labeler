@@ -2,259 +2,256 @@
 {% load static %}
 
 {% block content %}
+<style>
+/* ── Page ── */
+.mr-page {
+    background: #bdc7c7; border-radius: 10px; margin: 10px;
+    padding: 24px 28px 32px; font-family: Roboto, sans-serif;
+    display: flex; gap: 20px; min-height: calc(100vh - 120px);
+}
 
+/* ── Sidebar ── */
+.mr-side {
+    width: 240px; flex-shrink: 0;
+}
+.mr-side h1 {
+    font-size: 18px; font-weight: 700; color: #3a4a4a; margin: 0 0 16px;
+}
+.mr-tt-label {
+    font-size: 11px; font-weight: 700; color: #5d6d6d;
+    text-transform: uppercase; letter-spacing: .5px;
+    margin: 14px 0 6px; padding: 0;
+}
+.mr-tt-label:first-of-type { margin-top: 0; }
 
-<div style = 'display:flex; flex-direction: row;'>
+.mr-feat-btn {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; padding: 6px 10px; margin-bottom: 2px;
+    border: none; border-radius: 6px; background: transparent;
+    cursor: pointer; text-align: left; font-size: 13px;
+    color: #3a4a4a; font-family: Roboto, sans-serif;
+    transition: background .12s;
+}
+.mr-feat-btn:hover { background: #d2dede; }
+.mr-feat-btn.active { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.1); font-weight: 600; }
 
-    <div class = 'listing light container side_panel'>
-       
-        <!-- <div class = 'option panel model_results'>
-            <h1 class = 'listing_info label'>Model Type</h1>
-            {% for model_type in model_type_options %}
-                <div class = "option button rectangle model_results" >
-                    <h1 class = "option title">{{model_type}}</h1>
-                </div>
+.mr-perf-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.mr-perf-dot.yes { background: #5aa85a; }
+.mr-perf-dot.close { background: #d5c040; }
+.mr-perf-dot.no { background: #c05050; }
+.mr-perf-dot.none { background: #a0b0b0; }
+
+/* ── Main content ── */
+.mr-main { flex: 1; min-width: 0; }
+
+/* ── Prod card ── */
+.mr-prod {
+    background: #fff; border-radius: 10px; padding: 18px 22px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 18px;
+    border-left: 4px solid #5aa85a;
+}
+.mr-prod-hd {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+}
+.mr-prod-hd h2 { font-size: 16px; font-weight: 700; color: #2a3a3a; margin: 0; }
+.mr-prod-badge {
+    font-size: 10px; font-weight: 700; padding: 2px 10px;
+    border-radius: 4px; background: #d4edda; color: #1a6b2a;
+    text-transform: uppercase; letter-spacing: .4px;
+}
+
+.mr-metrics {
+    display: flex; gap: 14px; flex-wrap: wrap;
+}
+.mr-metric {
+    background: #f4f7f7; border-radius: 8px; padding: 10px 16px;
+    min-width: 100px; flex: 1;
+}
+.mr-metric-label {
+    font-size: 10px; color: #6a7a7a; text-transform: uppercase;
+    letter-spacing: .4px; margin: 0 0 2px;
+}
+.mr-metric-val {
+    font-size: 22px; font-weight: 700; color: #2a3a3a; margin: 0;
+}
+.mr-metric-sub {
+    font-size: 11px; color: #7a8a8a; margin: 2px 0 0;
+}
+
+.mr-prod-meta {
+    display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px;
+    font-size: 12px; color: #6a7a7a;
+}
+.mr-prod-meta span { white-space: nowrap; }
+.mr-prod-meta strong { color: #3a4a4a; }
+
+/* ── History table ── */
+.mr-history-hd {
+    font-size: 14px; font-weight: 700; color: #3a4a4a; margin: 0 0 8px;
+}
+.mr-tbl-wrap {
+    background: #fff; border-radius: 10px; padding: 14px 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+.mr-tbl {
+    width: 100%; border-collapse: separate; border-spacing: 0 2px;
+}
+.mr-tbl th {
+    text-align: left; font-size: 10px; font-weight: 600; color: #5d6d6d;
+    padding: 4px 8px; text-transform: uppercase; letter-spacing: .4px;
+    white-space: nowrap;
+}
+.mr-tbl td {
+    font-size: 12px; color: #2a3a3a; padding: 6px 8px;
+    background: #f4f7f7; white-space: nowrap;
+}
+.mr-tbl tr td:first-child { border-radius: 4px 0 0 4px; }
+.mr-tbl tr td:last-child { border-radius: 0 4px 4px 0; }
+.mr-tbl tr:hover td { background: #e8eded; }
+.mr-tbl tr.mr-prod-row td { background: #d4edda; font-weight: 600; }
+
+.mr-good { color: #2a6a4a; }
+.mr-warn { color: #a08020; }
+.mr-bad { color: #c05050; }
+
+.mr-empty {
+    text-align: center; padding: 40px; color: #8a9a9a; font-size: 14px;
+}
+
+.mr-no-prod {
+    background: #fff; border-radius: 10px; padding: 18px 22px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 18px;
+    border-left: 4px solid #a0b0b0; color: #6a7a7a; font-size: 13px;
+}
+</style>
+
+<div class="mr-page">
+    <!-- Sidebar -->
+    <div class="mr-side">
+        <h1>Models</h1>
+        {% for group in grouped_features %}
+            <p class="mr-tt-label">{{ group.task_type }}</p>
+            {% for feat in group.features %}
+                <button class="mr-feat-btn" data-key="{{ feat.task_type }}_{{ feat.rule_index }}"
+                        onclick="selectFeature(this, '{{ feat.task_type }}', {{ feat.rule_index }})">
+                    <span class="mr-perf-dot {{ feat.perf }}"></span>
+                    <span>{{ feat.title|default:"—" }}</span>
+                </button>
             {% endfor %}
-        </div>
-      
-        <div class = 'option panel model_results'>
-            <h1 class = 'listing_info label'>Task Type</h1>
-            {% for task_type in task_type_options %}
-                <div class = "option button rectangle model_results" >
-                    <h1 class = "option title">{{task_type}}</h1>
-                </div>
-            {% endfor %}
-        </div> -->
-        
-        <h1 class = 'listing_info label'>Rule Index</h1>
-
-            {% for task_type in task_type_options %}
-
-                <h1 class = 'listing_info label' style = 'margin-top:10px'>{{task_type}} </h1>
-
-                <div class = 'option panel model_results'>
-                    {% for label in model_labels %}
-
-                        {% if label.task_type == task_type %}
-                            <div style = 'display:flex; flex-direction: row; gap:5px; width:50%; margin-bottom:10px; align-items: center;'>
-                                <div class = "performant_status view_model_results {{label.performant}}"></div>
-                                <div class = "option button circle model_label view_model_results" model_label = {{label.label}} >
-                                    <h1 class = "option title">{{label.label}}</h1>
-                                </div>
-                                <h1 class = 'listing_info label'>{{label.title}}</h1>
-                            </div>
-                        {% endif %}
-                        
-                    {% endfor %}
-                </div>
-
-            {% endfor %}
-
+        {% endfor %}
     </div>
 
-    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap; ' >
-            
-        {% for label in model_labels%}
-
-            <div class = 'model_view group container' model_label = {{label.label}} >
-
-                <div style = 'display:flex; gap:5px'>
-
-                    <div class = 'model_label badge small' model_label = {{label.label}}>
-                        <h1 class = 'text_field badge label'>{{label.label}}</h1>                                        
-                    </div>
-                    
-                    <h1 class = 'text_field badge title'>  {{label.title}}</h1>
-                   
-                </div>
-
-                {% for model in model_results%}
-
-                    {% if label.label == model.label %}
-
-                        {% if label.label == 'LI1' %}
-
-                        <div class = 'model_view container {{model.status}}' >
-
-                            <div style = 'display:grid; grid-template-rows: 1fr'>
-
-                                <div style = 'display:grid; grid-template-columns:40px 450px 1fr'>
-                                
-                                    <div>
-
-                                        <div class = 'model_label badge'>
-                                            <h1 class = 'text_field badge small'>{{model.index_column}}</h1>    
-                                        </div>
-
-                                        <div class = 'model_type badge {{model.model_type}}'></div>
-
-                                    </div>
-
-                                    <div style = 'display:grid; grid-template-columns:140px 140px 140px'>
-
-                                        <div style ='display:grid; grid-template-rows:35px 20px 20px'>
-                                        
-                                                <div class = 'text_field large container validation'>
-                                                    <h1 class = 'text_field large'> {{model.val_mae}} </h1>                                        
-                                                </div>
-
-                                                <h5 class = 'text_field small'> val mae </h5>                   
-
-                                        </div>
-
-                                    </div>
-
-                                    <div style = 'display:flex; flex-direction:column' >
-                                    
-                                        <div style = 'display:flex'>
-                                            <h5 class = 'text_field small'>Overall Score:</h5>
-                                            <h1 class = 'text_field rule_title'>{{model.score}}</h1>
-                                        </div>
-
-                                        <div style = 'display:flex'>
-                                                <h5 class = 'text_field small'>Samples:</h5>
-                                                <h1 class = 'text_field rule_title'>{{model.total_samples}}</h1>
-                                        </div>
-
-                                        <div style = 'display:flex'>
-                                            <h5 class = 'text_field small'>Validation Samples:</h5>
-                                            <h1 class = 'text_field rule_title'>{{model.val_samples}}</h1>
-                                        </div>
-
-                                        <div style = 'display:flex'>
-                                            <h5 class = 'text_field small'>Date: </h5>
-                                            <h1 class = 'text_field rule_title'> {{model.date}}</h1>
-                                        </div>
-
-                                        <div style = 'display:flex'>
-                                            <h5 class = 'text_field small'>Model Type: </h5>
-                                            <h1 class = 'text_field rule_title'> {{model.model_type}}</h1>
-                                        </div>
-
-                                        <div style = 'display:flex'>
-                                            <h5 class = 'text_field small'>Image Size: </h5>
-                                            <h1 class = 'text_field rule_title'> {{model.image_size_width}} x {{model.image_size_height}} </h1>
-                                        </div>
-
-                                    </div>
-
-                                </div>    
-                            </div>
-                        </div>
-
-                        {% else %}
-                            <div class = 'model_view container {{model.status}}' >
-
-                                <div style = 'display:grid; grid-template-rows: 1fr'>
-
-                                    <div style = 'display:grid; grid-template-columns:40px 450px 1fr'>
-                                    
-                                        <div>
-
-                                            <div class = 'model_label badge'>
-                                                <h1 class = 'text_field badge small'>{{model.index_column}}</h1>    
-                                            </div>
-
-                                            <div class = 'model_type badge {{model.model_type}}'></div>
-
-                                        </div>
-
-                                        <div style = 'display:grid; grid-template-columns:140px 140px 140px'>
-
-                                            <div style ='display:grid; grid-template-rows:35px 20px 20px'>
-                                            
-                                                    <div class = 'text_field large container validation'>
-                                                        <h1 class = 'text_field large'> {{model.val_recall}} </h1>                                        
-                                                    </div>
-
-                                                    <h5 class = 'text_field small'> Validation Recall </h5>                   
-
-                                                    <h1 class = 'text_field confusion_metrics'>
-                                                    tp: {{model.val_tp}} | fn: {{model.val_fn}}
-                                                    </h1>
-
-                                            </div>
-                        
-                                            <div style ='display:grid; grid-template-rows:35px 20px 20px'>
-                                            
-                                                <div class = 'text_field large container precision'>
-                                                    <h1 class = 'text_field large'> {{model.val_precision}} </h1>                                        
-                                                </div>
-
-                                                <h5 class = 'text_field small'> Validation Precision </h5>                   
-
-                                                <h1 class = 'text_field confusion_metrics'>
-                                                    tp: {{model.val_tp}} | fp: {{model.val_fp}}
-                                                </h1>
-
-                                            </div>
-
-                                            <div style ='display:grid; grid-template-rows:35px 20px 20px'>
-                                            
-                                                <div class = 'text_field large container auc'>
-                                                    <h1 class = 'text_field large'> {{model.val_auc}} </h1>                                        
-                                                </div>
-
-                                                <h5 class = 'text_field small'> Area Under the Curve </h5>                   
-
-
-                                            </div>
-
-                                        </div>
-
-                                        <div style = 'display:flex; flex-direction:column' >
-                                        
-                                            <div style = 'display:flex'>
-                                                <h5 class = 'text_field small'>Overall Score:</h5>
-                                                <h1 class = 'text_field rule_title'>{{model.score}}</h1>
-                                            </div>
-
-                                            <div style = 'display:flex'>
-                                                    <h5 class = 'text_field small'>Samples:</h5>
-                                                    <h1 class = 'text_field rule_title'>{{model.total_samples}}</h1>
-                                            </div>
-
-                                            <div style = 'display:flex'>
-                                                <h5 class = 'text_field small'>Validation Samples:</h5>
-                                                <h1 class = 'text_field rule_title'>{{model.val_samples}}</h1>
-                                            </div>
-
-                                            <div style = 'display:flex'>
-                                                <h5 class = 'text_field small'>Date: </h5>
-                                                <h1 class = 'text_field rule_title'> {{model.date}}</h1>
-                                            </div>
-
-                                            <div style = 'display:flex'>
-                                                <h5 class = 'text_field small'>Model Type: </h5>
-                                                <h1 class = 'text_field rule_title'> {{model.model_type}}</h1>
-                                            </div>
-
-                                            <div style = 'display:flex'>
-                                                <h5 class = 'text_field small'>Image Size: </h5>
-                                                <h1 class = 'text_field rule_title'> {{model.image_size_width}} x {{model.image_size_height}} </h1>
-                                            </div>
-
-                                        </div>
-                                    </div>    
-
-                                    
-                                </div> 
-
-                            
-                            </div>
-                        {% endif %}
-                    
-                    {% endif %}
-
-                {% endfor %}
+    <!-- Main -->
+    <div class="mr-main">
+        <div id="mrEmpty" class="mr-empty">Select a feature from the sidebar to view model results.</div>
+        <div id="mrContent" style="display:none;">
+            <div id="mrProd"></div>
+            <h3 class="mr-history-hd">Model History</h3>
+            <div class="mr-tbl-wrap">
+                <table class="mr-tbl">
+                    <thead><tr>
+                        <th>#</th>
+                        <th>Recall</th>
+                        <th>Precision</th>
+                        <th>AUC</th>
+                        <th>Score</th>
+                        <th>Samples</th>
+                        <th>Model</th>
+                        <th>Date</th>
+                        <th></th>
+                    </tr></thead>
+                    <tbody id="mrBody"></tbody>
+                </table>
             </div>
-            {% endfor %}
-
-     
-
+        </div>
     </div>
-
 </div>
 
+<script>
+var _featureData = {{ features_json|safe }};
 
+function accCls(v) { return v >= 0.9 ? 'mr-good' : v >= 0.88 ? 'mr-warn' : 'mr-bad'; }
+function fmt(v) { return v != null ? v.toFixed(3) : '\u2014'; }
+
+function selectFeature(btn, taskType, ruleIndex) {
+    document.querySelectorAll('.mr-feat-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+
+    var key = taskType + '_' + ruleIndex;
+    var models = _featureData[key] || [];
+
+    document.getElementById('mrEmpty').style.display = 'none';
+    document.getElementById('mrContent').style.display = '';
+
+    var prod = models.find(function(m) { return m.is_prod; });
+    var prodEl = document.getElementById('mrProd');
+
+    if (prod) {
+        var t = prod.threshold;
+        var threshHtml = '';
+        if (t) {
+            threshHtml = '<div style="margin-top:14px; padding-top:12px; border-top:1px solid #dde4e4;">'
+                + '<p style="font-size:11px; font-weight:700; color:#5d6d6d; text-transform:uppercase; letter-spacing:.4px; margin:0 0 8px;">After Thresholding</p>'
+                + '<div class="mr-metrics">'
+                + metricCard('Recall', t.thresh_recall, accCls(t.thresh_recall))
+                + metricCard('Precision', t.thresh_precision, accCls(t.thresh_precision))
+                + metricCard('% Kept', t.percent_kept, null, '%')
+                + metricCard('Min Thresh', t.min_threshold)
+                + metricCard('Max Thresh', t.max_threshold)
+                + '</div></div>';
+        }
+
+        prodEl.innerHTML = '<div class="mr-prod">'
+            + '<div class="mr-prod-hd">'
+            + '<h2>' + (prod.title || taskType + ' / Rule ' + ruleIndex) + '</h2>'
+            + '<span class="mr-prod-badge">In Production</span>'
+            + '</div>'
+            + '<div class="mr-metrics">'
+            + metricCard('Recall', prod.val_recall, accCls(prod.val_recall))
+            + metricCard('Precision', prod.val_precision, accCls(prod.val_precision))
+            + metricCard('AUC', prod.val_auc)
+            + metricCard('Score', prod.score)
+            + metricCard('Val Samples', prod.val_samples)
+            + '</div>'
+            + threshHtml
+            + '<div class="mr-prod-meta">'
+            + '<span>Model: <strong>' + prod.model_type + '</strong></span>'
+            + '<span>Image: <strong>' + prod.image_size_width + '\u00d7' + prod.image_size_height + '</strong></span>'
+            + '<span>Epochs: <strong>' + prod.best_epoch + '/' + prod.epochs + '</strong></span>'
+            + '<span>LR: <strong>' + prod.learning_rate + '</strong></span>'
+            + '<span>Date: <strong>' + prod.date + '</strong></span>'
+            + '</div></div>';
+    } else {
+        prodEl.innerHTML = '<div class="mr-no-prod">No production model set for this feature.</div>';
+    }
+
+    var tb = document.getElementById('mrBody');
+    tb.innerHTML = '';
+    models.forEach(function(m) {
+        var tr = document.createElement('tr');
+        if (m.is_prod) tr.className = 'mr-prod-row';
+        tr.innerHTML = '<td>' + m.rank + '</td>'
+            + '<td class="' + accCls(m.val_recall) + '">' + fmt(m.val_recall) + '</td>'
+            + '<td class="' + accCls(m.val_precision) + '">' + fmt(m.val_precision) + '</td>'
+            + '<td>' + fmt(m.val_auc) + '</td>'
+            + '<td><strong>' + fmt(m.score) + '</strong></td>'
+            + '<td>' + m.total_samples + '</td>'
+            + '<td>' + m.model_type + '</td>'
+            + '<td style="color:#7a8a8a;">' + m.date + '</td>'
+            + '<td>' + (m.is_prod ? '<span class="mr-prod-badge" style="font-size:9px;">PROD</span>' : '') + '</td>';
+        tb.appendChild(tr);
+    });
+}
+
+function metricCard(label, val, cls, suffix) {
+    var valStr = (typeof val === 'number') ? (val % 1 === 0 ? String(val) : val.toFixed(3)) : '\u2014';
+    if (suffix && val != null) valStr += suffix;
+    return '<div class="mr-metric">'
+        + '<p class="mr-metric-label">' + label + '</p>'
+        + '<p class="mr-metric-val' + (cls ? ' ' + cls : '') + '">' + valStr + '</p>'
+        + '</div>';
+}
+</script>
 {% endblock %}
