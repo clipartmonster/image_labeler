@@ -6,243 +6,157 @@
 {% if not user_is_admin %}
 <!-- ===== LABELER VIEW ===== -->
 <style>
-.ld-page {
-    max-width: 900px;
-    margin: 30px auto;
-    padding: 0 20px;
-    font-family: Roboto, 'Segoe UI', sans-serif;
-}
-.ld-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 28px;
-    padding-bottom: 16px;
-    border-bottom: 2px solid #3a4a4a;
-}
-.ld-header h1 {
-    font-size: 24px;
-    font-weight: 700;
-    color: #e0eded;
-    margin: 0;
-}
-.ld-nav { display: flex; gap: 10px; }
+.ld-page { max-width:760px; margin:24px auto; padding:0 16px; font-family:Roboto,'Segoe UI',sans-serif; }
+.ld-topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+.ld-topbar h1 { font-size:18px; font-weight:700; color:#596767; margin:0; }
+.ld-nav { display:flex; gap:8px; }
 .ld-nav a {
-    padding: 8px 20px;
-    background: #2a3a3a;
-    color: #c8dada;
-    border-radius: 6px;
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-    border: 1px solid #3a4a4a;
-    transition: background 0.15s, color 0.15s;
+    padding:6px 14px; background:#a9b9b9; color:#3a4a4a; border-radius:5px;
+    text-decoration:none; font-size:13px; font-weight:500; border:1px solid #8a9c9c;
 }
-.ld-nav a:hover { background: #3a5050; color: #fff; }
-.ld-empty {
-    text-align: center;
-    padding: 50px 20px;
-    background: #1e2e2e;
-    border-radius: 10px;
-    border: 1px dashed #3a4a4a;
+.ld-nav a:hover { background:#bdc7c7; }
+.ld-empty { text-align:center; padding:40px 20px; color:#6f7a7a; font-size:15px; }
+.ld-section { margin-bottom:20px; }
+.ld-section-label {
+    font-size:11px; font-weight:700; color:#8a9c9c; text-transform:uppercase;
+    letter-spacing:1.2px; margin:0 0 8px; padding-left:2px;
 }
-.ld-empty p { color: #8aa8a8; font-size: 16px; margin: 0; }
-.ld-section-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: #8aa8a8;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin: 0 0 14px;
+/* --- Table rows --- */
+.ld-table { width:100%; border-collapse:separate; border-spacing:0 4px; }
+.ld-table th {
+    text-align:left; font-size:11px; font-weight:600; color:#6f7a7a;
+    padding:0 10px 4px; white-space:nowrap;
 }
-.ld-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 16px;
+.ld-row {
+    background:#bdc7c7; border-radius:6px; cursor:default;
 }
-.ld-card {
-    background: #1e2e2e;
-    border-radius: 10px;
-    padding: 20px;
-    border: 1px solid #3a4a4a;
-    transition: border-color 0.15s, box-shadow 0.15s;
+.ld-row:hover { background:#c8d4d4; }
+.ld-row td {
+    padding:10px; font-size:13px; color:#3a4a4a; vertical-align:middle;
 }
-.ld-card:hover {
-    border-color: #5a7a7a;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+.ld-row td:first-child { border-radius:6px 0 0 6px; }
+.ld-row td:last-child  { border-radius:0 6px 6px 0; }
+.ld-feat { font-weight:700; color:#2a3a3a; font-size:14px; line-height:1.2; }
+.ld-feat-sub { font-size:11px; font-weight:400; color:#5d6565; }
+.ld-bar-track { background:#a0b0b0; border-radius:3px; height:5px; width:100%; min-width:60px; }
+.ld-bar-fill { height:5px; border-radius:3px; background:#409393; }
+.ld-pct { font-size:11px; color:#5d6565; margin-top:2px; }
+.ld-tag {
+    display:inline-block; font-size:10px; font-weight:700; padding:2px 7px;
+    border-radius:3px; white-space:nowrap;
 }
-.ld-card.overdue  { border-left: 4px solid #e06060; }
-.ld-card.urgent   { border-left: 4px solid #e0c060; }
-.ld-card.training { border-left: 4px solid #60c080; }
-.ld-card-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 12px;
-}
-.ld-card-title {
-    font-size: 17px;
-    font-weight: 700;
-    color: #e0eded;
-    margin: 0;
-    line-height: 1.3;
-}
-.ld-badge {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 10px;
-    border-radius: 4px;
-    white-space: nowrap;
-}
-.ld-badge-training { background: #60c080; color: #0a1a0a; }
-.ld-badge-pay { background: #2a3a3a; color: #a0e0a0; }
-.ld-card-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 20px;
-    margin-bottom: 14px;
-}
-.ld-meta-item {
-    font-size: 13px;
-    color: #8aa8a8;
-}
-.ld-meta-item strong { color: #d0e0e0; font-weight: 600; }
-.ld-progress-wrap {
-    background: #162222;
-    border-radius: 4px;
-    height: 6px;
-    width: 100%;
-    margin-bottom: 6px;
-    overflow: hidden;
-}
-.ld-progress-bar {
-    height: 6px;
-    border-radius: 4px;
-    background: #5a9a7a;
-    transition: width 0.3s;
-}
-.ld-progress-label {
-    font-size: 12px;
-    color: #6a8a8a;
-    margin-bottom: 14px;
-}
-.ld-deadline {
-    font-size: 12px;
-    margin-bottom: 14px;
-}
-.ld-deadline.ok      { color: #8aa8a8; }
-.ld-deadline.urgent  { color: #e0c060; }
-.ld-deadline.overdue { color: #e06060; font-weight: 600; }
+.ld-tag-done    { background:#8eb284; color:#fff; }
+.ld-tag-todo    { background:#e0c060; color:#2a2a1a; }
+.ld-tag-overdue { background:#bd4444; color:#fff; }
+.ld-tag-urgent  { background:#e0c060; color:#2a2a1a; }
+.ld-tag-locked  { background:#a9b9b9; color:#6f7a7a; }
 .ld-btn {
-    display: inline-block;
-    padding: 9px 24px;
-    border-radius: 6px;
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 600;
-    transition: background 0.15s, transform 0.1s;
+    display:inline-block; padding:5px 14px; border-radius:5px;
+    text-decoration:none; font-size:12px; font-weight:600; white-space:nowrap;
 }
-.ld-btn:active { transform: scale(0.98); }
-.ld-btn-primary { background: #5a9a7a; color: #fff; }
-.ld-btn-primary:hover { background: #4a8a6a; }
-.ld-btn-training { background: #60c080; color: #0a1a0a; }
-.ld-btn-training:hover { background: #50b070; }
-.ld-card.training-done {
-    border-left: 4px solid #3a6a4a;
-    opacity: 0.75;
-}
-.ld-badge-done { background: #3a6a4a; color: #c0e0c0; }
-.ld-btn-disabled {
-    background: #2a3a3a;
-    color: #5a6a6a;
-    cursor: not-allowed;
-    pointer-events: none;
-}
-.ld-lock-msg {
-    font-size: 12px;
-    color: #e0c060;
-    margin-bottom: 8px;
-}
+.ld-btn-go    { background:#409393; color:#fff; }
+.ld-btn-go:hover { background:#338484; }
+.ld-btn-redo  { background:#a9b9b9; color:#3a4a4a; border:1px solid #8a9c9c; }
+.ld-btn-redo:hover { background:#bdc7c7; }
+.ld-btn-off   { background:#d2dada; color:#8a9c9c; cursor:not-allowed; pointer-events:none; }
+.ld-lock-note { font-size:11px; color:#bd4444; }
 </style>
 
 <div class="ld-page">
-    <div class="ld-header">
-        <h1>Your Batches</h1>
+    <div class="ld-topbar">
+        <h1>My Batches</h1>
         <div class="ld-nav">
-            <a href="/label_images/rules/">Rules Reference</a>
+            <a href="/label_images/rules/">Rules</a>
             <a href="/label_images/earnings/">Earnings</a>
         </div>
     </div>
 
     {% if not assignments %}
-        <div class="ld-empty">
-            <p>No batches assigned yet. Check back later.</p>
-        </div>
+        <p class="ld-empty">No batches assigned yet. Check back later.</p>
     {% endif %}
 
     {% if training_assignments %}
-    <p class="ld-section-title">Training</p>
-    <div class="ld-grid" style="margin-bottom: 28px;">
-        {% for a in training_assignments %}
-        <div class="ld-card {% if a.training_done %}training-done{% else %}training{% endif %}">
-            <div class="ld-card-head">
-                <p class="ld-card-title">{{ a.task_type }} &mdash; Rule {{ a.rule_index }}</p>
-                {% if a.training_done %}
-                    <span class="ld-badge ld-badge-done">&#10003; COMPLETED</span>
-                {% else %}
-                    <span class="ld-badge ld-badge-training">TRAINING</span>
-                {% endif %}
-            </div>
-            <div class="ld-card-meta">
-                <span class="ld-meta-item">Images: <strong>{{ a.total }}</strong></span>
-            </div>
-            <div class="ld-progress-wrap">
-                <div class="ld-progress-bar" style="width:{{ a.progress_pct }}%; background:{% if a.training_done %}#3a6a4a{% else %}#60c080{% endif %};"></div>
-            </div>
-            {% if a.training_done %}
-                <p class="ld-progress-label" style="color:#5a9a7a;">Training complete</p>
-                <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
-                   class="ld-btn ld-btn-training" style="background:#3a6a4a; font-size:13px;">Redo Training</a>
-            {% else %}
-                <p class="ld-progress-label">Not started</p>
-                <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
-                   class="ld-btn ld-btn-training">Start Training</a>
-            {% endif %}
-        </div>
-        {% endfor %}
+    <div class="ld-section">
+        <p class="ld-section-label">Training</p>
+        <table class="ld-table">
+            <thead><tr>
+                <th>Feature</th>
+                <th>Images</th>
+                <th>Status</th>
+                <th></th>
+            </tr></thead>
+            <tbody>
+            {% for a in training_assignments %}
+            <tr class="ld-row">
+                <td>
+                    <div class="ld-feat">{{ a.feature_name|default:"—" }}</div>
+                    <div class="ld-feat-sub">Rule {{ a.rule_index }}</div>
+                </td>
+                <td>{{ a.total }}</td>
+                <td>
+                    {% if a.training_done %}
+                        <span class="ld-tag ld-tag-done">&#10003; Done</span>
+                    {% else %}
+                        <span class="ld-tag ld-tag-todo">Not started</span>
+                    {% endif %}
+                </td>
+                <td style="text-align:right;">
+                    {% if a.training_done %}
+                        <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
+                           class="ld-btn ld-btn-redo">Redo</a>
+                    {% else %}
+                        <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
+                           class="ld-btn ld-btn-go">Start</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
     </div>
     {% endif %}
 
     {% if work_assignments %}
-    <p class="ld-section-title">Assigned Work</p>
-    <div class="ld-grid">
-        {% for a in work_assignments %}
-        <div class="ld-card {% if a.deadline_status == 'overdue' %}overdue{% elif a.deadline_status == 'urgent' %}urgent{% endif %}">
-            <div class="ld-card-head">
-                <p class="ld-card-title">{{ a.task_type }} &mdash; Rule {{ a.rule_index }}</p>
-                <span class="ld-badge ld-badge-pay">${{ a.payment_amount }}</span>
-            </div>
-            <div class="ld-card-meta">
-                <span class="ld-meta-item">Batch <strong>{{ a.batch_id }}</strong> / Sub-batch <strong>{{ a.large_sub_batch }}</strong></span>
-                <span class="ld-meta-item">Images: <strong>{{ a.completed }} / {{ a.total }}</strong></span>
-            </div>
-            <div class="ld-progress-wrap">
-                <div class="ld-progress-bar" style="width:{{ a.progress_pct }}%;"></div>
-            </div>
-            <p class="ld-progress-label">{{ a.progress_pct }}% complete</p>
-            <p class="ld-deadline {{ a.deadline_status }}">
-                Deadline: {{ a.deadline|date:"M d, Y" }}{% if a.deadline_status == "overdue" %} &mdash; OVERDUE{% endif %}
-            </p>
-            {% if a.training_required %}
-                <p class="ld-lock-msg">Complete training for this feature first</p>
-                <span class="ld-btn ld-btn-disabled">Start Labeling</span>
-            {% else %}
-                <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}"
-                   class="ld-btn ld-btn-primary">Start Labeling</a>
-            {% endif %}
-        </div>
-        {% endfor %}
+    <div class="ld-section">
+        <p class="ld-section-label">Assigned Work</p>
+        <table class="ld-table">
+            <thead><tr>
+                <th>Feature</th>
+                <th>Progress</th>
+                <th>Pay</th>
+                <th>Deadline</th>
+                <th></th>
+            </tr></thead>
+            <tbody>
+            {% for a in work_assignments %}
+            <tr class="ld-row">
+                <td>
+                    <div class="ld-feat">{{ a.feature_name|default:"—" }}</div>
+                    <div class="ld-feat-sub">Rule {{ a.rule_index }} &middot; Batch {{ a.batch_id }}/{{ a.large_sub_batch }}</div>
+                </td>
+                <td>
+                    <div class="ld-bar-track"><div class="ld-bar-fill" style="width:{{ a.progress_pct }}%;"></div></div>
+                    <div class="ld-pct">{{ a.completed }}/{{ a.total }}</div>
+                </td>
+                <td style="font-weight:600; color:#2a6a4a;">${{ a.payment_amount }}</td>
+                <td>
+                    <span style="font-size:12px;{% if a.deadline_status == 'overdue' %} color:#bd4444; font-weight:700;{% elif a.deadline_status == 'urgent' %} color:#b08820;{% else %} color:#5d6565;{% endif %}">
+                        {{ a.deadline|date:"M d" }}{% if a.deadline_status == "overdue" %} LATE{% endif %}
+                    </span>
+                </td>
+                <td style="text-align:right;">
+                    {% if a.training_required %}
+                        <span class="ld-btn ld-btn-off">Locked</span>
+                        <div class="ld-lock-note">Finish training first</div>
+                    {% else %}
+                        <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}"
+                           class="ld-btn ld-btn-go">Label</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
     </div>
     {% endif %}
 </div>

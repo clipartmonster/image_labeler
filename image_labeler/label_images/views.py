@@ -288,8 +288,12 @@ def setup_session(request):
         )
     else:
         now = timezone.now()
-        from labeling_api.models import label_data_selected_assets_new, prompt_responses
+        from labeling_api.models import label_data_selected_assets_new, prompt_responses, labelling_rules as LR
         from .models import TrainingBatchAsset
+
+        rule_titles = {}
+        for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
+            rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
 
         # Always show training batches (even completed); only show incomplete work batches
         training_qs = BatchAssignment.objects.filter(
@@ -313,6 +317,7 @@ def setup_session(request):
                 "id": a.id,
                 "task_type": a.task_type,
                 "rule_index": a.rule_index,
+                "feature_name": rule_titles.get((a.task_type, a.rule_index), ""),
                 "batch_id": a.batch_id,
                 "large_sub_batch": a.large_sub_batch,
                 "total": total,
@@ -356,6 +361,7 @@ def setup_session(request):
                 "id": a.id,
                 "task_type": a.task_type,
                 "rule_index": a.rule_index,
+                "feature_name": rule_titles.get((a.task_type, a.rule_index), ""),
                 "batch_id": a.batch_id,
                 "large_sub_batch": a.large_sub_batch,
                 "payment_amount": a.payment_amount,
