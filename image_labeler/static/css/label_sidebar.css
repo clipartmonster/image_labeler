@@ -6,17 +6,18 @@
 
 .rules-sidebar {
     position: fixed;
-    left: -320px;
+    left: -360px;
     top: 0;
     z-index: 900;
-    width: 300px;
+    width: 340px;
     height: 100vh;
     overflow-y: auto;
-    background: #1e2e2e;
-    border-right: 1px solid #3a4a4a;
-    padding: 16px;
+    background: #1a2828;
+    border-right: 2px solid #4a6060;
+    padding: 18px 20px;
     font-family: 'Roboto', sans-serif;
     transition: left 0.3s ease;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.3);
 }
 
 .rules-sidebar.open {
@@ -24,20 +25,21 @@
 }
 
 .rules-sidebar h2 {
-    color: #d2e2e2;
-    font-size: 16px;
+    color: #e8f0f0;
+    font-size: 18px;
     margin: 0 0 12px;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .rules-sidebar .rule-prompt {
-    color: #a0b8b8;
+    color: #b8d0d0;
     font-size: 13px;
-    line-height: 1.5;
-    margin: 0 0 16px;
-    padding: 10px;
-    background: #2a3a3a;
+    line-height: 1.6;
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    background: #243838;
     border-radius: 6px;
+    border-left: 3px solid #799494;
 }
 
 .rules-sidebar .examples-section {
@@ -84,19 +86,29 @@
     margin-top: 3px;
 }
 
+/* Toggle button — large, always visible */
 .rules-sidebar .sidebar-toggle {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     position: absolute;
-    top: 10px;
-    right: -36px;
+    top: 12px;
+    right: -90px;
     background: #799494;
-    color: #d2e2e2;
+    color: #fff;
     border: none;
-    border-radius: 0 6px 6px 0;
-    padding: 8px 10px;
+    border-radius: 0 8px 8px 0;
+    padding: 10px 14px;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: 'Roboto', sans-serif;
     z-index: 901;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.3);
+    white-space: nowrap;
+}
+.rules-sidebar .sidebar-toggle:hover {
+    background: #6a8585;
 }
 
 .labeling-main {

@@ -515,6 +515,12 @@ def mturk_redirect(request):
         "rule_index": rule_indexes[0],
     }
 
+    from .models import RuleGuide
+    rule_guides = list(
+        RuleGuide.objects.filter(task_type=task_type)
+        .prefetch_related("directives", "reference_images")
+    )
+
     return render(
         request,
         "label_content.html",
@@ -533,6 +539,7 @@ def mturk_redirect(request):
             "test_questions": test_questions,
             "is_training": is_training,
             "training_answers_json": json.dumps(training_answers),
+            "rule_guides": rule_guides,
         },
     )
 

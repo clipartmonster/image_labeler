@@ -7,16 +7,45 @@
 
         <!-- Rules + Examples Sidebar -->
         <div class="rules-sidebar" id="rulesSidebar">
-            <button class="sidebar-toggle" onclick="document.getElementById('rulesSidebar').classList.toggle('open')">&#9776;</button>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <h2 style="margin:0;">Rules &amp; Examples</h2>
-                <a href="/label_images/rules/" target="_blank" style="font-size:12px; color:#799494; text-decoration:none; border:1px solid #4a5a5a; border-radius:4px; padding:4px 10px;">Full Rules Page</a>
+            <button class="sidebar-toggle" id="sidebarToggleBtn" onclick="document.getElementById('rulesSidebar').classList.toggle('open')">
+                <span id="toggleIcon">&#9776;</span> Rules
+            </button>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <h2 style="margin:0; font-size:18px;">Rules &amp; Examples</h2>
+                <a href="/label_images/rules/" target="_blank"
+                   style="font-size:12px; color:#1a2a2a; text-decoration:none; background:#799494; border-radius:4px; padding:5px 12px; font-weight:600;">
+                    Full Page
+                </a>
             </div>
 
+            {% for guide in rule_guides %}
+            <div style="margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid #3a4a4a;">
+                <h3 style="color:#e8f0f0; font-size:15px; margin:0 0 6px; font-weight:700;">
+                    Rule {{ guide.rule_index }}: {{ guide.title }}
+                </h3>
+                <div class="rule-prompt">{{ guide.description }}</div>
+                <ol style="margin:8px 0 0; padding-left:18px; color:#c0d8d8; font-size:13px; line-height:1.6;">
+                    {% for d in guide.directives.all %}
+                    <li style="margin-bottom:4px;">{{ d.text }}</li>
+                    {% endfor %}
+                </ol>
+
+                {% for img in guide.reference_images.all %}
+                    {% if not img.directive %}
+                    <div style="display:inline-block; margin:6px 4px 0 0; vertical-align:top;">
+                        <img src="{{ img.image_url }}" style="max-width:120px; max-height:90px; border-radius:4px; border:2px solid {% if img.label == 'yes' %}#4a8a4a{% elif img.label == 'no' %}#8a4a4a{% else %}#3a4a4a{% endif %};">
+                        {% if img.caption %}<div style="font-size:10px; color:#8a9a9a; margin-top:2px;">{{ img.caption }}</div>{% endif %}
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+            {% endfor %}
+
+            {% if not rule_guides %}
             {% for rule in labelling_rules %}
                 {% if rule.rule_index != 0 %}
                 <div style="margin-bottom:18px;">
-                    <h2 style="color:#d2e2e2; font-size:14px; margin:0 0 4px;">Rule {{ rule.rule_index }}: {{ rule.title }}</h2>
+                    <h3 style="color:#e8f0f0; font-size:15px; margin:0 0 4px;">Rule {{ rule.rule_index }}: {{ rule.title }}</h3>
                     <div class="rule-prompt">{{ rule.description }}
                         {% if rule.directives %}
                         <ul style="margin:6px 0 0; padding-left:16px;">
@@ -26,32 +55,10 @@
                         </ul>
                         {% endif %}
                     </div>
-
-                    <div class="examples-section" id="examples_rule_{{ rule.rule_index }}">
-                        <!-- Examples loaded via JS or from template data -->
-                        {% for example in rule.examples %}
-                            {% if example.example_type == 'correct' %}
-                            <div class="example-item" style="display:inline-block; width:45%; margin:2px;">
-                                <img src="{{ example.image_path }}" style="border:2px solid #4a8a4a;">
-                                {% if example.caption %}<div class="caption">{{ example.caption }}</div>{% endif %}
-                            </div>
-                            {% endif %}
-                        {% endfor %}
-                        {% for example in rule.examples %}
-                            {% if example.example_type == 'incorrect' %}
-                            <div class="example-item" style="display:inline-block; width:45%; margin:2px;">
-                                <img src="{{ example.image_path }}" style="border:2px solid #8a4a4a;">
-                                {% if example.caption %}<div class="caption">{{ example.caption }}</div>{% endif %}
-                            </div>
-                            {% endif %}
-                        {% endfor %}
-                    </div>
-
-                    <!-- Dynamic examples from RuleExample model -->
-                    <div id="dynamic_examples_{{ rule.rule_index }}"></div>
                 </div>
                 {% endif %}
             {% endfor %}
+            {% endif %}
         </div>
 
         <!-- Main labeling content -->
