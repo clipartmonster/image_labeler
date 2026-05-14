@@ -10,8 +10,8 @@
     display: flex; flex-direction: column; align-items: center;
 }
 .fp-banner {
-    width: 100%; max-width: 900px;
-    margin: 48px 0 40px;
+    width: 100%; max-width: 940px;
+    margin: 48px 0 32px;
     text-align: center;
 }
 .fp-banner h1 {
@@ -20,19 +20,24 @@
 .fp-banner p {
     font-size: 14px; color: #6a8080; margin: 0;
 }
+.fp-container {
+    width: 100%; max-width: 940px;
+    background: #dfe7e7; border-radius: 12px;
+    padding: 28px 32px 32px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
 .fp-hero {
-    width: 100%; max-width: 900px;
-    margin-bottom: 44px;
+    margin-bottom: 28px;
 }
 .fp-hero a {
     display: flex; align-items: center; justify-content: center;
     flex-direction: column; gap: 4px;
-    padding: 28px 24px;
-    background: #3d5a5a; border-radius: 12px;
+    padding: 24px 24px;
+    background: #3d5a5a; border-radius: 10px;
     text-decoration: none; color: #fff;
     font-size: 18px; font-weight: 600;
     transition: background .15s;
-    box-shadow: 0 4px 14px rgba(0,0,0,.15);
+    box-shadow: 0 3px 10px rgba(0,0,0,.12);
 }
 .fp-hero a:hover { background: #4a6e6e; }
 .fp-hero a span {
@@ -40,15 +45,12 @@
 }
 
 .fp-sections {
-    width: 100%; max-width: 900px;
-    display: flex; flex-direction: column; gap: 36px;
+    display: flex; flex-direction: column; gap: 24px;
 }
-.fp-section {}
 .fp-section-hd {
-    font-size: 11px; font-weight: 700; color: #5d6d6d;
+    font-size: 12px; font-weight: 700; color: #3a4a4a;
     text-transform: uppercase; letter-spacing: .8px;
-    margin: 0 0 14px; padding-bottom: 8px;
-    border-bottom: 2px solid #c8d4d4;
+    margin: 0 0 12px; padding: 0;
 }
 .fp-grid {
     display: grid;
@@ -57,16 +59,16 @@
 }
 .fp-card {
     display: flex; align-items: center; justify-content: center;
-    padding: 18px 12px;
-    background: #eef3f3; border-radius: 8px;
+    padding: 16px 12px;
+    background: #fff; border-radius: 8px;
     text-decoration: none; color: #344646;
     font-size: 13px; font-weight: 500; text-align: center;
     transition: background .12s, box-shadow .12s, transform .12s;
-    border: 1px solid #d4dede;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
 }
 .fp-card:hover {
-    background: #fff; box-shadow: 0 3px 10px rgba(0,0,0,.1);
-    transform: translateY(-2px); border-color: #b0c0c0;
+    background: #f4f8f8; box-shadow: 0 3px 10px rgba(0,0,0,.1);
+    transform: translateY(-2px);
 }
 </style>
 
@@ -76,38 +78,40 @@
         <p>Internal labeling &amp; model dashboard</p>
     </div>
 
-    <div class="fp-hero">
-        <a href="/label_images/setup_session/">
-            Setup Session
-            <span>Start labeling or manage batches</span>
-        </a>
-    </div>
-
-    {% if user_is_admin %}
-    <div class="fp-sections">
-        <div class="fp-section">
-            <p class="fp-section-hd">Data &amp; Labels</p>
-            <div class="fp-grid">
-                <a href="/label_images/view_model_results/" class="fp-card">Model Results</a>
-                <a href="/label_images/view_batch_labels/" class="fp-card">Batch Labels</a>
-                <a href="/label_images/view_prediction_labels/?task_type=asset_type&rule_index=3" class="fp-card">Prediction Labels</a>
-                <a href="/label_images/view_labels/" class="fp-card">View Labels</a>
-                <a href="/label_images/view_asset/" class="fp-card">View Asset</a>
-            </div>
+    <div class="fp-container">
+        <div class="fp-hero">
+            <a href="/label_images/setup_session/">
+                Setup Session
+                <span>Start labeling or manage batches</span>
+            </a>
         </div>
 
-        <div class="fp-section">
-            <p class="fp-section-hd">Tools</p>
-            <div class="fp-grid">
-                <a href="/label_images/view_primary_colors/" class="fp-card">Primary Colors</a>
-                <a href="/label_images/view_line_widths/" class="fp-card">Line Width</a>
-                <a href="/label_images/view_rough_fill/" class="fp-card">Rough Fill</a>
-                <a href="/label_images/manage_rules/" class="fp-card">Manage Rules</a>
-                <a href="/label_images/label_search_results/" class="fp-card">Search Results</a>
+        {% if user_is_admin %}
+        <div class="fp-sections">
+            <div class="fp-section">
+                <p class="fp-section-hd">Data &amp; Labels</p>
+                <div class="fp-grid">
+                    <a href="/label_images/view_model_results/" class="fp-card">Model Results</a>
+                    <a href="/label_images/view_batch_labels/" class="fp-card">Batch Labels</a>
+                    <a href="/label_images/view_prediction_labels/?task_type=asset_type&rule_index=3" class="fp-card">Prediction Labels</a>
+                    <a href="/label_images/view_labels/" class="fp-card">View Labels</a>
+                    <a href="/label_images/view_asset/" class="fp-card">View Asset</a>
+                </div>
+            </div>
+
+            <div class="fp-section">
+                <p class="fp-section-hd">Tools</p>
+                <div class="fp-grid">
+                    <a href="/label_images/view_primary_colors/" class="fp-card">Primary Colors</a>
+                    <a href="/label_images/view_line_widths/" class="fp-card">Line Width</a>
+                    <a href="/label_images/view_rough_fill/" class="fp-card">Rough Fill</a>
+                    <a href="/label_images/manage_rules/" class="fp-card">Manage Rules</a>
+                    <a href="/label_images/label_search_results/" class="fp-card">Search Results</a>
+                </div>
             </div>
         </div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 
 {% endblock %}
