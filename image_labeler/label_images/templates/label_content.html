@@ -3,6 +3,19 @@
 
     {% block content %}
 
+    <style>
+    .measure-btn {
+        position: absolute; bottom: 10px; right: 10px; z-index: 5;
+        padding: 6px 14px; font-size: 12px; font-weight: 600;
+        font-family: Roboto, sans-serif;
+        background: rgba(61,90,90,0.85); color: #d2e2e2;
+        border: 1px solid #6a8a8a; border-radius: 6px;
+        cursor: pointer; transition: background .15s, border-color .15s;
+    }
+    .measure-btn:hover { background: rgba(74,110,110,0.9); border-color: #8ab0b0; }
+    .measure-btn.active { background: #2a6a6a; border-color: #8fd0d0; color: #fff; }
+    </style>
+
     <div class="labeling-layout">
 
         <!-- Rules toggle button — outside sidebar so it's never clipped -->
@@ -147,6 +160,7 @@
     {% endif %}
 
     <script>
+    window._taskType = '{{ task_type }}';
     // Load dynamic examples from RuleExample model
     (function() {
         var taskType = '{{ collection_data.task_type }}';

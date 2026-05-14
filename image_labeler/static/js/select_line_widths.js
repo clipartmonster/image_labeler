@@ -211,7 +211,7 @@ function label_line_width_invalid(event){
 
     data  = {
         asset_id:asset_container.getAttribute('asset_id'),
-        labler_id:document.getElementById('labeler_id').getAttribute('labeler_id')
+        labeler_id:document.getElementById('labeler_id').getAttribute('labeler_id')
     }
 
     api_label_line_width_as_invalid(data)

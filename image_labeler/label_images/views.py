@@ -105,11 +105,18 @@ def assign_batch(request):
 @login_required
 def select_line_widths(request):
 
-    labeler_id = request.GET.get("labeler_id", "Steve")
-    task_type = request.GET.get("task_type", "asset_type")
-    rule_index = request.GET.get("rule_index", 1)
+    labeler_id = request.GET.get("labeler_id", request.user.username)
     batch_id = request.GET.get("batch_id", 1)
     large_sub_batch = request.GET.get("large_sub_batch", 1)
+
+    rule_indexes_raw = request.GET.get("rule_indexes", "[]")
+    try:
+        rule_indexes = json.loads(rule_indexes_raw)
+    except (json.JSONDecodeError, TypeError):
+        rule_indexes = rule_indexes_raw
+    if not isinstance(rule_indexes, list):
+        rule_indexes = [rule_indexes]
+    rule_index = int(rule_indexes[0]) if rule_indexes else int(request.GET.get("rule_index", 2))
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_asset_batch/"
 
@@ -127,12 +134,16 @@ def select_line_widths(request):
     }
 
     response = requests.get(api_url, json=data, headers=header)
-
-    print("hello")
-
     assets_to_label = json.loads(response.content)["asset_batch"]
 
-    print(assets_to_label)
+    # Exclude assets that this labeler has already sampled
+    from labeling_api.models import line_width_sample_table
+    already_sampled = set(
+        line_width_sample_table.objects
+        .filter(labeler_id=labeler_id)
+        .values_list("asset_id", flat=True)
+    )
+    assets_to_label = [a for a in assets_to_label if a["asset_id"] not in already_sampled]
 
     sampling_array = [[1 + col + row * 3 for col in range(3)] for row in range(3)]
 
@@ -140,6 +151,7 @@ def select_line_widths(request):
         "sampling_array": sampling_array,
         "assets_to_label": assets_to_label,
         "labeler_id": labeler_id,
+        "rule_index": rule_index,
     }
 
     return render(request, "select_line_widths.html", data)
