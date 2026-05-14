@@ -116,6 +116,26 @@ class RuleExample(models.Model):
 
 
 # ---------------------------------------------------------------------------
+# Training batch assets — reconciled assets assigned for labeler training
+# ---------------------------------------------------------------------------
+
+class TrainingBatchAsset(models.Model):
+    assignment = models.ForeignKey(
+        BatchAssignment, on_delete=models.CASCADE, related_name="training_assets",
+    )
+    asset_id = models.BigIntegerField()
+    image_link = models.CharField(max_length=500)
+    correct_label = models.IntegerField(help_text="Reconciled label: 1=yes, 0=no")
+
+    class Meta:
+        unique_together = ("assignment", "asset_id")
+        indexes = [models.Index(fields=["assignment"])]
+
+    def __str__(self):
+        return f"Training asset {self.asset_id} for {self.assignment}"
+
+
+# ---------------------------------------------------------------------------
 # Rule Guide — editable rule reference content
 # ---------------------------------------------------------------------------
 

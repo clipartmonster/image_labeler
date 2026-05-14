@@ -1,6 +1,6 @@
 import logging
+import random
 from datetime import timedelta
-from collections import defaultdict
 
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
@@ -9,7 +9,7 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-BATCHES_PER_FEATURE = 2
+TRAINING_ASSET_COUNT = 150
 
 
 @receiver(post_save, sender=User)
@@ -25,28 +25,24 @@ def create_profile_for_new_user(sender, instance, created, **kwargs):
 
 
 @receiver(post_save, sender=User)
-def auto_assign_test_batches(sender, instance, created, **kwargs):
-    """When a new labeler is created, assign 2 existing sub-batches per feature.
-
-    Picks sub-batches with the highest proportion of reconciled assets
-    (from assets_w_rule_labels with percent_agree >= 0.9).
-    """
+def auto_assign_training_batches(sender, instance, created, **kwargs):
+    """When a new labeler is created, build training batches from reconciled assets."""
     if not created:
         return
     if not instance.is_staff or instance.is_superuser:
         return
 
     try:
-        _assign_test_batches(instance)
+        _assign_training_batches(instance)
     except Exception:
-        logger.exception("Failed to auto-assign test batches for %s", instance.username)
+        logger.exception("Failed to auto-assign training batches for %s", instance.username)
 
 
-def _assign_test_batches(user):
+def _assign_training_batches(user):
     from labeling_api.models import (
-        labelling_rules, label_data_selected_assets_new, assets_w_rule_labels,
+        labelling_rules, assets_w_rule_labels, label_data_selected_assets_new,
     )
-    from .models import BatchAssignment
+    from .models import BatchAssignment, TrainingBatchAsset
 
     features = list(
         labelling_rules.objects.exclude(task_type="color_type")
@@ -54,44 +50,64 @@ def _assign_test_batches(user):
         .distinct()
     )
 
+    deadline = timezone.now() + timedelta(days=30)
+
     for task_type, rule_index in features:
-        reconciled_ids = set(
+        reconciled = list(
             assets_w_rule_labels.objects
             .filter(task_type=task_type, rule_index=rule_index, percent_agree__gte=0.9)
-            .values_list("asset_id", flat=True)[:5000]
+            .values_list("asset_id", "label")
         )
 
-        if not reconciled_ids:
+        if len(reconciled) < 10:
             continue
 
-        sb_assets = defaultdict(set)
-        for row in (
+        sampled = random.sample(reconciled, min(TRAINING_ASSET_COUNT, len(reconciled)))
+        sampled_ids = [a[0] for a in sampled]
+        label_map = {a[0]: a[1] for a in sampled}
+
+        image_links = dict(
             label_data_selected_assets_new.objects
-            .filter(task_type=task_type, rule_index=rule_index)
-            .values_list("batch_id", "large_sub_batch", "asset_id")
-        ):
-            sb_assets[(row[0], row[1])].add(row[2])
+            .filter(asset_id__in=sampled_ids)
+            .values_list("asset_id", "image_link")
+        )
 
-        scored = []
-        for (bid, lsb), asset_ids in sb_assets.items():
-            overlap = len(asset_ids & reconciled_ids)
-            total = len(asset_ids)
-            if overlap > 0:
-                scored.append((overlap, total, bid, lsb))
+        assets_with_links = [
+            (aid, image_links[aid], label_map[aid])
+            for aid in sampled_ids if aid in image_links
+        ]
 
-        scored.sort(key=lambda x: (-x[0], x[1]))
+        if not assets_with_links:
+            continue
 
-        deadline = timezone.now() + timedelta(days=30)
-        for _, _, bid, lsb in scored[:BATCHES_PER_FEATURE]:
-            BatchAssignment.objects.get_or_create(
-                user=user,
-                task_type=task_type,
-                rule_index=rule_index,
-                batch_id=bid,
-                large_sub_batch=lsb,
-                defaults={
-                    "payment_amount": 0,
-                    "deadline": deadline,
-                    "is_training": True,
-                },
-            )
+        # Use batch_id=0, large_sub_batch=0 as a sentinel for training batches
+        assignment, _ = BatchAssignment.objects.get_or_create(
+            user=user,
+            task_type=task_type,
+            rule_index=rule_index,
+            batch_id=0,
+            large_sub_batch=0,
+            defaults={
+                "payment_amount": 0,
+                "deadline": deadline,
+                "is_training": True,
+            },
+        )
+
+        TrainingBatchAsset.objects.bulk_create(
+            [
+                TrainingBatchAsset(
+                    assignment=assignment,
+                    asset_id=aid,
+                    image_link=link,
+                    correct_label=label,
+                )
+                for aid, link, label in assets_with_links
+            ],
+            ignore_conflicts=True,
+        )
+
+        logger.info(
+            "Created training batch for %s: %s/rule_%d with %d assets",
+            user.username, task_type, rule_index, len(assets_with_links),
+        )

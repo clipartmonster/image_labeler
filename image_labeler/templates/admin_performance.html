@@ -58,29 +58,6 @@
 
     <p id="perfStatus" class="wf-muted" style="margin-top:12px;"></p>
 
-    <!-- Gold import section -->
-    <div class="wf-section" style="margin-top:28px;">
-        <h2>Import Gold-Standard Labels</h2>
-        <p class="wf-muted" style="margin-bottom:12px;">
-            Import reconciled labels (from <code>assets_w_rule_labels</code>) as gold-standard answers for accuracy scoring.
-        </p>
-        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
-            <div>
-                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Task Type (optional)</label>
-                <input id="goldTaskType" class="wf-input" style="width:160px;" placeholder="e.g. asset_type">
-            </div>
-            <div>
-                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Rule Index (optional)</label>
-                <input id="goldRuleIndex" type="number" class="wf-input" style="width:80px;">
-            </div>
-            <div>
-                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Min Agreement</label>
-                <input id="goldMinAgreement" type="number" step="0.05" min="0" max="1" value="0.9" class="wf-input" style="width:80px;">
-            </div>
-            <button class="wf-btn wf-btn-success" onclick="importGold()">Import</button>
-        </div>
-        <p id="goldStatus" style="font-size:.85rem; color:#5a8a5a; min-height:1.4em; margin-top:8px;"></p>
-    </div>
 </div>
 
 <script>
@@ -117,24 +94,5 @@ function loadPerformance() {
     });
 }
 
-function importGold() {
-    var body = {
-        task_type: document.getElementById('goldTaskType').value,
-        rule_index: document.getElementById('goldRuleIndex').value || null,
-        min_agreement: document.getElementById('goldMinAgreement').value,
-    };
-    document.getElementById('goldStatus').textContent = 'Importing\u2026';
-    fetch('/label_images/admin/import_gold/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
-        body: JSON.stringify(body),
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-        if (d.error) { document.getElementById('goldStatus').style.color = '#bd4444'; document.getElementById('goldStatus').textContent = d.error; return; }
-        document.getElementById('goldStatus').style.color = '#5a8a5a';
-        document.getElementById('goldStatus').textContent = 'Imported ' + d.imported + ' new gold labels (' + d.total_candidates + ' candidates matched).';
-    });
-}
 </script>
 {% endblock %}

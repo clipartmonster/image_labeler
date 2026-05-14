@@ -50,5 +50,8 @@ urlpatterns = [
     # Rule guide
     path('rules/', views.rule_guide, name='rule_guide'),
     path('rules/api/', views.rule_guide_api, name='rule_guide_api'),
+
+    # Training completion
+    path('complete_training/', views.complete_training, name='complete_training'),
 ]
 

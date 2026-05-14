@@ -70,7 +70,9 @@ function collect_label(element, response){
             label:label
     }
 
-    api_collect_label(data)
+    if (!window._trainingAnswers) {
+        api_collect_label(data)
+    }
 
 }
 
@@ -97,7 +99,9 @@ function collect_prompt(element, reponse){
             is_lure_question:collection_data.getAttribute('is_lure_question')
     }
 
-     api_collect_prompt(data)
+     if (!window._trainingAnswers) {
+         api_collect_prompt(data)
+     }
 
 }
 
@@ -161,6 +165,17 @@ function direct_hotkey_action(hotkey) {
             assignment_id = collection_data[0].getAttribute('assignment_id')
             labeler_source = collection_data[0].getAttribute('labeler_source')
 
+            if (window._trainingAnswers && window._trainingMeta) {
+                var fd = new FormData();
+                fd.append('task_type', window._trainingMeta.taskType);
+                fd.append('rule_index', window._trainingMeta.ruleIndex);
+                fetch('/label_images/complete_training/', { method: 'POST', body: fd })
+                    .finally(function() {
+                        window.location.href = '/label_images/setup_session/';
+                    });
+                return;
+            }
+
             api_update_submission_status(assignment_id)
    
             //advance the page where next page is determined by mturk or not
@@ -170,7 +185,6 @@ function direct_hotkey_action(hotkey) {
                 form.submit()
             else{
                 console.log('here')
-                // window.location.href = window.location.href;
 
                 const form = document.getElementById('submit_labels');
                 const baseUrl = `${window.location.protocol}//${window.location.host}`;
@@ -504,11 +518,13 @@ function reset_responses(event){
 
         console.log("just remove prompt")
 
-        api_remove_prompt_responses(listing_data.getAttribute('asset_id'),
-                                    listing_data.getAttribute('labeler_id'),
-                                    listing_data.getAttribute('labeler_source'),
-                                    listing_data.getAttribute('task_type'),
-                                    active_prompt.getAttribute('rule_index'))
+        if (!window._trainingAnswers) {
+            api_remove_prompt_responses(listing_data.getAttribute('asset_id'),
+                                        listing_data.getAttribute('labeler_id'),
+                                        listing_data.getAttribute('labeler_source'),
+                                        listing_data.getAttribute('task_type'),
+                                        active_prompt.getAttribute('rule_index'))
+        }
 
     }
 
@@ -671,7 +687,9 @@ function flag_asset_issue(event){
             }
 
 
-    api_collect_label_issue(data)
+    if (!window._trainingAnswers) {
+        api_collect_label_issue(data)
+    }
 
 
     const key_event = new KeyboardEvent('keydown', {

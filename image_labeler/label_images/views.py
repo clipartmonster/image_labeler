@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect
 from django.http import HttpResponse, JsonResponse
 from django.contrib.staticfiles import finders
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Count, Q, Avg, F, Value, CharField
 from django.db.models.functions import Concat
 
@@ -287,20 +288,48 @@ def setup_session(request):
         )
     else:
         now = timezone.now()
-        assignments = BatchAssignment.objects.filter(
-            user=request.user, completed_at__isnull=True
+        from labeling_api.models import label_data_selected_assets_new, prompt_responses
+        from .models import TrainingBatchAsset
+
+        # Always show training batches (even completed); only show incomplete work batches
+        training_qs = BatchAssignment.objects.filter(
+            user=request.user, is_training=True,
+        ).order_by("completed_at", "deadline")
+        work_qs = BatchAssignment.objects.filter(
+            user=request.user, is_training=False, completed_at__isnull=True,
         ).order_by("deadline")
 
-        assignment_data = []
-        for a in assignments:
-            from labeling_api.models import label_data_selected_assets_new, prompt_responses
+        # Build set of features with completed training
+        completed_training_features = set(
+            training_qs.filter(completed_at__isnull=False)
+            .values_list("task_type", "rule_index")
+        )
+
+        training_assignments = []
+        for a in training_qs:
+            total = TrainingBatchAsset.objects.filter(assignment=a).count()
+            is_done = a.completed_at is not None
+            training_assignments.append({
+                "id": a.id,
+                "task_type": a.task_type,
+                "rule_index": a.rule_index,
+                "batch_id": a.batch_id,
+                "large_sub_batch": a.large_sub_batch,
+                "total": total,
+                "completed": total if is_done else 0,
+                "progress_pct": 100 if is_done else 0,
+                "is_training": True,
+                "training_done": is_done,
+            })
+
+        work_assignments = []
+        for a in work_qs:
             total = label_data_selected_assets_new.objects.filter(
                 task_type=a.task_type,
                 rule_index=a.rule_index,
                 batch_id=a.batch_id,
                 large_sub_batch=a.large_sub_batch,
             ).count()
-
             completed = prompt_responses.objects.filter(
                 task_type=a.task_type,
                 rule_index=a.rule_index,
@@ -322,7 +351,8 @@ def setup_session(request):
             else:
                 deadline_status = "ok"
 
-            assignment_data.append({
+            training_required = (a.task_type, a.rule_index) not in completed_training_features
+            work_assignments.append({
                 "id": a.id,
                 "task_type": a.task_type,
                 "rule_index": a.rule_index,
@@ -334,7 +364,8 @@ def setup_session(request):
                 "total": total,
                 "completed": completed,
                 "progress_pct": int((completed / total * 100) if total > 0 else 0),
-                "is_training": a.is_training,
+                "is_training": False,
+                "training_required": training_required,
             })
 
         return render(
@@ -342,7 +373,9 @@ def setup_session(request):
             "setup_session.html",
             {
                 "user_is_admin": False,
-                "assignments": assignment_data,
+                "assignments": training_assignments + work_assignments,
+                "training_assignments": training_assignments,
+                "work_assignments": work_assignments,
             },
         )
 
@@ -480,29 +513,39 @@ def mturk_redirect(request):
             return dict(json.loads(response.content))
         return []
 
-    # Execute requests in parallel
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        future_assets = executor.submit(fetch_assets)
-        future_rules = executor.submit(fetch_rules)
-        future_test = executor.submit(fetch_test_questions)
-
-        assets_content = future_assets.result()
-        labelling_rules = future_rules.result()
-        test_questions = future_test.result()
-
-    assets_to_label = assets_content["asset_batch"]
-
     training_answers = {}
     if is_training:
-        from labeling_api.models import assets_w_rule_labels
-        asset_ids = [a["asset_id"] for a in assets_to_label]
-        for row in assets_w_rule_labels.objects.filter(
-            task_type=task_type,
-            rule_index=rule_index,
-            asset_id__in=asset_ids,
-            percent_agree__gte=0.9,
-        ).values("asset_id", "label"):
-            training_answers[str(row["asset_id"])] = row["label"]
+        from .models import TrainingBatchAsset
+
+        ta_list = list(
+            TrainingBatchAsset.objects.filter(
+                assignment__user=request.user,
+                assignment__task_type=task_type,
+                assignment__rule_index=rule_index,
+                assignment__is_training=True,
+            ).values("asset_id", "image_link", "correct_label")
+        )
+
+        assets_to_label = [{"asset_id": t["asset_id"], "image_link": t["image_link"]} for t in ta_list]
+        for t in ta_list:
+            training_answers[str(t["asset_id"])] = t["correct_label"]
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_rules = executor.submit(fetch_rules)
+            future_test = executor.submit(fetch_test_questions)
+            labelling_rules = future_rules.result()
+            test_questions = future_test.result()
+    else:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_assets = executor.submit(fetch_assets)
+            future_rules = executor.submit(fetch_rules)
+            future_test = executor.submit(fetch_test_questions)
+
+            assets_content = future_assets.result()
+            labelling_rules = future_rules.result()
+            test_questions = future_test.result()
+
+        assets_to_label = assets_content["asset_batch"]
 
     collection_data = {
         "task_type": task_type,
@@ -2391,3 +2434,26 @@ def rule_guide_api(request):
         return JsonResponse({"ok": True})
 
     return JsonResponse({"error": "unknown action"}, status=400)
+
+
+@csrf_exempt
+@login_required
+def complete_training(request):
+    """AJAX: mark a training BatchAssignment as completed."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    from .models import BatchAssignment
+    task_type = request.POST.get("task_type")
+    rule_index = request.POST.get("rule_index")
+
+    from django.utils import timezone as tz
+    updated = BatchAssignment.objects.filter(
+        user=request.user,
+        task_type=task_type,
+        rule_index=rule_index,
+        is_training=True,
+        completed_at__isnull=True,
+    ).update(completed_at=tz.now())
+
+    return JsonResponse({"ok": True, "updated": updated})
