@@ -173,14 +173,16 @@
 var _featureData = {{ features_json|safe }};
 
 function accCls(v) { return v >= 0.9 ? 'mr-good' : v >= 0.88 ? 'mr-warn' : 'mr-bad'; }
-function fmt(v) { return v != null ? v.toFixed(3) : '\u2014'; }
+function maeCls(v) { return v <= 0.1 ? 'mr-good' : v <= 0.2 ? 'mr-warn' : 'mr-bad'; }
+function fmt(v) { return (v != null && !isNaN(v)) ? v.toFixed(3) : '\u2014'; }
 
 function selectFeature(btn, taskType, ruleIndex) {
     document.querySelectorAll('.mr-feat-btn').forEach(function(b) { b.classList.remove('active'); });
     btn.classList.add('active');
 
     var key = taskType + '_' + ruleIndex;
-    var models = _featureData[key] || [];
+    var data = _featureData[key] || { models: [], has_prod: false };
+    var models = data.models;
 
     document.getElementById('mrEmpty').style.display = 'none';
     document.getElementById('mrContent').style.display = '';
@@ -188,10 +190,12 @@ function selectFeature(btn, taskType, ruleIndex) {
     var prod = models.find(function(m) { return m.is_prod; });
     var prodEl = document.getElementById('mrProd');
 
-    if (prod) {
-        var t = prod.threshold;
+    var isReg = data.is_regressor;
+
+    if (data.has_prod) {
+        var t = data.prod_threshold;
         var threshHtml = '';
-        if (t) {
+        if (t && !isReg) {
             threshHtml = '<div style="margin-top:14px; padding-top:12px; border-top:1px solid #dde4e4;">'
                 + '<p style="font-size:11px; font-weight:700; color:#5d6d6d; text-transform:uppercase; letter-spacing:.4px; margin:0 0 8px;">After Thresholding</p>'
                 + '<div class="mr-metrics">'
@@ -203,28 +207,55 @@ function selectFeature(btn, taskType, ruleIndex) {
                 + '</div></div>';
         }
 
+        var baseHtml = '';
+        if (prod) {
+            if (isReg) {
+                baseHtml = '<div class="mr-metrics">'
+                    + metricCard('Val MAE', prod.val_mae, maeCls(prod.val_mae))
+                    + metricCard('Val Loss', prod.val_loss)
+                    + metricCard('Val Samples', prod.val_samples)
+                    + '</div>';
+            } else {
+                baseHtml = '<div class="mr-metrics">'
+                    + metricCard('Recall', prod.val_recall, accCls(prod.val_recall))
+                    + metricCard('Precision', prod.val_precision, accCls(prod.val_precision))
+                    + metricCard('AUC', prod.val_auc)
+                    + metricCard('Score', prod.score)
+                    + metricCard('Val Samples', prod.val_samples)
+                    + '</div>'
+                    + threshHtml;
+            }
+            baseHtml += '<div class="mr-prod-meta">'
+                + '<span>Model: <strong>' + prod.model_type + '</strong></span>'
+                + '<span>Image: <strong>' + prod.image_size_width + '\u00d7' + prod.image_size_height + '</strong></span>'
+                + '<span>Epochs: <strong>' + prod.best_epoch + '/' + prod.epochs + '</strong></span>'
+                + '<span>LR: <strong>' + prod.learning_rate + '</strong></span>'
+                + '<span>Date: <strong>' + prod.date + '</strong></span>'
+                + '</div>';
+        } else {
+            baseHtml = threshHtml
+                || '<p style="color:#6a7a7a; font-size:13px; margin:0;">Dev model details not available.</p>';
+        }
+
+        var title = (prod && prod.title) ? prod.title : (models.length ? models[0].title : taskType + ' / Rule ' + ruleIndex);
         prodEl.innerHTML = '<div class="mr-prod">'
             + '<div class="mr-prod-hd">'
-            + '<h2>' + (prod.title || taskType + ' / Rule ' + ruleIndex) + '</h2>'
+            + '<h2>' + title + '</h2>'
             + '<span class="mr-prod-badge">In Production</span>'
+            + '<span style="font-size:11px; color:#6a7a7a; margin-left:auto;">' + data.prod_version + '</span>'
             + '</div>'
-            + '<div class="mr-metrics">'
-            + metricCard('Recall', prod.val_recall, accCls(prod.val_recall))
-            + metricCard('Precision', prod.val_precision, accCls(prod.val_precision))
-            + metricCard('AUC', prod.val_auc)
-            + metricCard('Score', prod.score)
-            + metricCard('Val Samples', prod.val_samples)
-            + '</div>'
-            + threshHtml
-            + '<div class="mr-prod-meta">'
-            + '<span>Model: <strong>' + prod.model_type + '</strong></span>'
-            + '<span>Image: <strong>' + prod.image_size_width + '\u00d7' + prod.image_size_height + '</strong></span>'
-            + '<span>Epochs: <strong>' + prod.best_epoch + '/' + prod.epochs + '</strong></span>'
-            + '<span>LR: <strong>' + prod.learning_rate + '</strong></span>'
-            + '<span>Date: <strong>' + prod.date + '</strong></span>'
-            + '</div></div>';
+            + baseHtml
+            + '</div>';
     } else {
         prodEl.innerHTML = '<div class="mr-no-prod">No production model set for this feature.</div>';
+    }
+
+    // Update table headers based on model type
+    var thead = document.querySelector('.mr-tbl thead tr');
+    if (isReg) {
+        thead.innerHTML = '<th>#</th><th>MAE</th><th>Loss</th><th>Samples</th><th>Model</th><th>Date</th><th></th>';
+    } else {
+        thead.innerHTML = '<th>#</th><th>Recall</th><th>Precision</th><th>AUC</th><th>Score</th><th>Samples</th><th>Model</th><th>Date</th><th></th>';
     }
 
     var tb = document.getElementById('mrBody');
@@ -232,15 +263,25 @@ function selectFeature(btn, taskType, ruleIndex) {
     models.forEach(function(m) {
         var tr = document.createElement('tr');
         if (m.is_prod) tr.className = 'mr-prod-row';
-        tr.innerHTML = '<td>' + m.rank + '</td>'
-            + '<td class="' + accCls(m.val_recall) + '">' + fmt(m.val_recall) + '</td>'
-            + '<td class="' + accCls(m.val_precision) + '">' + fmt(m.val_precision) + '</td>'
-            + '<td>' + fmt(m.val_auc) + '</td>'
-            + '<td><strong>' + fmt(m.score) + '</strong></td>'
-            + '<td>' + m.total_samples + '</td>'
-            + '<td>' + m.model_type + '</td>'
-            + '<td style="color:#7a8a8a;">' + m.date + '</td>'
-            + '<td>' + (m.is_prod ? '<span class="mr-prod-badge" style="font-size:9px;">PROD</span>' : '') + '</td>';
+        if (isReg) {
+            tr.innerHTML = '<td>' + m.rank + '</td>'
+                + '<td class="' + maeCls(m.val_mae) + '"><strong>' + fmt(m.val_mae) + '</strong></td>'
+                + '<td>' + fmt(m.val_loss) + '</td>'
+                + '<td>' + m.total_samples + '</td>'
+                + '<td>' + m.model_type + '</td>'
+                + '<td style="color:#7a8a8a;">' + m.date + '</td>'
+                + '<td>' + (m.is_prod ? '<span class="mr-prod-badge" style="font-size:9px;">PROD</span>' : '') + '</td>';
+        } else {
+            tr.innerHTML = '<td>' + m.rank + '</td>'
+                + '<td class="' + accCls(m.val_recall) + '">' + fmt(m.val_recall) + '</td>'
+                + '<td class="' + accCls(m.val_precision) + '">' + fmt(m.val_precision) + '</td>'
+                + '<td>' + fmt(m.val_auc) + '</td>'
+                + '<td><strong>' + fmt(m.score) + '</strong></td>'
+                + '<td>' + m.total_samples + '</td>'
+                + '<td>' + m.model_type + '</td>'
+                + '<td style="color:#7a8a8a;">' + m.date + '</td>'
+                + '<td>' + (m.is_prod ? '<span class="mr-prod-badge" style="font-size:9px;">PROD</span>' : '') + '</td>';
+        }
         tb.appendChild(tr);
     });
 }

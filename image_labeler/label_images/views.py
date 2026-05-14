@@ -1352,25 +1352,43 @@ def view_model_results(request):
     for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
         rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
 
+    # model_results_prod is SSOT for what's in production.
+    # Use rule_index_thresholds to map version_id -> (task_type, rule_index).
     prod_rows = list(
         production_models_table.objects.using(_db)
         .filter(active=True)
         .values("version_id", "dev_id")
     )
-    prod_dev_ids = {r["dev_id"] for r in prod_rows}
-    prod_version_map = {r["dev_id"]: r["version_id"] for r in prod_rows}
 
-    # Threshold data keyed by model_version
-    thresholds = {}
+    # Threshold data keyed by model_version -> (task_type, rule_index)
+    thresh_version_map = {}
     for t in rule_index_thresholds_table.objects.using(_db).values():
-        key = (t["model_version"], t["task_type"], t["rule_index"])
-        thresholds[key] = {
+        thresh_version_map[t["model_version"]] = {
+            "task_type": t["task_type"],
+            "rule_index": t["rule_index"],
             "thresh_precision": round(t["precision"], 3) if t["precision"] else None,
             "thresh_recall": round(t["recall"], 3) if t["recall"] else None,
             "percent_kept": round(t["percent_kept"] * 100, 1) if t["percent_kept"] else None,
             "min_threshold": round(t["min_threshold"], 3) if t["min_threshold"] is not None else None,
             "max_threshold": round(t["max_threshold"], 3) if t["max_threshold"] is not None else None,
         }
+
+    # Build prod info: for each prod row, determine the feature from thresholds,
+    # and only accept dev_id if the model_results row matches that feature.
+    prod_by_feature = {}  # (task_type, rule_index) -> {dev_id, threshold, version_id}
+    prod_dev_ids_valid = set()
+    for pr in prod_rows:
+        vid = pr["version_id"]
+        thresh = thresh_version_map.get(vid)
+        if thresh:
+            feat_key = (thresh["task_type"], thresh["rule_index"])
+        else:
+            feat_key = None
+        prod_by_feature_entry = {"version_id": vid, "dev_id": pr["dev_id"], "threshold": thresh, "feat_key": feat_key}
+        if feat_key:
+            prod_by_feature[feat_key] = prod_by_feature_entry
+            if pr["dev_id"] is not None:
+                prod_dev_ids_valid.add((pr["dev_id"], feat_key))
 
     all_results = list(
         model_results_table.objects.using(_db)
@@ -1387,18 +1405,18 @@ def view_model_results(request):
     for row in all_results:
         for f in ("val_recall", "val_precision", "val_auc", "val_loss", "val_mae", "learning_rate"):
             row[f] = round(_float(row.get(f)), 3)
-        row["is_prod"] = row["id"] in prod_dev_ids
+        row["is_regressor"] = row.get("outcome_type") == "regressor"
         row["title"] = rule_titles.get((row["task_type"], row["rule_index"]), "")
-        row["score"] = round((row["val_precision"] + row["val_recall"]) - abs(row["val_precision"] - row["val_recall"]), 3)
+        if row["is_regressor"]:
+            row["score"] = round(-row["val_mae"], 3) if row["val_mae"] else 0
+        else:
+            row["score"] = round((row["val_precision"] + row["val_recall"]) - abs(row["val_precision"] - row["val_recall"]), 3)
         row["total_samples"] = (row.get("train_samples") or 0) + (row.get("val_samples") or 0)
         row["date"] = row["created_at"].strftime("%b %d, %Y") if row["created_at"] else ""
-        # Attach threshold data if this model is in production
-        mv = prod_version_map.get(row["id"])
-        if mv:
-            tkey = (mv, row["task_type"], row["rule_index"])
-            row["threshold"] = thresholds.get(tkey)
-        else:
-            row["threshold"] = None
+        feat_key = (row["task_type"], row["rule_index"])
+        # Only mark as prod if dev_id matches AND the feature matches
+        row["is_prod"] = (row["id"], feat_key) in prod_dev_ids_valid
+        row["threshold"] = prod_by_feature[feat_key]["threshold"] if row["is_prod"] and feat_key in prod_by_feature else None
 
     features = {}
     for row in all_results:
@@ -1420,16 +1438,21 @@ def view_model_results(request):
         feat["models"] = feat["models"][:20]
         for i, m in enumerate(feat["models"]):
             m["rank"] = i + 1
-        p = feat["prod_model"]
-        if p:
-            t = p.get("threshold") or {}
-            pr = t.get("thresh_precision") or p["val_precision"]
-            rc = t.get("thresh_recall") or p["val_recall"]
+        fkey = (feat["task_type"], feat["rule_index"])
+        prod_info = prod_by_feature.get(fkey)
+        if prod_info:
+            t = prod_info.get("threshold") or {}
+            pr = t.get("thresh_precision") or (feat["prod_model"]["val_precision"] if feat["prod_model"] else 0)
+            rc = t.get("thresh_recall") or (feat["prod_model"]["val_recall"] if feat["prod_model"] else 0)
             feat["perf"] = "yes" if rc > 0.9 and pr > 0.9 else (
                 "close" if rc > 0.88 and pr > 0.88 else "no"
             )
+            feat["has_prod"] = True
+            feat["prod_version"] = prod_info["version_id"]
+            feat["prod_threshold"] = t
         else:
             feat["perf"] = "none"
+            feat["has_prod"] = False
 
     task_types = sorted(set(k[0] for k in features))
     grouped = []
@@ -1440,12 +1463,21 @@ def view_model_results(request):
         )
         grouped.append({"task_type": tt, "features": items})
 
+    features_json = {}
+    for f in features.values():
+        key = f"{f['task_type']}_{f['rule_index']}"
+        is_reg = any(m.get("is_regressor") for m in f["models"])
+        features_json[key] = {
+            "models": f["models"],
+            "has_prod": f.get("has_prod", False),
+            "prod_version": f.get("prod_version", ""),
+            "prod_threshold": f.get("prod_threshold"),
+            "is_regressor": is_reg,
+        }
+
     data = {
         "grouped_features": grouped,
-        "features_json": json.dumps(
-            {f"{f['task_type']}_{f['rule_index']}": f["models"] for f in features.values()},
-            default=str,
-        ),
+        "features_json": json.dumps(features_json, default=str),
     }
     return render(request, "view_model_results.html", data)
 
