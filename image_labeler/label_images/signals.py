@@ -11,6 +11,12 @@ logger = logging.getLogger(__name__)
 
 TRAINING_ASSET_COUNT = 150
 
+# Only these task types use the standard binary labeling interface
+STANDARD_TASK_TYPES = {
+    "asset_type", "clip_art_type", "color_fill_type",
+    "mono_color_type", "multi_color_type",
+}
+
 
 @receiver(post_save, sender=User)
 def create_profile_for_new_user(sender, instance, created, **kwargs):
@@ -45,7 +51,7 @@ def _assign_training_batches(user):
     from .models import BatchAssignment, TrainingBatchAsset
 
     features = list(set(
-        labelling_rules.objects.exclude(task_type="color_type")
+        labelling_rules.objects.filter(task_type__in=STANDARD_TASK_TYPES)
         .values_list("task_type", "rule_index")
     ))
 

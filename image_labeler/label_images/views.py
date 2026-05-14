@@ -2556,4 +2556,4 @@ def complete_training(request):
         time_seconds=max(time_seconds, 1),
     )
 
-    return JsonResponse({"ok": True, "updated": updated})
+    return JsonResponse({"ok": True})
