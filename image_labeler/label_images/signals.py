@@ -44,11 +44,10 @@ def _assign_training_batches(user):
     )
     from .models import BatchAssignment, TrainingBatchAsset
 
-    features = list(
+    features = list(set(
         labelling_rules.objects.exclude(task_type="color_type")
         .values_list("task_type", "rule_index")
-        .distinct()
-    )
+    ))
 
     deadline = timezone.now() + timedelta(days=30)
 

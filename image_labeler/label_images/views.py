@@ -374,14 +374,21 @@ def setup_session(request):
                 "training_required": training_required,
             })
 
+        from collections import OrderedDict
+        def _group_by_task(items):
+            groups = OrderedDict()
+            for a in items:
+                groups.setdefault(a["task_type"], []).append(a)
+            return list(groups.items())
+
         return render(
             request,
             "setup_session.html",
             {
                 "user_is_admin": False,
                 "assignments": training_assignments + work_assignments,
-                "training_assignments": training_assignments,
-                "work_assignments": work_assignments,
+                "training_groups": _group_by_task(training_assignments),
+                "work_groups": _group_by_task(work_assignments),
             },
         )
 
