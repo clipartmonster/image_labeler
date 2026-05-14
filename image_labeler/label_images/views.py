@@ -1353,14 +1353,13 @@ def view_model_results(request):
         rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
 
     # model_results_prod is SSOT for what's in production.
-    # Use rule_index_thresholds to map version_id -> (task_type, rule_index).
     prod_rows = list(
         production_models_table.objects.using(_db)
         .filter(active=True)
         .values("version_id", "dev_id")
     )
 
-    # Threshold data keyed by model_version -> (task_type, rule_index)
+    # Threshold data keyed by model_version
     thresh_version_map = {}
     for t in rule_index_thresholds_table.objects.using(_db).values():
         thresh_version_map[t["model_version"]] = {
@@ -1373,9 +1372,23 @@ def view_model_results(request):
             "max_threshold": round(t["max_threshold"], 3) if t["max_threshold"] is not None else None,
         }
 
-    # Build prod info: for each prod row, determine the feature from thresholds,
-    # and only accept dev_id if the model_results row matches that feature.
-    prod_by_feature = {}  # (task_type, rule_index) -> {dev_id, threshold, version_id}
+    # Parse version_id to (task_type, rule_index) as fallback when no threshold data
+    import re
+    _VID_PREFIX = {
+        "A": "asset_type", "CF": "color_fill_type", "CL": "clip_art_type",
+        "MU": "multi_color_type", "MO": "mono_color_type", "LW": "line_width_type",
+        "DR": "dark_ratio_score", "RO": "roughness_score", "PC": "select_primary_colors",
+    }
+    def _parse_version_id(vid):
+        m = re.match(r"^([A-Z]+)(\d+)_", vid)
+        if not m:
+            return None
+        prefix, ri = m.group(1), int(m.group(2))
+        tt = _VID_PREFIX.get(prefix)
+        return (tt, ri) if tt else None
+
+    # Build prod info per feature
+    prod_by_feature = {}
     prod_dev_ids_valid = set()
     for pr in prod_rows:
         vid = pr["version_id"]
@@ -1383,12 +1396,15 @@ def view_model_results(request):
         if thresh:
             feat_key = (thresh["task_type"], thresh["rule_index"])
         else:
-            feat_key = None
-        prod_by_feature_entry = {"version_id": vid, "dev_id": pr["dev_id"], "threshold": thresh, "feat_key": feat_key}
-        if feat_key:
-            prod_by_feature[feat_key] = prod_by_feature_entry
-            if pr["dev_id"] is not None:
-                prod_dev_ids_valid.add((pr["dev_id"], feat_key))
+            feat_key = _parse_version_id(vid)
+        if not feat_key:
+            continue
+        prod_by_feature[feat_key] = {
+            "version_id": vid, "dev_id": pr["dev_id"],
+            "threshold": thresh, "feat_key": feat_key,
+        }
+        if pr["dev_id"] is not None:
+            prod_dev_ids_valid.add((pr["dev_id"], feat_key))
 
     all_results = list(
         model_results_table.objects.using(_db)
@@ -1441,15 +1457,21 @@ def view_model_results(request):
         fkey = (feat["task_type"], feat["rule_index"])
         prod_info = prod_by_feature.get(fkey)
         if prod_info:
-            t = prod_info.get("threshold") or {}
-            pr = t.get("thresh_precision") or (feat["prod_model"]["val_precision"] if feat["prod_model"] else 0)
-            rc = t.get("thresh_recall") or (feat["prod_model"]["val_recall"] if feat["prod_model"] else 0)
-            feat["perf"] = "yes" if rc > 0.9 and pr > 0.9 else (
-                "close" if rc > 0.88 and pr > 0.88 else "no"
-            )
             feat["has_prod"] = True
             feat["prod_version"] = prod_info["version_id"]
-            feat["prod_threshold"] = t
+            feat["prod_threshold"] = prod_info.get("threshold")
+            # Sidebar dot uses pre-thresholding numbers from the actual model_results row
+            p = feat["prod_model"]
+            if p:
+                is_reg = p.get("is_regressor")
+                if is_reg:
+                    feat["perf"] = "yes" if p["val_mae"] <= 0.1 else ("close" if p["val_mae"] <= 0.2 else "no")
+                else:
+                    feat["perf"] = "yes" if p["val_recall"] > 0.9 and p["val_precision"] > 0.9 else (
+                        "close" if p["val_recall"] > 0.88 and p["val_precision"] > 0.88 else "no"
+                    )
+            else:
+                feat["perf"] = "yes"
         else:
             feat["perf"] = "none"
             feat["has_prod"] = False

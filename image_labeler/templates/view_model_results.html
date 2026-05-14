@@ -138,6 +138,7 @@
                         onclick="selectFeature(this, '{{ feat.task_type }}', {{ feat.rule_index }})">
                     <span class="mr-perf-dot {{ feat.perf }}"></span>
                     <span>{{ feat.title|default:"—" }}</span>
+                    {% if not feat.has_prod %}<span style="font-size:9px; color:#9a6a6a; margin-left:auto;">no prod</span>{% endif %}
                 </button>
             {% endfor %}
         {% endfor %}
