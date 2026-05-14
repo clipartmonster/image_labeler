@@ -6,115 +6,192 @@
 {% if not user_is_admin %}
 <!-- ===== LABELER VIEW ===== -->
 <style>
-.ld-page { max-width:660px; margin:20px auto; padding:0 14px; font-family:Roboto,'Segoe UI',sans-serif; }
-.ld-topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
-.ld-topbar h1 { font-size:15px; font-weight:700; color:#2a3a3a; margin:0; }
-.ld-nav { display:flex; gap:6px; }
-.ld-nav a {
-    padding:4px 12px; background:#d2dada; color:#2a3a3a; border-radius:4px;
-    text-decoration:none; font-size:12px; font-weight:500;
+/* ── Page ── */
+.lb-page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 32px 20px 48px;
+    font-family: Roboto, 'Segoe UI', sans-serif;
 }
-.ld-nav a:hover { background:#c2d2d2; }
-.ld-empty { text-align:center; padding:30px; color:#6f7a7a; font-size:14px; }
-.ld-sec { margin-bottom:18px; }
-.ld-sec-hd {
-    font-size:13px; font-weight:700; color:#2a3a3a; margin:0 0 5px 0;
-    padding:5px 8px; background:#c2d0d0; border-radius:4px;
-    display:flex; align-items:center; gap:6px;
+/* ── Top bar ── */
+.lb-top {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 28px;
 }
-.ld-sec-hd small { font-size:10px; font-weight:400; color:#5d6565; text-transform:uppercase; letter-spacing:.5px; }
+.lb-top h1 {
+    font-size: 22px; font-weight: 700; color: #fff; margin: 0;
+    letter-spacing: -.3px;
+}
+.lb-links { display: flex; gap: 8px; }
+.lb-links a {
+    padding: 6px 16px; border-radius: 6px;
+    font-size: 13px; font-weight: 600; text-decoration: none;
+    color: #d2e2e2; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18);
+    transition: background .15s;
+}
+.lb-links a:hover { background: rgba(255,255,255,.22); }
 
-.ld-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px; }
-.ld-item {
-    display:flex; align-items:center; gap:8px;
-    background:#dae2e2; border-radius:4px; padding:4px 8px;
-    font-size:12px; color:#2a3a3a;
+/* ── Section header (Training / Work Assignments) ── */
+.lb-section-hd {
+    font-size: 15px; font-weight: 700; color: #fff;
+    margin: 28px 0 12px; padding: 0;
+    letter-spacing: -.2px;
 }
-.ld-item:hover { background:#d0dcdc; }
-.ld-name { flex:1; min-width:0; overflow:hidden; }
-.ld-name span {
-    font-size:13px; font-weight:600; color:#1a1a1a;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;
+.lb-section-hd:first-of-type { margin-top: 0; }
+
+/* ── Group card (one per task_type) ── */
+.lb-group {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    margin-bottom: 14px;
+    overflow: hidden;
 }
-.ld-sub { font-size:10px; color:#5d6565; white-space:nowrap; }
-.ld-tag { font-size:9px; font-weight:700; padding:1px 6px; border-radius:3px; white-space:nowrap; }
-.ld-tag-done { background:#7aaa72; color:#fff; }
-.ld-tag-todo { background:#d4aa30; color:#fff; }
-.ld-go {
-    display:inline-block; padding:2px 10px; border-radius:4px;
-    text-decoration:none; font-size:11px; font-weight:600; color:#fff; background:#409393; white-space:nowrap;
+.lb-group-hd {
+    padding: 8px 16px;
+    background: #f0f4f4;
+    border-bottom: 1px solid #dde4e4;
 }
-.ld-go:hover { background:#338484; }
-.ld-go-dim { background:#b4c4c4; color:#7a8a8a; pointer-events:none; cursor:default; }
-.ld-go-redo { background:transparent; color:#5d6565; border:1px solid #9aacac; padding:1px 8px; font-size:10px; }
-.ld-go-redo:hover { background:#c8d4d4; color:#2a3a3a; }
-.ld-bar { display:inline-block; width:44px; height:4px; background:#b0baba; border-radius:2px; vertical-align:middle; }
-.ld-bar-in { display:block; height:4px; border-radius:2px; background:#409393; }
-.ld-stat { font-size:10px; color:#5d6565; white-space:nowrap; min-width:32px; text-align:right; }
-.ld-pay { font-size:11px; font-weight:700; color:#2a6a4a; white-space:nowrap; }
-.ld-dl { font-size:10px; color:#5d6565; white-space:nowrap; }
-.ld-dl-late { color:#bd4444; font-weight:700; }
-.ld-dl-urg { color:#b08820; }
+.lb-group-hd h3 {
+    margin: 0; font-size: 12px; font-weight: 700; color: #3d5a5a;
+    text-transform: uppercase; letter-spacing: .5px;
+}
+
+/* ── Row ── */
+.lb-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid #eef1f1;
+    font-size: 13px; color: #3a4a4a;
+    transition: background .1s;
+}
+.lb-row:last-child { border-bottom: none; }
+.lb-row:hover { background: #f6f9f9; }
+
+/* Feature name */
+.lb-feat {
+    flex: 1; min-width: 0;
+    font-weight: 600; color: #2a3a3a;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Image count */
+.lb-imgs {
+    font-size: 12px; color: #7a8a8a; white-space: nowrap;
+    min-width: 58px; text-align: right;
+}
+
+/* Status tags */
+.lb-status {
+    display: inline-block; font-size: 11px; font-weight: 700;
+    padding: 3px 10px; border-radius: 4px; white-space: nowrap;
+    min-width: 48px; text-align: center;
+}
+.lb-done { background: #d4edda; color: #1a6b2a; }
+.lb-todo { background: #fff3cd; color: #7a6000; }
+
+/* Buttons */
+.lb-btn {
+    display: inline-block; padding: 5px 16px; border-radius: 5px;
+    font-size: 12px; font-weight: 600; text-decoration: none;
+    white-space: nowrap; transition: background .15s, opacity .15s;
+    cursor: pointer; border: none;
+}
+.lb-btn-start { background: #409393; color: #fff; }
+.lb-btn-start:hover { background: #357e7e; }
+.lb-btn-redo {
+    background: transparent; color: #5a7878;
+    border: 1px solid #b0c4c4; padding: 4px 14px;
+}
+.lb-btn-redo:hover { background: #eef4f4; color: #3a5a5a; }
+.lb-btn-label { background: #409393; color: #fff; }
+.lb-btn-label:hover { background: #357e7e; }
+.lb-btn-locked {
+    background: #e0e4e4; color: #9aacac;
+    cursor: default; pointer-events: none;
+}
+
+/* Work row extras */
+.lb-prog-wrap {
+    display: flex; align-items: center; gap: 6px; min-width: 88px;
+}
+.lb-prog-bar {
+    flex: 1; height: 5px; background: #dde4e4; border-radius: 3px; overflow: hidden;
+}
+.lb-prog-fill { height: 100%; background: #409393; border-radius: 3px; }
+.lb-prog-txt { font-size: 11px; color: #6a7a7a; white-space: nowrap; }
+
+.lb-pay { font-size: 13px; font-weight: 700; color: #1a6a3a; white-space: nowrap; }
+.lb-deadline { font-size: 11px; color: #7a8a8a; white-space: nowrap; }
+.lb-deadline-late { color: #c03030; font-weight: 700; }
+.lb-deadline-urg { color: #a08020; font-weight: 600; }
+
+/* Empty state */
+.lb-empty { text-align: center; padding: 40px 20px; color: #8a9a9a; font-size: 14px; }
 </style>
 
-<div class="ld-page">
-    <div class="ld-topbar">
+<div class="lb-page">
+    <div class="lb-top">
         <h1>My Batches</h1>
-        <div class="ld-nav">
+        <div class="lb-links">
             <a href="/label_images/rules/">Rules</a>
             <a href="/label_images/earnings/">Earnings</a>
         </div>
     </div>
 
     {% if not assignments %}
-        <p class="ld-empty">No batches assigned yet.</p>
+        <p class="lb-empty">No batches assigned yet.</p>
     {% endif %}
 
+    {% if training_groups %}
+    <h2 class="lb-section-hd">Training</h2>
     {% for task_type, items in training_groups %}
-    <div class="ld-sec">
-        <div class="ld-sec-hd">{{ task_type }} <small>training</small></div>
-        <ul class="ld-list">
+    <div class="lb-group">
+        <div class="lb-group-hd"><h3>{{ task_type }}</h3></div>
         {% for a in items %}
-            <li class="ld-item">
-                <div class="ld-name"><span>{{ a.feature_name|default:"—" }}</span></div>
-                <span class="ld-sub">{{ a.total }} imgs</span>
-                {% if a.training_done %}
-                    <span class="ld-tag ld-tag-done">&#10003; Done</span>
-                    <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
-                       class="ld-go ld-go-redo">Redo</a>
-                {% else %}
-                    <span class="ld-tag ld-tag-todo">Todo</span>
-                    <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
-                       class="ld-go">Start</a>
-                {% endif %}
-            </li>
+        <div class="lb-row">
+            <span class="lb-feat">{{ a.feature_name|default:"—" }}</span>
+            <span class="lb-imgs">{{ a.total }} imgs</span>
+            {% if a.training_done %}
+                <span class="lb-status lb-done">Done</span>
+                <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
+                   class="lb-btn lb-btn-redo">Redo</a>
+            {% else %}
+                <span class="lb-status lb-todo">Todo</span>
+                <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
+                   class="lb-btn lb-btn-start">Start</a>
+            {% endif %}
+        </div>
         {% endfor %}
-        </ul>
     </div>
     {% endfor %}
+    {% endif %}
 
+    {% if work_groups %}
+    <h2 class="lb-section-hd">Work Assignments</h2>
     {% for task_type, items in work_groups %}
-    <div class="ld-sec">
-        <div class="ld-sec-hd">{{ task_type }} <small>work</small></div>
-        <ul class="ld-list">
+    <div class="lb-group">
+        <div class="lb-group-hd"><h3>{{ task_type }}</h3></div>
         {% for a in items %}
-            <li class="ld-item">
-                <div class="ld-name"><span>{{ a.feature_name|default:"—" }}</span></div>
-                <span class="ld-bar"><span class="ld-bar-in" style="width:{{ a.progress_pct }}%;"></span></span>
-                <span class="ld-stat">{{ a.completed }}/{{ a.total }}</span>
-                <span class="ld-pay">${{ a.payment_amount }}</span>
-                <span class="ld-dl {% if a.deadline_status == 'overdue' %}ld-dl-late{% elif a.deadline_status == 'urgent' %}ld-dl-urg{% endif %}">{{ a.deadline|date:"M d" }}{% if a.deadline_status == "overdue" %} LATE{% endif %}</span>
-                {% if a.training_required %}
-                    <span class="ld-go ld-go-dim">Locked</span>
-                {% else %}
-                    <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}"
-                       class="ld-go">Label</a>
-                {% endif %}
-            </li>
+        <div class="lb-row">
+            <span class="lb-feat">{{ a.feature_name|default:"—" }}</span>
+            <div class="lb-prog-wrap">
+                <div class="lb-prog-bar"><div class="lb-prog-fill" style="width:{{ a.progress_pct }}%"></div></div>
+                <span class="lb-prog-txt">{{ a.completed }}/{{ a.total }}</span>
+            </div>
+            <span class="lb-pay">${{ a.payment_amount }}</span>
+            <span class="lb-deadline {% if a.deadline_status == 'overdue' %}lb-deadline-late{% elif a.deadline_status == 'urgent' %}lb-deadline-urg{% endif %}">{{ a.deadline|date:"M d" }}{% if a.deadline_status == "overdue" %} LATE{% endif %}</span>
+            {% if a.training_required %}
+                <span class="lb-btn lb-btn-locked">Locked</span>
+            {% else %}
+                <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}"
+                   class="lb-btn lb-btn-label">Label</a>
+            {% endif %}
+        </div>
         {% endfor %}
-        </ul>
     </div>
     {% endfor %}
+    {% endif %}
 </div>
 
 {% else %}

@@ -2499,7 +2499,8 @@ def complete_training(request):
     time_seconds = int(request.POST.get("time_seconds", 0))
 
     from django.utils import timezone as tz
-    updated = BatchAssignment.objects.filter(
+    # Mark as completed (first time only)
+    BatchAssignment.objects.filter(
         user=request.user,
         task_type=task_type,
         rule_index=rule_index,
@@ -2507,14 +2508,14 @@ def complete_training(request):
         completed_at__isnull=True,
     ).update(completed_at=tz.now())
 
-    if total > 0:
-        TrainingResult.objects.create(
-            user=request.user,
-            task_type=task_type,
-            rule_index=int(rule_index),
-            total=total,
-            correct=correct,
-            time_seconds=time_seconds,
-        )
+    # Always record a training result (including redo attempts)
+    TrainingResult.objects.create(
+        user=request.user,
+        task_type=task_type,
+        rule_index=int(rule_index),
+        total=total,
+        correct=correct,
+        time_seconds=max(time_seconds, 1),
+    )
 
     return JsonResponse({"ok": True, "updated": updated})

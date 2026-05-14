@@ -26,62 +26,13 @@
 
         <!-- Tab bar -->
         <div style="display:flex; gap:2px; margin:16px 0 12px;">
-            <button class="pf-tab active" data-tab="summary" onclick="switchTab('summary')">Summary</button>
+            <button class="pf-tab active" data-tab="work" onclick="switchTab('work')">Work Batches</button>
             <button class="pf-tab" data-tab="training" onclick="switchTab('training')">Training</button>
-            <button class="pf-tab" data-tab="work" onclick="switchTab('work')">Work Batches</button>
         </div>
 
-        <!-- SUMMARY TAB -->
-        <div id="tab-summary" class="pf-panel">
-            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
-                <div class="pf-card">
-                    <div class="pf-card-label">Training Accuracy</div>
-                    <div class="pf-card-val" id="sTrainAcc">—</div>
-                    <div class="pf-card-sub" id="sTrainAccSub"></div>
-                </div>
-                <div class="pf-card">
-                    <div class="pf-card-label">Training Sessions</div>
-                    <div class="pf-card-val" id="sTrainCount">—</div>
-                </div>
-                <div class="pf-card">
-                    <div class="pf-card-label">Work Throughput</div>
-                    <div class="pf-card-val" id="sWorkThroughput">—</div>
-                    <div class="pf-card-sub" id="sWorkThroughputSub"></div>
-                </div>
-                <div class="pf-card">
-                    <div class="pf-card-label">On-time Rate</div>
-                    <div class="pf-card-val" id="sOnTime">—</div>
-                    <div class="pf-card-sub" id="sOnTimeSub"></div>
-                </div>
-                <div class="pf-card">
-                    <div class="pf-card-label">Total Work Labels</div>
-                    <div class="pf-card-val" id="sWorkLabels">—</div>
-                </div>
-                <div class="pf-card">
-                    <div class="pf-card-label">Assignments</div>
-                    <div class="pf-card-val" id="sAssignments">—</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- TRAINING TAB -->
-        <div id="tab-training" class="pf-panel" style="display:none;">
-            <table class="pf-tbl">
-                <thead><tr>
-                    <th>Feature</th>
-                    <th>Accuracy</th>
-                    <th>Score</th>
-                    <th>Time</th>
-                    <th>Per Img</th>
-                    <th>Date</th>
-                </tr></thead>
-                <tbody id="trainBody"></tbody>
-            </table>
-            <p id="trainEmpty" class="wf-muted" style="display:none;">No training results yet.</p>
-        </div>
-
-        <!-- WORK TAB -->
-        <div id="tab-work" class="pf-panel" style="display:none;">
+        <!-- WORK TAB (default) -->
+        <div id="tab-work" class="pf-panel">
+            <div id="workStats" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px;"></div>
             <div style="margin-bottom:8px;">
                 <label style="font-size:11px; color:#6f7a7a;">Filter:</label>
                 <select id="workFilter" class="wf-select" style="width:auto; font-size:12px; padding:3px 8px;" onchange="renderWork()">
@@ -103,6 +54,23 @@
                 <tbody id="workBody"></tbody>
             </table>
             <p id="workEmpty" class="wf-muted" style="display:none;">No work batches.</p>
+        </div>
+
+        <!-- TRAINING TAB -->
+        <div id="tab-training" class="pf-panel" style="display:none;">
+            <div id="trainStats" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px;"></div>
+            <table class="pf-tbl">
+                <thead><tr>
+                    <th>Feature</th>
+                    <th>Accuracy</th>
+                    <th>Score</th>
+                    <th>Time</th>
+                    <th>Per Img</th>
+                    <th>Date</th>
+                </tr></thead>
+                <tbody id="trainBody"></tbody>
+            </table>
+            <p id="trainEmpty" class="wf-muted" style="display:none;">No training results yet.</p>
         </div>
     </div>
 </div>
@@ -147,13 +115,20 @@ var _perfData = null;
 })();
 
 function switchTab(name) {
-    ['summary','training','work'].forEach(function(t) {
+    ['work','training'].forEach(function(t) {
         document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
         document.querySelector('.pf-tab[data-tab="' + t + '"]').className = 'pf-tab' + (t === name ? ' active' : '');
     });
 }
 
 function accClass(pct) { return pct >= 85 ? 'pf-good' : pct >= 70 ? 'pf-warn' : 'pf-bad'; }
+
+function makeCard(label, val, sub) {
+    return '<div class="pf-card"><div class="pf-card-label">' + label + '</div>'
+        + '<div class="pf-card-val">' + val + '</div>'
+        + (sub ? '<div class="pf-card-sub">' + sub + '</div>' : '')
+        + '</div>';
+}
 
 function loadPerf() {
     var uid = document.getElementById('labelerSelect').value;
@@ -169,16 +144,18 @@ function loadPerf() {
         document.getElementById('perfContent').style.display = '';
 
         var s = d.summary;
-        document.getElementById('sTrainAcc').innerHTML = s.training_accuracy != null
+
+        var workHtml = makeCard('Total Labels', s.work_labels)
+            + makeCard('Throughput', s.work_throughput != null ? s.work_throughput + '/hr' : '\u2014', s.work_hours + ' hrs total')
+            + makeCard('On-time Rate', s.work_on_time_pct != null ? s.work_on_time_pct + '%' : '\u2014', s.work_completed + ' completed')
+            + makeCard('Assignments', s.work_assignments);
+        document.getElementById('workStats').innerHTML = workHtml;
+
+        var trainAccVal = s.training_accuracy != null
             ? '<span class="' + accClass(s.training_accuracy) + '">' + s.training_accuracy + '%</span>' : '\u2014';
-        document.getElementById('sTrainAccSub').textContent = s.training_total_imgs + ' total images';
-        document.getElementById('sTrainCount').textContent = s.training_sessions;
-        document.getElementById('sWorkThroughput').textContent = s.work_throughput != null ? s.work_throughput + '/hr' : '\u2014';
-        document.getElementById('sWorkThroughputSub').textContent = s.work_labels + ' labels \u00b7 ' + s.work_hours + ' hrs';
-        document.getElementById('sOnTime').textContent = s.work_on_time_pct != null ? s.work_on_time_pct + '%' : '\u2014';
-        document.getElementById('sOnTimeSub').textContent = s.work_completed + ' completed';
-        document.getElementById('sWorkLabels').textContent = s.work_labels;
-        document.getElementById('sAssignments').textContent = s.work_assignments;
+        var trainHtml = makeCard('Avg Accuracy', trainAccVal, s.training_total_imgs + ' total images')
+            + makeCard('Sessions', s.training_sessions);
+        document.getElementById('trainStats').innerHTML = trainHtml;
 
         renderTraining(d.training);
         renderWork();
