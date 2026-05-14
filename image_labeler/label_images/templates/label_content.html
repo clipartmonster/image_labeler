@@ -5,11 +5,13 @@
 
     <div class="labeling-layout">
 
+        <!-- Rules toggle button — outside sidebar so it's never clipped -->
+        <button class="rules-toggle-btn" id="sidebarToggleBtn" onclick="document.getElementById('rulesSidebar').classList.toggle('open'); this.classList.toggle('open');">
+            &#9776; Rules
+        </button>
+
         <!-- Rules + Examples Sidebar -->
         <div class="rules-sidebar" id="rulesSidebar">
-            <button class="sidebar-toggle" id="sidebarToggleBtn" onclick="document.getElementById('rulesSidebar').classList.toggle('open')">
-                <span id="toggleIcon">&#9776;</span> Rules
-            </button>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
                 <h2 style="margin:0; font-size:18px;">Rules &amp; Examples</h2>
                 <a href="/label_images/rules/" target="_blank"
