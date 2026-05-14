@@ -517,7 +517,7 @@ def mturk_redirect(request):
 
     from .models import RuleGuide
     rule_guides = list(
-        RuleGuide.objects.filter(task_type=task_type)
+        RuleGuide.objects.filter(task_type=task_type, rule_index=rule_index)
         .prefetch_related("directives", "reference_images")
     )
 
