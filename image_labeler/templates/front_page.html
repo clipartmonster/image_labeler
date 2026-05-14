@@ -5,61 +5,91 @@
 <style>
 .fp-page {
     background: #bdc7c7; border-radius: 10px; margin: 10px;
-    padding: 28px 32px 36px; font-family: Roboto, sans-serif;
-    max-width: 560px;
+    padding: 32px 36px 40px; font-family: Roboto, sans-serif;
 }
-.fp-page h1 {
-    font-size: 20px; font-weight: 700; color: #3a4a4a;
-    margin: 0 0 20px;
+.fp-top {
+    margin-bottom: 28px;
 }
-.fp-section {
-    margin-bottom: 20px;
+.fp-top h1 {
+    font-size: 24px; font-weight: 700; color: #3a4a4a; margin: 0 0 4px;
 }
+.fp-top p {
+    font-size: 13px; color: #6a7a7a; margin: 0;
+}
+.fp-hero {
+    margin-bottom: 28px;
+}
+.fp-hero a {
+    display: block; padding: 18px 24px;
+    background: #3d5a5a; border-radius: 10px;
+    text-decoration: none; color: #fff;
+    font-size: 16px; font-weight: 600;
+    transition: background .15s;
+    box-shadow: 0 2px 6px rgba(0,0,0,.12);
+}
+.fp-hero a:hover { background: #4a6e6e; }
+.fp-hero a span {
+    display: block; font-size: 12px; font-weight: 400;
+    color: #b0c8c8; margin-top: 3px;
+}
+
 .fp-section-hd {
     font-size: 11px; font-weight: 700; color: #5d6d6d;
     text-transform: uppercase; letter-spacing: .6px;
-    margin: 0 0 8px; padding: 0;
+    margin: 0 0 10px; padding: 0;
 }
-.fp-link {
-    display: block; padding: 10px 16px; margin-bottom: 4px;
+.fp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 8px;
+    margin-bottom: 24px;
+}
+.fp-card {
+    display: flex; align-items: center; justify-content: center;
+    padding: 14px 16px;
     background: #fff; border-radius: 8px;
     text-decoration: none; color: #3a4a4a;
-    font-size: 14px; font-weight: 500;
-    transition: background .12s, box-shadow .12s;
-    box-shadow: 0 1px 2px rgba(0,0,0,.05);
+    font-size: 13px; font-weight: 500;
+    text-align: center;
+    transition: background .12s, box-shadow .12s, transform .12s;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06);
 }
-.fp-link:hover {
-    background: #f0f5f5; box-shadow: 0 1px 4px rgba(0,0,0,.1);
-}
-.fp-link-sub {
-    font-size: 11px; color: #7a8a8a; font-weight: 400; margin-left: 6px;
+.fp-card:hover {
+    background: #f0f5f5; box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    transform: translateY(-1px);
 }
 </style>
 
 <div class="fp-page">
-    <h1>Clipart Monster</h1>
+    <div class="fp-top">
+        <h1>Clipart Monster</h1>
+        <p>Internal labeling & model dashboard</p>
+    </div>
 
-    <div class="fp-section">
-        <a href="/label_images/setup_session/" class="fp-link">Setup Session</a>
+    <div class="fp-hero">
+        <a href="/label_images/setup_session/">
+            Setup Session
+            <span>Start labeling or manage batches</span>
+        </a>
     </div>
 
     {% if user_is_admin %}
-    <div class="fp-section">
-        <p class="fp-section-hd">Data & Labels</p>
-        <a href="/label_images/view_model_results/" class="fp-link">Model Results</a>
-        <a href="/label_images/view_batch_labels/" class="fp-link">Batch Labels</a>
-        <a href="/label_images/view_prediction_labels/?task_type=asset_type&rule_index=3" class="fp-link">Prediction Labels</a>
-        <a href="/label_images/view_labels/" class="fp-link">View Labels</a>
-        <a href="/label_images/view_asset/" class="fp-link">View Asset</a>
+    <p class="fp-section-hd">Data & Labels</p>
+    <div class="fp-grid">
+        <a href="/label_images/view_model_results/" class="fp-card">Model Results</a>
+        <a href="/label_images/view_batch_labels/" class="fp-card">Batch Labels</a>
+        <a href="/label_images/view_prediction_labels/?task_type=asset_type&rule_index=3" class="fp-card">Prediction Labels</a>
+        <a href="/label_images/view_labels/" class="fp-card">View Labels</a>
+        <a href="/label_images/view_asset/" class="fp-card">View Asset</a>
     </div>
 
-    <div class="fp-section">
-        <p class="fp-section-hd">Tools</p>
-        <a href="/label_images/view_primary_colors/" class="fp-link">Primary Colors</a>
-        <a href="/label_images/view_line_widths/" class="fp-link">Line Width</a>
-        <a href="/label_images/view_rough_fill/" class="fp-link">Rough Fill</a>
-        <a href="/label_images/manage_rules/" class="fp-link">Manage Rules</a>
-        <a href="/label_images/label_search_results/" class="fp-link">Label Search Results</a>
+    <p class="fp-section-hd">Tools</p>
+    <div class="fp-grid">
+        <a href="/label_images/view_primary_colors/" class="fp-card">Primary Colors</a>
+        <a href="/label_images/view_line_widths/" class="fp-card">Line Width</a>
+        <a href="/label_images/view_rough_fill/" class="fp-card">Rough Fill</a>
+        <a href="/label_images/manage_rules/" class="fp-card">Manage Rules</a>
+        <a href="/label_images/label_search_results/" class="fp-card">Search Results</a>
     </div>
     {% endif %}
 </div>
