@@ -1378,15 +1378,20 @@ def view_model_results(request):
         .values()
     )
 
+    def _float(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
     for row in all_results:
+        for f in ("val_recall", "val_precision", "val_auc", "val_loss", "val_mae", "learning_rate"):
+            row[f] = round(_float(row.get(f)), 3)
         row["is_prod"] = row["id"] in prod_dev_ids
         row["title"] = rule_titles.get((row["task_type"], row["rule_index"]), "")
         row["score"] = round((row["val_precision"] + row["val_recall"]) - abs(row["val_precision"] - row["val_recall"]), 3)
-        row["total_samples"] = row["train_samples"] + row["val_samples"]
+        row["total_samples"] = (row.get("train_samples") or 0) + (row.get("val_samples") or 0)
         row["date"] = row["created_at"].strftime("%b %d, %Y") if row["created_at"] else ""
-        for f in ("val_recall", "val_precision", "val_auc", "val_loss", "val_mae", "learning_rate"):
-            if row.get(f) is not None:
-                row[f] = round(row[f], 3)
         # Attach threshold data if this model is in production
         mv = prod_version_map.get(row["id"])
         if mv:
