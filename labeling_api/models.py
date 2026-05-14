@@ -703,7 +703,7 @@ class rule_index_thresholds_table(models.Model):
     precision = models.FloatField()
     recall = models.FloatField()
     percent_kept = models.FloatField()
-    model_version = models.CharField(max_length=100)
+    model_version = models.CharField(max_length=100, primary_key=True)
     task_type = models.CharField(max_length=100)
 
     class Meta:
