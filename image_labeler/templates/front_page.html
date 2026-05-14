@@ -2,132 +2,66 @@
 {% load static %}
 
 {% block content %}
+<style>
+.fp-page {
+    background: #bdc7c7; border-radius: 10px; margin: 10px;
+    padding: 28px 32px 36px; font-family: Roboto, sans-serif;
+    max-width: 560px;
+}
+.fp-page h1 {
+    font-size: 20px; font-weight: 700; color: #3a4a4a;
+    margin: 0 0 20px;
+}
+.fp-section {
+    margin-bottom: 20px;
+}
+.fp-section-hd {
+    font-size: 11px; font-weight: 700; color: #5d6d6d;
+    text-transform: uppercase; letter-spacing: .6px;
+    margin: 0 0 8px; padding: 0;
+}
+.fp-link {
+    display: block; padding: 10px 16px; margin-bottom: 4px;
+    background: #fff; border-radius: 8px;
+    text-decoration: none; color: #3a4a4a;
+    font-size: 14px; font-weight: 500;
+    transition: background .12s, box-shadow .12s;
+    box-shadow: 0 1px 2px rgba(0,0,0,.05);
+}
+.fp-link:hover {
+    background: #f0f5f5; box-shadow: 0 1px 4px rgba(0,0,0,.1);
+}
+.fp-link-sub {
+    font-size: 11px; color: #7a8a8a; font-weight: 400; margin-left: 6px;
+}
+</style>
 
-    
-<div style = 'display:flex; flex-direction: row; gap: 20px; flex-wrap: wrap;'>
+<div class="fp-page">
+    <h1>Clipart Monster</h1>
 
-    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
-
-        <ul style="list-style-type: none; padding: 0;">
-            
-            <li style="margin-bottom: 5px;">
-                <a href="/label_images/setup_session/">
-                    <h1 class = "label_option intro">Setup Session</h1>
-                </a>
-            </li>
-            
-            {% if user_is_admin %}
-            <li style="margin-bottom: 5px;">
-                <a href="/label_images/view_asset/">
-                    <h1 class = "label_option intro">View Asset</h1>
-                </a>
-            </li>
-            
-            <li style="margin-bottom: 5px;">
-                <a href="/label_images/view_model_results/">
-                    <h1 class = "label_option intro">View Model Results</h1>
-                </a>
-            </li>
-            
-            <li style="margin-bottom: 5px;">
-                <a href="/label_images/view_batch_labels/">
-                    <h1 class = "label_option intro">View Batch Labels</h1>
-                </a>
-            </li>
-
-            <li style="margin-bottom: 5px;">
-                <a href="/label_images/view_prediction_labels/?task_type=asset_type&rule_index=3">
-                    <h1 class = "label_option intro">Prediction Labels</h1>
-                </a>
-            </li>
-
-            <li style="margin-bottom: 5px;">
-                <a href="/label_images/view_labels/">
-                    <h1 class = "label_option intro">View Labels</h1>
-                </a>
-            </li>
-
-            <li style="margin-bottom: 5px;">
-                <a href="/label_images/view_primary_colors/">
-                    <h1 class = "label_option intro">Primary Colors</h1>
-                </a>
-            </li>
-
-            <li style="margin-bottom: 5px;">
-                <a href="/label_images/view_line_widths/">
-                    <h1 class = "label_option intro">Line Width</h1>
-                </a>
-            </li>
-
-            <li style="margin-bottom: 5px;">
-                <a href="/label_images/view_rough_fill/">
-                    <h1 class = "label_option intro">Rough Fill</h1>
-                </a>
-            </li>
-
-            <li style="margin-bottom: 5px;">
-                <a href="/label_images/manage_rules/">
-                    <h1 class = "label_option intro">Manage Rules</h1>
-                </a>
-            </li>
-
-            <li style="margin-bottom: 5px;">
-                <a href="/label_images/label_search_results/">
-                    <h1 class = "label_option intro">Label Search Results</h1>
-                </a>
-            </li>
-            {% endif %}
-
-        </ul>
-
+    <div class="fp-section">
+        <a href="/label_images/setup_session/" class="fp-link">Setup Session</a>
     </div>
 
     {% if user_is_admin %}
-    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap; align-self:flex-start;' >
+    <div class="fp-section">
+        <p class="fp-section-hd">Data & Labels</p>
+        <a href="/label_images/view_model_results/" class="fp-link">Model Results</a>
+        <a href="/label_images/view_batch_labels/" class="fp-link">Batch Labels</a>
+        <a href="/label_images/view_prediction_labels/?task_type=asset_type&rule_index=3" class="fp-link">Prediction Labels</a>
+        <a href="/label_images/view_labels/" class="fp-link">View Labels</a>
+        <a href="/label_images/view_asset/" class="fp-link">View Asset</a>
+    </div>
 
-        <h1 class="label_option intro" style="width:100%; margin-bottom:10px; color:#cba6f7;">Admin</h1>
-
-        <ul style="list-style-type: none; padding: 0;">
-            <li style="margin-bottom: 5px;">
-                <a href="/admin/">
-                    <h1 class = "label_option intro">Django Admin Panel</h1>
-                </a>
-            </li>
-
-            <li style="margin-bottom: 5px;">
-                <a href="/admin/auth/user/">
-                    <h1 class = "label_option intro">Manage Users</h1>
-                </a>
-            </li>
-
-            <li style="margin-bottom: 5px;">
-                <a href="/admin/label_images/userprofile/">
-                    <h1 class = "label_option intro">User Profiles &amp; Roles</h1>
-                </a>
-            </li>
-
-            <li style="margin-bottom: 5px;">
-                <a href="/admin/label_images/batchassignment/">
-                    <h1 class = "label_option intro">Batch Assignments</h1>
-                </a>
-            </li>
-
-            <li style="margin-bottom: 5px;">
-                <a href="/admin/label_images/labelingsession/">
-                    <h1 class = "label_option intro">Labeling Sessions &amp; Rates</h1>
-                </a>
-            </li>
-
-            <li style="margin-bottom: 5px;">
-                <a href="/admin/label_images/ruleexample/">
-                    <h1 class = "label_option intro">Rule Examples</h1>
-                </a>
-            </li>
-        </ul>
-
+    <div class="fp-section">
+        <p class="fp-section-hd">Tools</p>
+        <a href="/label_images/view_primary_colors/" class="fp-link">Primary Colors</a>
+        <a href="/label_images/view_line_widths/" class="fp-link">Line Width</a>
+        <a href="/label_images/view_rough_fill/" class="fp-link">Rough Fill</a>
+        <a href="/label_images/manage_rules/" class="fp-link">Manage Rules</a>
+        <a href="/label_images/label_search_results/" class="fp-link">Label Search Results</a>
     </div>
     {% endif %}
-
 </div>
 
 {% endblock %}
