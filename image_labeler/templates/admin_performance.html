@@ -15,53 +15,130 @@
 
     <div class="wf-filters">
         <label>Labeler</label>
-        <select id="labelerSelect" class="wf-select" onchange="loadPerformance()">
+        <select id="labelerSelect" class="wf-select" onchange="loadPerf()">
             <option value="">— select —</option>
         </select>
-        <button class="wf-btn wf-btn-primary wf-btn-sm" onclick="loadPerformance()">Refresh</button>
     </div>
+
+    <p id="perfStatus" class="wf-muted" style="margin-top:8px;"></p>
 
     <div id="perfContent" style="display:none;">
-        <div class="wf-stats">
-            <div class="wf-stat">
-                <p class="label">Throughput</p>
-                <p class="value" id="statThroughput">—</p>
-                <p class="sub" id="statThroughputSub"></p>
-            </div>
-            <div class="wf-stat">
-                <p class="label">Gold Accuracy</p>
-                <p class="value" id="statAccuracy">—</p>
-                <p class="sub" id="statAccuracySub"></p>
-            </div>
-            <div class="wf-stat">
-                <p class="label">On-time Rate</p>
-                <p class="value" id="statOntime">—</p>
-                <p class="sub" id="statOntimeSub"></p>
+
+        <!-- Tab bar -->
+        <div style="display:flex; gap:2px; margin:16px 0 12px;">
+            <button class="pf-tab active" data-tab="summary" onclick="switchTab('summary')">Summary</button>
+            <button class="pf-tab" data-tab="training" onclick="switchTab('training')">Training</button>
+            <button class="pf-tab" data-tab="work" onclick="switchTab('work')">Work Batches</button>
+        </div>
+
+        <!-- SUMMARY TAB -->
+        <div id="tab-summary" class="pf-panel">
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+                <div class="pf-card">
+                    <div class="pf-card-label">Training Accuracy</div>
+                    <div class="pf-card-val" id="sTrainAcc">—</div>
+                    <div class="pf-card-sub" id="sTrainAccSub"></div>
+                </div>
+                <div class="pf-card">
+                    <div class="pf-card-label">Training Sessions</div>
+                    <div class="pf-card-val" id="sTrainCount">—</div>
+                </div>
+                <div class="pf-card">
+                    <div class="pf-card-label">Work Throughput</div>
+                    <div class="pf-card-val" id="sWorkThroughput">—</div>
+                    <div class="pf-card-sub" id="sWorkThroughputSub"></div>
+                </div>
+                <div class="pf-card">
+                    <div class="pf-card-label">On-time Rate</div>
+                    <div class="pf-card-val" id="sOnTime">—</div>
+                    <div class="pf-card-sub" id="sOnTimeSub"></div>
+                </div>
+                <div class="pf-card">
+                    <div class="pf-card-label">Total Work Labels</div>
+                    <div class="pf-card-val" id="sWorkLabels">—</div>
+                </div>
+                <div class="pf-card">
+                    <div class="pf-card-label">Assignments</div>
+                    <div class="pf-card-val" id="sAssignments">—</div>
+                </div>
             </div>
         </div>
 
-        <div class="wf-stats">
-            <div class="wf-stat">
-                <p class="label">Total Labels</p>
-                <p class="value" id="statLabels">—</p>
+        <!-- TRAINING TAB -->
+        <div id="tab-training" class="pf-panel" style="display:none;">
+            <table class="pf-tbl">
+                <thead><tr>
+                    <th>Feature</th>
+                    <th>Accuracy</th>
+                    <th>Score</th>
+                    <th>Time</th>
+                    <th>Per Img</th>
+                    <th>Date</th>
+                </tr></thead>
+                <tbody id="trainBody"></tbody>
+            </table>
+            <p id="trainEmpty" class="wf-muted" style="display:none;">No training results yet.</p>
+        </div>
+
+        <!-- WORK TAB -->
+        <div id="tab-work" class="pf-panel" style="display:none;">
+            <div style="margin-bottom:8px;">
+                <label style="font-size:11px; color:#6f7a7a;">Filter:</label>
+                <select id="workFilter" class="wf-select" style="width:auto; font-size:12px; padding:3px 8px;" onchange="renderWork()">
+                    <option value="all">All</option>
+                    <option value="completed">Completed</option>
+                    <option value="active">Active</option>
+                </select>
             </div>
-            <div class="wf-stat">
-                <p class="label">Total Hours</p>
-                <p class="value" id="statHours">—</p>
-            </div>
-            <div class="wf-stat">
-                <p class="label">Assignments</p>
-                <p class="value" id="statAssignments">—</p>
-            </div>
+            <table class="pf-tbl">
+                <thead><tr>
+                    <th>Feature</th>
+                    <th>Batch</th>
+                    <th>Labels</th>
+                    <th>Hours</th>
+                    <th>Speed</th>
+                    <th>Deadline</th>
+                    <th>Status</th>
+                </tr></thead>
+                <tbody id="workBody"></tbody>
+            </table>
+            <p id="workEmpty" class="wf-muted" style="display:none;">No work batches.</p>
         </div>
     </div>
-
-    <p id="perfStatus" class="wf-muted" style="margin-top:12px;"></p>
-
 </div>
+
+<style>
+.pf-tab {
+    padding:5px 14px; font-size:12px; font-weight:600; border:1px solid #8a9c9c;
+    border-radius:4px 4px 0 0; background:#c2d0d0; color:#3a4a4a; cursor:pointer;
+}
+.pf-tab.active { background:#a9b9b9; border-bottom-color:#a9b9b9; }
+.pf-panel { background:#c8d4d4; border-radius:0 6px 6px 6px; padding:12px; }
+.pf-card {
+    background:#d6dfdf; border-radius:6px; padding:10px 14px; min-width:110px; flex:1;
+}
+.pf-card-label { font-size:10px; color:#5d6565; text-transform:uppercase; letter-spacing:.5px; margin-bottom:2px; }
+.pf-card-val { font-size:20px; font-weight:700; color:#2a3a3a; }
+.pf-card-sub { font-size:11px; color:#6f7a7a; }
+.pf-tbl { width:100%; border-collapse:separate; border-spacing:0 2px; }
+.pf-tbl th { text-align:left; font-size:10px; font-weight:600; color:#5d6565; padding:2px 8px; white-space:nowrap; }
+.pf-tbl td { font-size:12px; color:#2a3a3a; padding:5px 8px; background:#dae2e2; }
+.pf-tbl tr td:first-child { border-radius:4px 0 0 4px; font-weight:600; }
+.pf-tbl tr td:last-child { border-radius:0 4px 4px 0; }
+.pf-tbl tr:hover td { background:#d0dcdc; }
+.pf-good { color:#2a6a4a; font-weight:700; }
+.pf-warn { color:#b08820; font-weight:700; }
+.pf-bad  { color:#bd4444; font-weight:700; }
+.pf-tag { font-size:9px; font-weight:700; padding:1px 6px; border-radius:3px; }
+.pf-tag-done { background:#7aaa72; color:#fff; }
+.pf-tag-active { background:#409393; color:#fff; }
+.pf-tag-late { background:#bd4444; color:#fff; }
+</style>
 
 <script>
 var _labelers = {{ labelers_json|safe }};
+var _perfData = null;
+
 (function() {
     var sel = document.getElementById('labelerSelect');
     _labelers.forEach(function(l) {
@@ -69,9 +146,16 @@ var _labelers = {{ labelers_json|safe }};
     });
 })();
 
-function getCsrfToken() { var c = document.cookie.match(/csrftoken=([^;]+)/); return c ? c[1] : ''; }
+function switchTab(name) {
+    ['summary','training','work'].forEach(function(t) {
+        document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
+        document.querySelector('.pf-tab[data-tab="' + t + '"]').className = 'pf-tab' + (t === name ? ' active' : '');
+    });
+}
 
-function loadPerformance() {
+function accClass(pct) { return pct >= 85 ? 'pf-good' : pct >= 70 ? 'pf-warn' : 'pf-bad'; }
+
+function loadPerf() {
     var uid = document.getElementById('labelerSelect').value;
     if (!uid) return;
     document.getElementById('perfStatus').textContent = 'Loading\u2026';
@@ -80,19 +164,72 @@ function loadPerformance() {
     fetch('/label_images/admin/performance/data/?user_id=' + uid)
     .then(function(r) { return r.json(); })
     .then(function(d) {
+        _perfData = d;
         document.getElementById('perfStatus').textContent = '';
         document.getElementById('perfContent').style.display = '';
-        document.getElementById('statThroughput').textContent = d.throughput_labels_per_hour != null ? d.throughput_labels_per_hour + '/hr' : '\u2014';
-        document.getElementById('statThroughputSub').textContent = d.total_labels + ' labels in ' + d.total_hours + ' hrs';
-        document.getElementById('statAccuracy').textContent = d.accuracy_pct != null ? d.accuracy_pct + '%' : '\u2014';
-        document.getElementById('statAccuracySub').textContent = d.gold_correct + ' / ' + d.gold_total + ' gold items';
-        document.getElementById('statOntime').textContent = d.on_time_pct != null ? d.on_time_pct + '%' : '\u2014';
-        document.getElementById('statOntimeSub').textContent = d.on_time_count + ' / ' + d.total_completed + ' completed';
-        document.getElementById('statLabels').textContent = d.total_labels;
-        document.getElementById('statHours').textContent = d.total_hours;
-        document.getElementById('statAssignments').textContent = d.total_assignments;
+
+        var s = d.summary;
+        document.getElementById('sTrainAcc').innerHTML = s.training_accuracy != null
+            ? '<span class="' + accClass(s.training_accuracy) + '">' + s.training_accuracy + '%</span>' : '\u2014';
+        document.getElementById('sTrainAccSub').textContent = s.training_total_imgs + ' total images';
+        document.getElementById('sTrainCount').textContent = s.training_sessions;
+        document.getElementById('sWorkThroughput').textContent = s.work_throughput != null ? s.work_throughput + '/hr' : '\u2014';
+        document.getElementById('sWorkThroughputSub').textContent = s.work_labels + ' labels \u00b7 ' + s.work_hours + ' hrs';
+        document.getElementById('sOnTime').textContent = s.work_on_time_pct != null ? s.work_on_time_pct + '%' : '\u2014';
+        document.getElementById('sOnTimeSub').textContent = s.work_completed + ' completed';
+        document.getElementById('sWorkLabels').textContent = s.work_labels;
+        document.getElementById('sAssignments').textContent = s.work_assignments;
+
+        renderTraining(d.training);
+        renderWork();
     });
 }
 
+function renderTraining(rows) {
+    var tb = document.getElementById('trainBody');
+    tb.innerHTML = '';
+    document.getElementById('trainEmpty').style.display = rows.length ? 'none' : '';
+    rows.forEach(function(r) {
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + (r.feature || r.task_type + '/r' + r.rule_index) + '</td>'
+            + '<td><span class="' + accClass(r.accuracy_pct) + '">' + r.accuracy_pct + '%</span></td>'
+            + '<td>' + r.correct + '/' + r.total + '</td>'
+            + '<td>' + r.time_min + 'm</td>'
+            + '<td>' + r.per_image_sec + 's</td>'
+            + '<td style="font-size:11px;color:#6f7a7a;">' + r.date + '</td>';
+        tb.appendChild(tr);
+    });
+}
+
+function renderWork() {
+    if (!_perfData) return;
+    var filter = document.getElementById('workFilter').value;
+    var rows = _perfData.work.filter(function(r) {
+        if (filter === 'completed') return r.completed;
+        if (filter === 'active') return !r.completed;
+        return true;
+    });
+    var tb = document.getElementById('workBody');
+    tb.innerHTML = '';
+    document.getElementById('workEmpty').style.display = rows.length ? 'none' : '';
+    rows.forEach(function(r) {
+        var status = '';
+        if (r.completed) {
+            status = r.on_time ? '<span class="pf-tag pf-tag-done">On time</span>'
+                               : '<span class="pf-tag pf-tag-late">Late</span>';
+        } else {
+            status = '<span class="pf-tag pf-tag-active">Active</span>';
+        }
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + (r.feature || r.task_type + '/r' + r.rule_index) + '</td>'
+            + '<td>' + r.batch_id + '/' + r.sub_batch + '</td>'
+            + '<td>' + r.labels + '</td>'
+            + '<td>' + r.hours + '</td>'
+            + '<td>' + (r.throughput != null ? r.throughput + '/hr' : '\u2014') + '</td>'
+            + '<td style="font-size:11px;">' + r.deadline + '</td>'
+            + '<td>' + status + '</td>';
+        tb.appendChild(tr);
+    });
+}
 </script>
 {% endblock %}

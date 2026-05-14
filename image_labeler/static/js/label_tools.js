@@ -116,7 +116,9 @@ function collect_mismatch_prompt(element, reponse){
             asset_id:parseInt(collection_data.getAttribute('asset_id'))
     }
 
-    api_collect_mismatch_prompt(data)
+    if (!window._trainingAnswers) {
+        api_collect_mismatch_prompt(data)
+    }
 
     data = {task_type:collection_data.getAttribute('task_type'),
             rule_index:parseInt(element.getAttribute('rule_index')),
@@ -126,8 +128,9 @@ function collect_mismatch_prompt(element, reponse){
             modified_prompt_response:reponse
         }
 
-
-    api_collect_modified_prompt(data)
+    if (!window._trainingAnswers) {
+        api_collect_modified_prompt(data)
+    }
 
 }
 
@@ -166,9 +169,14 @@ function direct_hotkey_action(hotkey) {
             labeler_source = collection_data[0].getAttribute('labeler_source')
 
             if (window._trainingAnswers && window._trainingMeta) {
+                var stats = window._trainingStats || { correct: 0, total: 0, startTime: Date.now() };
+                var elapsed = Math.round((Date.now() - stats.startTime) / 1000);
                 var fd = new FormData();
                 fd.append('task_type', window._trainingMeta.taskType);
                 fd.append('rule_index', window._trainingMeta.ruleIndex);
+                fd.append('correct', stats.correct);
+                fd.append('total', stats.total);
+                fd.append('time_seconds', elapsed);
                 fetch('/label_images/complete_training/', { method: 'POST', body: fd })
                     .finally(function() {
                         window.location.href = '/label_images/setup_session/';
@@ -362,6 +370,11 @@ function close_listing_container(element){
             }
             var correctText = correctLabel === 1 ? 'YES' : 'NO';
             var isCorrect = (correctLabel === 1 && userAnswer === 'yes') || (correctLabel === 0 && userAnswer === 'no');
+
+            if (window._trainingStats) {
+                window._trainingStats.total++;
+                if (isCorrect) window._trainingStats.correct++;
+            }
 
             var fb = document.createElement('div');
             fb.className = 'training-feedback-overlay';

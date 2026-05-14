@@ -116,6 +116,27 @@ class RuleExample(models.Model):
 
 
 # ---------------------------------------------------------------------------
+# Training results — recorded when a labeler completes a training batch
+# ---------------------------------------------------------------------------
+
+class TrainingResult(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="training_results")
+    task_type = models.CharField(max_length=100)
+    rule_index = models.IntegerField()
+    total = models.IntegerField()
+    correct = models.IntegerField()
+    time_seconds = models.IntegerField(help_text="Wall-clock seconds from start to finish")
+    completed_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def accuracy(self):
+        return self.correct / self.total if self.total > 0 else 0
+
+    def __str__(self):
+        return f"{self.user.username} {self.task_type}/rule{self.rule_index}: {self.correct}/{self.total}"
+
+
+# ---------------------------------------------------------------------------
 # Training batch assets — reconciled assets assigned for labeler training
 # ---------------------------------------------------------------------------
 

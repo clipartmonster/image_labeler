@@ -2201,9 +2201,10 @@ def admin_performance(request):
 
 @admin_required_ajax
 def admin_performance_data(request):
-    """AJAX: return throughput, accuracy, on-time stats for a labeler."""
+    """AJAX: return summary, training results, and work batch stats for a labeler."""
     from django.contrib.auth.models import User
-    from labeling_api.models import prompt_responses
+    from labeling_api.models import prompt_responses, labelling_rules as LR
+    from .models import TrainingResult
 
     user_id = request.GET.get("user_id")
     if not user_id:
@@ -2213,49 +2214,83 @@ def admin_performance_data(request):
     except User.DoesNotExist:
         return JsonResponse({"error": "user not found"}, status=404)
 
-    # --- Throughput ---
-    sessions = LabelingSession.objects.filter(user=user, ended_at__isnull=False)
-    total_labels = sum(s.labels_completed for s in sessions)
-    total_hours = sum((s.duration_hours or 0) for s in sessions)
-    throughput = round(total_labels / total_hours, 1) if total_hours > 0 else None
+    rule_titles = {}
+    for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
+        rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
 
-    # --- Accuracy vs gold ---
-    labeler_id_str = user.username
-    gold_labels = {
-        (g.asset_id, g.task_type, g.rule_index): g.correct_response
-        for g in GoldStandardLabel.objects.all()
-    }
-    gold_total = 0
-    gold_correct = 0
-    if gold_labels:
-        responses = prompt_responses.objects.filter(labeler_id=labeler_id_str)
-        for r in responses:
-            key = (r.asset_id, r.task_type, r.rule_index)
-            if key in gold_labels:
-                gold_total += 1
-                if r.prompt_response == gold_labels[key]:
-                    gold_correct += 1
-    accuracy = round(gold_correct / gold_total * 100, 1) if gold_total > 0 else None
+    # --- Training results ---
+    training_rows = []
+    for tr in TrainingResult.objects.filter(user=user).order_by("-completed_at"):
+        mins = round(tr.time_seconds / 60, 1)
+        training_rows.append({
+            "task_type": tr.task_type,
+            "rule_index": tr.rule_index,
+            "feature": rule_titles.get((tr.task_type, tr.rule_index), ""),
+            "correct": tr.correct,
+            "total": tr.total,
+            "accuracy_pct": round(tr.correct / tr.total * 100, 1) if tr.total > 0 else 0,
+            "time_min": mins,
+            "per_image_sec": round(tr.time_seconds / tr.total, 1) if tr.total > 0 else 0,
+            "date": tr.completed_at.strftime("%b %d, %Y %I:%M %p") if tr.completed_at else "",
+        })
 
-    # --- On-time completion ---
-    assignments = BatchAssignment.objects.filter(user=user)
-    completed = assignments.filter(completed_at__isnull=False)
-    total_completed = completed.count()
-    on_time = completed.filter(completed_at__lte=F("deadline")).count()
-    on_time_rate = round(on_time / total_completed * 100, 1) if total_completed > 0 else None
+    # Training summary
+    tr_qs = TrainingResult.objects.filter(user=user)
+    tr_total_imgs = sum(t.total for t in tr_qs)
+    tr_total_correct = sum(t.correct for t in tr_qs)
+    tr_total_secs = sum(t.time_seconds for t in tr_qs)
+    tr_avg_accuracy = round(tr_total_correct / tr_total_imgs * 100, 1) if tr_total_imgs > 0 else None
+    tr_count = tr_qs.count()
+
+    # --- Work batch stats ---
+    work_assignments = BatchAssignment.objects.filter(user=user, is_training=False)
+    work_rows = []
+    total_work_labels = 0
+    for a in work_assignments.order_by("-assigned_at"):
+        sessions = LabelingSession.objects.filter(batch_assignment=a, ended_at__isnull=False)
+        labels = sum(s.labels_completed for s in sessions)
+        hours = sum((s.duration_hours or 0) for s in sessions)
+        total_work_labels += labels
+        work_rows.append({
+            "task_type": a.task_type,
+            "rule_index": a.rule_index,
+            "feature": rule_titles.get((a.task_type, a.rule_index), ""),
+            "batch_id": a.batch_id,
+            "sub_batch": a.large_sub_batch,
+            "labels": labels,
+            "hours": round(hours, 2),
+            "throughput": round(labels / hours, 1) if hours > 0 else None,
+            "deadline": a.deadline.strftime("%b %d") if a.deadline else "",
+            "completed": a.completed_at is not None,
+            "on_time": a.completed_at <= a.deadline if a.completed_at and a.deadline else None,
+        })
+
+    # Work summary
+    all_sessions = LabelingSession.objects.filter(user=user, ended_at__isnull=False,
+                                                   batch_assignment__is_training=False)
+    w_total_labels = sum(s.labels_completed for s in all_sessions)
+    w_total_hours = sum((s.duration_hours or 0) for s in all_sessions)
+    w_throughput = round(w_total_labels / w_total_hours, 1) if w_total_hours > 0 else None
+    w_completed = work_assignments.filter(completed_at__isnull=False)
+    w_completed_count = w_completed.count()
+    w_on_time = w_completed.filter(completed_at__lte=F("deadline")).count()
+    w_on_time_pct = round(w_on_time / w_completed_count * 100, 1) if w_completed_count > 0 else None
 
     return JsonResponse({
         "username": user.username,
-        "throughput_labels_per_hour": throughput,
-        "total_labels": total_labels,
-        "total_hours": round(total_hours, 1),
-        "accuracy_pct": accuracy,
-        "gold_total": gold_total,
-        "gold_correct": gold_correct,
-        "on_time_pct": on_time_rate,
-        "total_completed": total_completed,
-        "on_time_count": on_time,
-        "total_assignments": assignments.count(),
+        "summary": {
+            "training_accuracy": tr_avg_accuracy,
+            "training_sessions": tr_count,
+            "training_total_imgs": tr_total_imgs,
+            "work_labels": w_total_labels,
+            "work_hours": round(w_total_hours, 1),
+            "work_throughput": w_throughput,
+            "work_on_time_pct": w_on_time_pct,
+            "work_completed": w_completed_count,
+            "work_assignments": work_assignments.count(),
+        },
+        "training": training_rows,
+        "work": work_rows,
     })
 
 
@@ -2452,13 +2487,16 @@ def rule_guide_api(request):
 @csrf_exempt
 @login_required
 def complete_training(request):
-    """AJAX: mark a training BatchAssignment as completed."""
+    """AJAX: mark a training BatchAssignment as completed and record results."""
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
-    from .models import BatchAssignment
+    from .models import BatchAssignment, TrainingResult
     task_type = request.POST.get("task_type")
     rule_index = request.POST.get("rule_index")
+    correct = int(request.POST.get("correct", 0))
+    total = int(request.POST.get("total", 0))
+    time_seconds = int(request.POST.get("time_seconds", 0))
 
     from django.utils import timezone as tz
     updated = BatchAssignment.objects.filter(
@@ -2468,5 +2506,15 @@ def complete_training(request):
         is_training=True,
         completed_at__isnull=True,
     ).update(completed_at=tz.now())
+
+    if total > 0:
+        TrainingResult.objects.create(
+            user=request.user,
+            task_type=task_type,
+            rule_index=int(rule_index),
+            total=total,
+            correct=correct,
+            time_seconds=time_seconds,
+        )
 
     return JsonResponse({"ok": True, "updated": updated})

@@ -6,9 +6,9 @@
 {% if not user_is_admin %}
 <!-- ===== LABELER VIEW ===== -->
 <style>
-.ld-page { max-width:700px; margin:20px auto; padding:0 14px; font-family:Roboto,'Segoe UI',sans-serif; }
-.ld-topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
-.ld-topbar h1 { font-size:16px; font-weight:700; color:#2a3a3a; margin:0; }
+.ld-page { max-width:660px; margin:20px auto; padding:0 14px; font-family:Roboto,'Segoe UI',sans-serif; }
+.ld-topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+.ld-topbar h1 { font-size:15px; font-weight:700; color:#2a3a3a; margin:0; }
 .ld-nav { display:flex; gap:6px; }
 .ld-nav a {
     padding:4px 12px; background:#d2dada; color:#2a3a3a; border-radius:4px;
@@ -16,34 +16,41 @@
 }
 .ld-nav a:hover { background:#c2d2d2; }
 .ld-empty { text-align:center; padding:30px; color:#6f7a7a; font-size:14px; }
-.ld-sec { margin-bottom:16px; }
-.ld-sec-hd { font-size:10px; font-weight:700; color:#2a3a3a; text-transform:uppercase; letter-spacing:1px; margin:0 0 6px 1px; }
+.ld-sec { margin-bottom:18px; }
+.ld-sec-hd {
+    font-size:13px; font-weight:700; color:#2a3a3a; margin:0 0 5px 0;
+    padding:5px 8px; background:#c2d0d0; border-radius:4px;
+    display:flex; align-items:center; gap:6px;
+}
+.ld-sec-hd small { font-size:10px; font-weight:400; color:#5d6565; text-transform:uppercase; letter-spacing:.5px; }
 
-.ld-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:3px; }
+.ld-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px; }
 .ld-item {
-    display:flex; align-items:center; gap:10px;
-    background:#d6dfdf; border-radius:5px; padding:6px 10px;
+    display:flex; align-items:center; gap:8px;
+    background:#dae2e2; border-radius:4px; padding:4px 8px;
     font-size:12px; color:#2a3a3a;
 }
-.ld-item:hover { background:#ccd8d8; }
-.ld-name { flex:1; min-width:0; }
-.ld-name b { font-size:12px; font-weight:700; color:#1a2a2a; display:block; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.ld-name small { font-size:10px; color:#5d6565; }
-.ld-stat { font-size:10px; color:#5d6565; white-space:nowrap; text-align:right; min-width:40px; }
+.ld-item:hover { background:#d0dcdc; }
+.ld-name { flex:1; min-width:0; overflow:hidden; }
+.ld-name span {
+    font-size:13px; font-weight:600; color:#1a1a1a;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;
+}
+.ld-sub { font-size:10px; color:#5d6565; white-space:nowrap; }
 .ld-tag { font-size:9px; font-weight:700; padding:1px 6px; border-radius:3px; white-space:nowrap; }
 .ld-tag-done { background:#7aaa72; color:#fff; }
 .ld-tag-todo { background:#d4aa30; color:#fff; }
 .ld-go {
-    display:inline-block; padding:3px 10px; border-radius:4px;
+    display:inline-block; padding:2px 10px; border-radius:4px;
     text-decoration:none; font-size:11px; font-weight:600; color:#fff; background:#409393; white-space:nowrap;
 }
 .ld-go:hover { background:#338484; }
 .ld-go-dim { background:#b4c4c4; color:#7a8a8a; pointer-events:none; cursor:default; }
-.ld-go-redo { background:transparent; color:#5d6565; border:1px solid #9aacac; }
+.ld-go-redo { background:transparent; color:#5d6565; border:1px solid #9aacac; padding:1px 8px; font-size:10px; }
 .ld-go-redo:hover { background:#c8d4d4; color:#2a3a3a; }
-.ld-bar { display:inline-block; width:50px; height:4px; background:#b0baba; border-radius:2px; vertical-align:middle; }
+.ld-bar { display:inline-block; width:44px; height:4px; background:#b0baba; border-radius:2px; vertical-align:middle; }
 .ld-bar-in { display:block; height:4px; border-radius:2px; background:#409393; }
-.ld-lock { font-size:9px; color:#a06030; white-space:nowrap; }
+.ld-stat { font-size:10px; color:#5d6565; white-space:nowrap; min-width:32px; text-align:right; }
 .ld-pay { font-size:11px; font-weight:700; color:#2a6a4a; white-space:nowrap; }
 .ld-dl { font-size:10px; color:#5d6565; white-space:nowrap; }
 .ld-dl-late { color:#bd4444; font-weight:700; }
@@ -65,14 +72,12 @@
 
     {% for task_type, items in training_groups %}
     <div class="ld-sec">
-        <p class="ld-sec-hd">Training — {{ task_type }}</p>
+        <div class="ld-sec-hd">{{ task_type }} <small>training</small></div>
         <ul class="ld-list">
         {% for a in items %}
             <li class="ld-item">
-                <div class="ld-name">
-                    <b>{{ a.feature_name|default:"—" }}</b>
-                    <small>Rule {{ a.rule_index }} · {{ a.total }} imgs</small>
-                </div>
+                <div class="ld-name"><span>{{ a.feature_name|default:"—" }}</span></div>
+                <span class="ld-sub">{{ a.total }} imgs</span>
                 {% if a.training_done %}
                     <span class="ld-tag ld-tag-done">&#10003; Done</span>
                     <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
@@ -90,14 +95,11 @@
 
     {% for task_type, items in work_groups %}
     <div class="ld-sec">
-        <p class="ld-sec-hd">Work — {{ task_type }}</p>
+        <div class="ld-sec-hd">{{ task_type }} <small>work</small></div>
         <ul class="ld-list">
         {% for a in items %}
             <li class="ld-item">
-                <div class="ld-name">
-                    <b>{{ a.feature_name|default:"—" }}</b>
-                    <small>Rule {{ a.rule_index }} · B{{ a.batch_id }}/{{ a.large_sub_batch }}</small>
-                </div>
+                <div class="ld-name"><span>{{ a.feature_name|default:"—" }}</span></div>
                 <span class="ld-bar"><span class="ld-bar-in" style="width:{{ a.progress_pct }}%;"></span></span>
                 <span class="ld-stat">{{ a.completed }}/{{ a.total }}</span>
                 <span class="ld-pay">${{ a.payment_amount }}</span>
