@@ -2855,10 +2855,22 @@ def collect_line_width_sample(request: Request) -> JsonResponse:
         status="valid",
     )
 
+    from django.db import connection
+
     entry.save()
+
+    print(
+        f"[collect_line_width_sample] saved id={entry.id} "
+        f"asset_id={entry.asset_id} sample_index={entry.sample_index} "
+        f"labeler_id={entry.labeler_id} db={connection.settings_dict.get('NAME')} "
+        f"host={connection.settings_dict.get('HOST')}",
+        flush=True,
+    )
 
     result = {
         "status": "success",
+        "saved_id": entry.id,
+        "db": connection.settings_dict.get("NAME"),
         "explanation": "recorded line width sample for asset "
         + str(request.data.get("asset_id", None)),
     }

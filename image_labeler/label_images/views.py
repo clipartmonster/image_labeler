@@ -2638,18 +2638,46 @@ def complete_training(request):
 
 @login_required
 def image_proxy(request):
-    """Proxy an image URL so the browser can read its pixels (bypasses CORS)."""
+    """Proxy an image URL so the browser can read its pixels (bypasses CORS).
+
+    Some hosts (Cloudflare/WAF-protected CDNs, hot-link-protected buckets)
+    return an HTML "request blocked" page when contacted with the default
+    ``python-requests`` user agent. We mimic a real browser and reject any
+    response whose content type isn't an image — otherwise the blocked HTML
+    would be drawn into the measurement canvas as a corrupt/wrong image.
+    """
+    from urllib.parse import urlsplit
+
     url = request.GET.get("url", "")
     if not url:
         return HttpResponse("Missing url param", status=400)
 
-    try:
-        resp = requests.get(url, timeout=10, stream=True)
-        resp.raise_for_status()
-    except Exception:
-        return HttpResponse("Failed to fetch image", status=502)
+    split = urlsplit(url)
+    referer = f"{split.scheme}://{split.netloc}/" if split.scheme and split.netloc else ""
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+        ),
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    }
+    if referer:
+        headers["Referer"] = referer
 
-    content_type = resp.headers.get("Content-Type", "image/png")
+    try:
+        resp = requests.get(url, timeout=10, headers=headers)
+        resp.raise_for_status()
+    except Exception as exc:
+        return HttpResponse(f"Failed to fetch image: {exc}", status=502)
+
+    content_type = (resp.headers.get("Content-Type") or "").lower()
+    if not content_type.startswith("image/"):
+        return HttpResponse(
+            f"Upstream returned non-image content ({content_type or 'unknown'}); "
+            "the image host likely blocked the server-side fetch.",
+            status=502,
+        )
+
     response = HttpResponse(resp.content, content_type=content_type)
     response["Cache-Control"] = "public, max-age=3600"
     return response
