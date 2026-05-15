@@ -1398,6 +1398,7 @@ function initMeasureOverlay(imgEl) {
 
     window._mlwMeasureGroups = measureGroups;
     _measureState = { canvas: canvas, container: container, statsBar: statsBar };
+    updateStatsBar();
     redraw();
 }
 
