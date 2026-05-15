@@ -851,7 +851,7 @@ function initMeasureOverlay(imgEl) {
         var centerBright = brightness(cx, cy);
         var centerAlpha = alpha(cx, cy);
 
-        // Sample the surrounding area to find the background brightness
+        // Sample surrounding area to estimate background brightness
         var bgSamples = [];
         for (var sd = 0; sd < 8; sd++) {
             var sa = sd * Math.PI / 4;
@@ -865,13 +865,14 @@ function initMeasureOverlay(imgEl) {
         }
         bgSamples.sort(function(a, b) { return b - a; });
         var bgBright = bgSamples.length > 4 ? bgSamples[Math.floor(bgSamples.length * 0.25)] : 255;
-        var contrast = Math.abs(bgBright - centerBright);
-        var threshold = Math.max(25, contrast * 0.4);
+        var midBright = (centerBright + bgBright) / 2;
 
         var angles = [];
         for (var deg = 0; deg < 180; deg += 5) {
             angles.push(deg * Math.PI / 180);
         }
+
+        var PARALLEL_OFFSETS = [-2, -1, 0, 1, 2];
 
         var bestWidth = Infinity;
         var bestA = null, bestB = null;
@@ -880,50 +881,99 @@ function initMeasureOverlay(imgEl) {
             var ang = angles[ai];
             var dx = Math.cos(ang);
             var dy = Math.sin(ang);
+            var perpDx = -dy;
+            var perpDy = dx;
 
-            var posD = findEdge(cx, cy, dx, dy, centerBright, centerAlpha, threshold);
-            var negD = findEdge(cx, cy, -dx, -dy, centerBright, centerAlpha, threshold);
+            var rayWidths = [];
+            var rayAs = [];
+            var rayBs = [];
 
-            if (posD !== null && negD !== null) {
-                var total = posD + negD;
-                if (total < bestWidth) {
-                    bestWidth = total;
-                    bestA = { x: (cx + dx * posD) / scaleX, y: (cy + dy * posD) / scaleY };
-                    bestB = { x: (cx - dx * negD) / scaleX, y: (cy - dy * negD) / scaleY };
+            for (var oi = 0; oi < PARALLEL_OFFSETS.length; oi++) {
+                var off = PARALLEL_OFFSETS[oi];
+                var ox = cx + perpDx * off;
+                var oy = cy + perpDy * off;
+
+                var posD = findEdge(ox, oy, dx, dy, centerBright, centerAlpha, midBright);
+                var negD = findEdge(ox, oy, -dx, -dy, centerBright, centerAlpha, midBright);
+
+                if (posD !== null && negD !== null) {
+                    rayWidths.push(posD + negD);
+                    rayAs.push({ x: (ox + dx * posD) / scaleX, y: (oy + dy * posD) / scaleY });
+                    rayBs.push({ x: (ox - dx * negD) / scaleX, y: (oy - dy * negD) / scaleY });
                 }
+            }
+
+            if (rayWidths.length < 2) continue;
+
+            // Median of the ray widths for robustness
+            rayWidths.sort(function(a, b) { return a - b; });
+            var medIdx = Math.floor(rayWidths.length / 2);
+            var medWidth = rayWidths[medIdx];
+
+            if (medWidth < bestWidth) {
+                bestWidth = medWidth;
+                bestA = rayAs[medIdx];
+                bestB = rayBs[medIdx];
             }
         }
 
         if (bestWidth === Infinity || bestWidth < 0.5) return null;
 
         return {
-            width: Math.round(bestWidth * 2) / 2,
+            width: Math.round(bestWidth * 4) / 4,
             ax: bestA.x, ay: bestA.y,
             bx: bestB.x, by: bestB.y,
             cx: canvasX, cy: canvasY
         };
     }
 
-    function findEdge(startX, startY, dx, dy, refBright, refAlpha, threshold) {
+    function findEdge(startX, startY, dx, dy, refBright, refAlpha, midBright) {
         var useAlpha = refAlpha > 200;
+        var prevBright = brightness(Math.round(startX), Math.round(startY));
+        var maxGrad = 0;
+        var maxGradStep = -1;
 
         for (var step = 1; step <= MAX_SCAN; step++) {
             var px = Math.round(startX + dx * step);
             var py = Math.round(startY + dy * step);
-            if (px < 0 || py < 0 || px >= natW || py >= natH) return step;
+            if (px < 0 || py < 0 || px >= natW || py >= natH) {
+                return maxGradStep > 0 ? maxGradStep : step;
+            }
 
             if (useAlpha) {
                 var a = alpha(px, py);
-                if (a < 128) return step - 0.5;
+                var prevA = alpha(
+                    Math.round(startX + dx * (step - 1)),
+                    Math.round(startY + dy * (step - 1))
+                );
+                if (a < 128 && prevA >= 128) {
+                    return step - 1 + (prevA - 128) / Math.max(1, prevA - a);
+                }
             }
 
-            var b = brightness(px, py);
-            var diff = Math.abs(b - refBright);
+            var curBright = brightness(px, py);
+            var grad = Math.abs(curBright - prevBright);
 
-            if (diff > threshold) {
-                return step - 0.5;
+            if (grad > maxGrad) {
+                maxGrad = grad;
+                maxGradStep = step;
             }
+
+            // Sub-pixel interpolation at the midpoint brightness crossing
+            var crossingUp = (refBright < midBright) && (prevBright < midBright) && (curBright >= midBright);
+            var crossingDown = (refBright > midBright) && (prevBright > midBright) && (curBright <= midBright);
+
+            if (crossingUp || crossingDown) {
+                var range = Math.abs(curBright - prevBright);
+                if (range < 1) return step - 0.5;
+                var frac = Math.abs(midBright - prevBright) / range;
+                return (step - 1) + frac;
+            }
+
+            prevBright = curBright;
         }
+
+        if (maxGrad > 20 && maxGradStep > 0) return maxGradStep - 0.5;
         return null;
     }
 
