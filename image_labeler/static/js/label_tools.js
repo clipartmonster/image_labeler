@@ -769,7 +769,9 @@ if (_origCollectPromptFn) {
 }
 
 // ---------------------------------------------------------------------------
-// Line-width measurement overlay (visual only — no data saved)
+// Line-width measurement overlay — two-point ruler (visual only, no data saved)
+// Click two points to measure pixel distance. Right-click to undo last.
+// Dual-stroke rendering (dark outline + bright inner) for contrast on any bg.
 // ---------------------------------------------------------------------------
 var _measureState = null;
 
@@ -791,37 +793,91 @@ function initMeasureOverlay(imgEl) {
     container.appendChild(canvas);
     var ctx = canvas.getContext('2d');
 
-    var circles = [];
-    var radius = 12;
+    var measurements = [];
+    var pendingPoint = null;
 
-    function redraw(hx, hy) {
-        ctx.clearRect(0, 0, w, h);
-        for (var i = 0; i < circles.length; i++) {
-            drawCircle(circles[i].x, circles[i].y, circles[i].r, 'rgba(0,25,255,0.45)', '#fff');
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold ' + Math.max(10, circles[i].r * 0.7) + 'px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(Math.round(circles[i].r * 2) + 'px', circles[i].x, circles[i].y);
-        }
-        if (hx !== undefined) {
-            drawCircle(hx, hy, radius, 'rgba(0,25,255,0.25)', 'rgba(255,255,255,0.7)');
-            ctx.fillStyle = 'rgba(255,255,255,0.8)';
-            ctx.font = 'bold ' + Math.max(10, radius * 0.7) + 'px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(Math.round(radius * 2) + 'px', hx, hy);
-        }
+    function dist(ax, ay, bx, by) {
+        return Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
     }
 
-    function drawCircle(x, y, r, fill, stroke) {
+    function drawRulerLine(ax, ay, bx, by) {
         ctx.beginPath();
-        ctx.arc(x, y, r, 0, 2 * Math.PI);
-        ctx.fillStyle = fill;
-        ctx.fill();
-        ctx.strokeStyle = stroke;
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        ctx.strokeStyle = '#00e5ff';
         ctx.lineWidth = 1.5;
         ctx.stroke();
+    }
+
+    function drawEndpoint(x, y) {
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, 2 * Math.PI);
+        ctx.fillStyle = '#00e5ff';
+        ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
+
+    function drawLabel(ax, ay, bx, by, d) {
+        var mx = (ax + bx) / 2;
+        var my = (ay + by) / 2;
+        var text = Math.round(d) + 'px';
+
+        ctx.font = 'bold 12px sans-serif';
+        var tw = ctx.measureText(text).width;
+        var pad = 4;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        var rx = mx - tw / 2 - pad, ry = my - 8 - pad, rw = tw + pad * 2, rh = 16 + pad * 2, rr = 4;
+        ctx.beginPath();
+        ctx.moveTo(rx + rr, ry);
+        ctx.lineTo(rx + rw - rr, ry);
+        ctx.arcTo(rx + rw, ry, rx + rw, ry + rr, rr);
+        ctx.lineTo(rx + rw, ry + rh - rr);
+        ctx.arcTo(rx + rw, ry + rh, rx + rw - rr, ry + rh, rr);
+        ctx.lineTo(rx + rr, ry + rh);
+        ctx.arcTo(rx, ry + rh, rx, ry + rh - rr, rr);
+        ctx.lineTo(rx, ry + rr);
+        ctx.arcTo(rx, ry, rx + rr, ry, rr);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, mx, my);
+    }
+
+    function redraw(mouseX, mouseY) {
+        ctx.clearRect(0, 0, w, h);
+
+        for (var i = 0; i < measurements.length; i++) {
+            var m = measurements[i];
+            drawRulerLine(m.ax, m.ay, m.bx, m.by);
+            drawEndpoint(m.ax, m.ay);
+            drawEndpoint(m.bx, m.by);
+            drawLabel(m.ax, m.ay, m.bx, m.by, m.d);
+        }
+
+        if (pendingPoint) {
+            drawEndpoint(pendingPoint.x, pendingPoint.y);
+            if (mouseX !== undefined) {
+                drawRulerLine(pendingPoint.x, pendingPoint.y, mouseX, mouseY);
+                drawEndpoint(mouseX, mouseY);
+                var d = dist(pendingPoint.x, pendingPoint.y, mouseX, mouseY);
+                drawLabel(pendingPoint.x, pendingPoint.y, mouseX, mouseY, d);
+            }
+        } else if (mouseX !== undefined) {
+            drawEndpoint(mouseX, mouseY);
+        }
     }
 
     function coords(e) {
@@ -833,22 +889,30 @@ function initMeasureOverlay(imgEl) {
         var p = coords(e);
         redraw(p.x, p.y);
     });
+
     canvas.addEventListener('click', function(e) {
         var p = coords(e);
-        circles.push({ x: p.x, y: p.y, r: radius });
-        redraw();
+        if (!pendingPoint) {
+            pendingPoint = { x: p.x, y: p.y };
+        } else {
+            var d = dist(pendingPoint.x, pendingPoint.y, p.x, p.y);
+            measurements.push({ ax: pendingPoint.x, ay: pendingPoint.y, bx: p.x, by: p.y, d: d });
+            pendingPoint = null;
+        }
+        redraw(p.x, p.y);
     });
+
     canvas.addEventListener('contextmenu', function(e) {
         e.preventDefault();
-        if (circles.length) circles.pop();
-        redraw();
-    });
-    canvas.addEventListener('wheel', function(e) {
-        e.preventDefault();
-        radius = Math.max(3, Math.min(80, radius - Math.sign(e.deltaY) * 2));
+        if (pendingPoint) {
+            pendingPoint = null;
+        } else if (measurements.length) {
+            measurements.pop();
+        }
         var p = coords(e);
         redraw(p.x, p.y);
-    }, { passive: false });
+    });
+
     canvas.addEventListener('mouseleave', function() { redraw(); });
 
     _measureState = { canvas: canvas, container: container };

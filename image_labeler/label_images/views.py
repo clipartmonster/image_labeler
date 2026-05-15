@@ -237,7 +237,7 @@ def show_images(request):
             "reference_panels": range(9),
             "color_labels": color_labels,
             "spread_values": spread_values,
-            "labeler_id": "Steve",
+            "labeler_id": request.user.username,
         },
     )
 
@@ -248,7 +248,7 @@ def setup_session(request):
     from .models import BatchAssignment
     from django.utils import timezone
 
-    labeler_id = request.GET.get("labeler_id", "Steve")
+    labeler_id = request.GET.get("labeler_id", request.user.username)
     task_type = request.GET.get("task_type", "asset_type")
     rule_index = request.GET.get("rule_index", 1)
     batch_id = request.GET.get("batch_index", 1)
@@ -428,7 +428,7 @@ def internal(request):
     task_type = request.GET.get("task_type")
     labeler_source = request.GET.get("label_source", None)
     label_type = request.GET.get("label_type")
-    labeler_id = request.GET.get("labeler_id")
+    labeler_id = request.GET.get("labeler_id", request.user.username)
     samples = request.GET.get("samples", 50)
     asset_id = request.GET.get("asset_id", None)
     test_the_labeler = request.GET.get("test_the_labeler", False)
@@ -455,7 +455,7 @@ def mturk_redirect(request):
     task_type = request.GET.get("task_type")
     labeler_source = request.GET.get("label_source", None)
     label_type = request.GET.get("label_type")
-    labeler_id = request.GET.get("labeler_id")
+    labeler_id = request.GET.get("labeler_id", request.user.username)
     samples = request.GET.get("samples", 50)
     asset_id = request.GET.get("asset_id", None)
     sandbox_flag = request.GET.get("sandbox_flag", None)
@@ -695,7 +695,7 @@ def reconcile_labels(request):
     labeler_source = "reconcile_label"
     batch_type = request.GET.get("batch_type")
     task_type = request.GET.get("task_type")
-    labeler_id = request.GET.get("labeler_id")
+    labeler_id = request.GET.get("labeler_id", request.user.username)
     batch_index = request.GET.get("batch_index", None)
     rule_indexes = json.loads(request.GET.get("rule_indexes", None))
     rule_index = int(rule_indexes[0])
@@ -870,7 +870,8 @@ def view_batch_labels(request):
 
     total_assets = len(batch_of_assets)
 
-    labeler_id_options = ["Steve", "Noah"]
+    from django.contrib.auth.models import User
+    labeler_id_options = list(User.objects.filter(is_staff=True).values_list("username", flat=True))
     label_type_filters = ["only_yes", "only_no"]
 
     if len(rule_entry) > 0:
@@ -1166,7 +1167,8 @@ def view_prediction_labels(request):
         prediction_data = prediction_data.iloc[1:3000]
 
     label_types = ["model", "manual"]
-    labeler_id_options = ["Steve", "Noah"]
+    from django.contrib.auth.models import User
+    labeler_id_options = list(User.objects.filter(is_staff=True).values_list("username", flat=True))
     label_type_filters = ["only_yes", "only_no", "mismatch"]
 
     data = {
@@ -1309,7 +1311,8 @@ def view_label_issues(request):
     print(assets_w_label_issues)
 
     label_types = ["model", "manual"]
-    labeler_id_options = ["Steve", "Noah"]
+    from django.contrib.auth.models import User
+    labeler_id_options = list(User.objects.filter(is_staff=True).values_list("username", flat=True))
 
     # data = {'assets':assets_w_label_issues}
 
@@ -1546,7 +1549,7 @@ def correct_mismatch_labels(request):
 
     task_type = request.GET.get("task_type", "color_fill_type")
     rule_index = int(request.GET.get("rule_index", 2))
-    labeler_id = request.GET.get("labeler_id", "Steve")
+    labeler_id = request.GET.get("labeler_id", request.user.username)
 
     # print(task_type)
     # print(rule_index)
@@ -1839,7 +1842,7 @@ def label_search_results(request):
                         "batch_id"
                     )
                     labeler_id = request.GET.get("labeler_id") or request.POST.get(
-                        "labeler_id", "Steve"
+                        "labeler_id", request.user.username
                     )
 
                     # Prepare POST data

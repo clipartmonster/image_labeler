@@ -259,15 +259,15 @@ function lbSwitchTab(tab, btn) {
         <div class="option_container" style = 'display:flex; flex-direction: row; flex-wrap: wrap;'>
 
             <div style = 'margin:5px; width:100%'>
-                <h1 id = 'title' class = 'listing_info label'> Select your labeler id</h1>
+                <h1 id = 'title' class = 'listing_info label'>Labeling as</h1>
                 
                 <select id="labeler_id" class = 'title_font field_label' name="labeler_id">
-
+                    <option value="{{ request.user.username }}" selected>{{ request.user.username }} (me)</option>
                     {% for labeler_id in session_options.labeler_ids %}
+                        {% if labeler_id.display_name != request.user.username %}
                         <option value="{{ labeler_id.display_name }}">{{ labeler_id.display_name }}</option>
+                        {% endif %}
                     {% endfor %}
-                        <!-- <option value="add_a_labeler">add labeler</option> -->
-
                 </select>
             </div>
 

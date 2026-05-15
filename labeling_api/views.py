@@ -1674,7 +1674,13 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
         .distinct()
         .order_by("task_type")
     )
-    labeler_ids = list(labeler_table.objects.values("id", "display_name"))
+    from django.contrib.auth.models import User
+    from django.db.models import F
+    labeler_ids = list(
+        User.objects.filter(is_staff=True)
+        .annotate(display_name=F("username"))
+        .values("id", "display_name")
+    )
     selected_rules = pd.DataFrame(
         labelling_rules.objects.filter(task_type=task_type).values(
             "task_type", "rule_index", "title"
