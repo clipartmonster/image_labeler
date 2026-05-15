@@ -843,7 +843,74 @@ function initMeasureOverlay(imgEl) {
     };
     img2.src = proxyUrl;
 
-    var measurements = [];
+    var GROUP_COLORS = ['#ff3366', '#33aaff', '#44cc66', '#ff9933', '#cc66ff', '#ffcc00'];
+    var measureGroups = [[]];
+    var currentGroup = 0;
+
+    // Floating stats bar + new-group button
+    var statsBar = document.createElement('div');
+    statsBar.style.cssText = 'position:absolute; top:' + imgEl.offsetTop + 'px; left:' + imgEl.offsetLeft + 'px; '
+        + 'z-index:12; display:flex; align-items:center; gap:6px; padding:4px 8px; '
+        + 'background:rgba(0,0,0,0.82); border-radius:0 0 6px 0; font:bold 11px sans-serif; color:#fff; '
+        + 'pointer-events:auto; user-select:none; flex-wrap:wrap; max-width:' + w + 'px;';
+    statsBar.innerHTML = '';
+    container.appendChild(statsBar);
+
+    var addBtn = document.createElement('button');
+    addBtn.textContent = '+';
+    addBtn.title = 'Start a new measurement group to compare a different section';
+    addBtn.style.cssText = 'background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); '
+        + 'color:#fff; font:bold 14px sans-serif; width:22px; height:22px; border-radius:4px; '
+        + 'cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; flex-shrink:0;';
+    addBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        measureGroups.push([]);
+        currentGroup = measureGroups.length - 1;
+        updateStatsBar();
+    });
+
+    function groupStats(group) {
+        if (!group.length) return null;
+        var widths = group.map(function(m) { return m.width; });
+        var mn = Math.min.apply(null, widths);
+        var mx = Math.max.apply(null, widths);
+        var avg = Math.round(widths.reduce(function(a, b) { return a + b; }, 0) / widths.length * 2) / 2;
+        return { min: mn, max: mx, avg: avg, n: widths.length };
+    }
+
+    function updateStatsBar() {
+        var parts = [];
+        for (var gi = 0; gi < measureGroups.length; gi++) {
+            var s = groupStats(measureGroups[gi]);
+            var c = GROUP_COLORS[gi % GROUP_COLORS.length];
+            var label = measureGroups.length > 1 ? 'G' + (gi + 1) : '';
+            var active = gi === currentGroup ? 'border-bottom:2px solid ' + c + ';' : 'opacity:0.6;';
+            if (!s) {
+                parts.push('<span style="color:' + c + '; padding:2px 4px; cursor:pointer; ' + active + '" data-gidx="' + gi + '">'
+                    + label + (label ? ' ' : '') + '(click to measure)</span>');
+            } else {
+                parts.push('<span style="color:' + c + '; padding:2px 4px; cursor:pointer; ' + active + '" data-gidx="' + gi + '">'
+                    + (label ? label + ': ' : '')
+                    + 'Min ' + s.min + ' | Avg ' + s.avg + ' | Max ' + s.max
+                    + '  <span style="opacity:0.5;">(' + s.n + ')</span></span>');
+            }
+        }
+        statsBar.innerHTML = parts.join('<span style="opacity:0.25;">|</span>');
+        statsBar.appendChild(addBtn);
+
+        // Click on a group label to switch to it
+        var spans = statsBar.querySelectorAll('[data-gidx]');
+        for (var i = 0; i < spans.length; i++) {
+            spans[i].addEventListener('click', (function(idx) {
+                return function(e) {
+                    e.stopPropagation();
+                    currentGroup = idx;
+                    updateStatsBar();
+                };
+            })(parseInt(spans[i].getAttribute('data-gidx'))));
+        }
+    }
+    updateStatsBar();
 
     var LOUPE_SIZE = 120;
     var LOUPE_ZOOM = 8;
@@ -1075,7 +1142,8 @@ function initMeasureOverlay(imgEl) {
         return null;
     }
 
-    function drawMeasurement(m) {
+    function drawMeasurement(m, color) {
+        color = color || '#ff3366';
         ctx.beginPath();
         ctx.moveTo(m.ax, m.ay);
         ctx.lineTo(m.bx, m.by);
@@ -1085,14 +1153,14 @@ function initMeasureOverlay(imgEl) {
         ctx.beginPath();
         ctx.moveTo(m.ax, m.ay);
         ctx.lineTo(m.bx, m.by);
-        ctx.strokeStyle = '#ff3366';
+        ctx.strokeStyle = color;
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
         [{ x: m.ax, y: m.ay }, { x: m.bx, y: m.by }].forEach(function(pt) {
             ctx.beginPath();
             ctx.arc(pt.x, pt.y, 3, 0, 2 * Math.PI);
-            ctx.fillStyle = '#ff3366';
+            ctx.fillStyle = color;
             ctx.fill();
             ctx.strokeStyle = '#000';
             ctx.lineWidth = 1;
@@ -1214,33 +1282,36 @@ function initMeasureOverlay(imgEl) {
         ctx.moveTo(lx, lcy); ctx.lineTo(lx + LOUPE_SIZE, lcy);
         ctx.stroke();
 
-        for (var mi = 0; mi < measurements.length; mi++) {
-            var mm = measurements[mi];
-            var lax = lcx + (mm.ax - mx) * LOUPE_ZOOM;
-            var lay = lcy + (mm.ay - my) * LOUPE_ZOOM;
-            var lbx = lcx + (mm.bx - mx) * LOUPE_ZOOM;
-            var lby = lcy + (mm.by - my) * LOUPE_ZOOM;
+        for (var gi = 0; gi < measureGroups.length; gi++) {
+            var gc = GROUP_COLORS[gi % GROUP_COLORS.length];
+            for (var mi = 0; mi < measureGroups[gi].length; mi++) {
+                var mm = measureGroups[gi][mi];
+                var lax = lcx + (mm.ax - mx) * LOUPE_ZOOM;
+                var lay = lcy + (mm.ay - my) * LOUPE_ZOOM;
+                var lbx = lcx + (mm.bx - mx) * LOUPE_ZOOM;
+                var lby = lcy + (mm.by - my) * LOUPE_ZOOM;
 
-            ctx.beginPath();
-            ctx.moveTo(lax, lay); ctx.lineTo(lbx, lby);
-            ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(lax, lay); ctx.lineTo(lbx, lby);
-            ctx.strokeStyle = '#ff3366';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-
-            [{ x: lax, y: lay }, { x: lbx, y: lby }].forEach(function(pt) {
                 ctx.beginPath();
-                ctx.arc(pt.x, pt.y, 3, 0, 2 * Math.PI);
-                ctx.fillStyle = '#ff3366';
-                ctx.fill();
-                ctx.strokeStyle = '#000';
-                ctx.lineWidth = 1;
+                ctx.moveTo(lax, lay); ctx.lineTo(lbx, lby);
+                ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+                ctx.lineWidth = 3;
                 ctx.stroke();
-            });
+                ctx.beginPath();
+                ctx.moveTo(lax, lay); ctx.lineTo(lbx, lby);
+                ctx.strokeStyle = gc;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                [{ x: lax, y: lay }, { x: lbx, y: lby }].forEach(function(pt) {
+                    ctx.beginPath();
+                    ctx.arc(pt.x, pt.y, 3, 0, 2 * Math.PI);
+                    ctx.fillStyle = gc;
+                    ctx.fill();
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                });
+            }
         }
 
         ctx.restore();
@@ -1274,8 +1345,11 @@ function initMeasureOverlay(imgEl) {
             drawCrosshair(mouseX, mouseY);
         }
 
-        for (var i = 0; i < measurements.length; i++) {
-            drawMeasurement(measurements[i]);
+        for (var gi = 0; gi < measureGroups.length; gi++) {
+            var gc = GROUP_COLORS[gi % GROUP_COLORS.length];
+            for (var mi = 0; mi < measureGroups[gi].length; mi++) {
+                drawMeasurement(measureGroups[gi][mi], gc);
+            }
         }
 
         if (mouseX !== undefined) {
@@ -1300,27 +1374,36 @@ function initMeasureOverlay(imgEl) {
         var p = coords(e);
         var m = measureWidthAt(p.x, p.y);
         if (m) {
-            measurements.push(m);
+            measureGroups[currentGroup].push(m);
+            updateStatsBar();
         }
         redraw(p.x, p.y);
     });
 
     canvas.addEventListener('contextmenu', function(e) {
         e.preventDefault();
-        if (measurements.length) measurements.pop();
+        var grp = measureGroups[currentGroup];
+        if (grp.length) {
+            grp.pop();
+        } else if (measureGroups.length > 1) {
+            measureGroups.pop();
+            currentGroup = measureGroups.length - 1;
+        }
+        updateStatsBar();
         var p = coords(e);
         redraw(p.x, p.y);
     });
 
     canvas.addEventListener('mouseleave', function() { redraw(); });
 
-    _measureState = { canvas: canvas, container: container };
+    _measureState = { canvas: canvas, container: container, statsBar: statsBar };
     redraw();
 }
 
 function teardownMeasureOverlay() {
     if (!_measureState) return;
     _measureState.canvas.remove();
+    if (_measureState.statsBar) _measureState.statsBar.remove();
     _measureState = null;
     var btn = document.querySelector('.measure-btn.active');
     if (btn) btn.classList.remove('active');
