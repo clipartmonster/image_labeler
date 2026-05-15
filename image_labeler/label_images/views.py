@@ -2214,7 +2214,7 @@ def admin_bulk_assign(request):
         .select_related("user")
         .values("id", "user_id", "user__username", "task_type", "rule_index",
                 "batch_id", "large_sub_batch", "payment_amount", "deadline",
-                "completed_at")
+                "completed_at", "is_training")
     )
 
     return render(request, "admin_bulk_assign.html", {

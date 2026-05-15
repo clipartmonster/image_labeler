@@ -2,6 +2,7 @@ import logging
 import random
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -85,7 +86,8 @@ def _assign_training_batches(user):
         if not assets_with_links:
             continue
 
-        # Use batch_id=0, large_sub_batch=0 as a sentinel for training batches
+        # Use batch_id=0, large_sub_batch=0 as a sentinel for training batches.
+        # Training batches are paid at the same rate as regular assignments.
         assignment, _ = BatchAssignment.objects.get_or_create(
             user=user,
             task_type=task_type,
@@ -93,7 +95,7 @@ def _assign_training_batches(user):
             batch_id=0,
             large_sub_batch=0,
             defaults={
-                "payment_amount": 0,
+                "payment_amount": settings.LABELER_PAY_PER_BATCH,
                 "deadline": deadline,
                 "is_training": True,
             },

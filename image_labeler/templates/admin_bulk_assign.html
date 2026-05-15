@@ -79,8 +79,14 @@
     <div class="wf-section" style="margin-top:24px;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
             <h2 style="margin:0;">Existing Assignments</h2>
-            <div style="display:flex; gap:8px; align-items:center;">
-                <label class="wf-muted" style="font-size:.8rem;">Filter by labeler:</label>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <label class="wf-muted" style="font-size:.8rem;">Type:</label>
+                <select id="existingTypeFilter" class="wf-select" onchange="renderExisting()" style="width:120px;">
+                    <option value="">All</option>
+                    <option value="work">Work</option>
+                    <option value="training">Training</option>
+                </select>
+                <label class="wf-muted" style="font-size:.8rem;">Labeler:</label>
                 <select id="existingLabelerFilter" class="wf-select" onchange="renderExisting()" style="width:160px;">
                     <option value="">All</option>
                 </select>
@@ -289,8 +295,14 @@ function initExisting() {
 }
 
 function renderExisting() {
-    var filter = document.getElementById('existingLabelerFilter').value;
-    var filtered = _existing.filter(function(e) { return !filter || e.user__username === filter; });
+    var labelerFilter = document.getElementById('existingLabelerFilter').value;
+    var typeFilter = document.getElementById('existingTypeFilter').value;
+    var filtered = _existing.filter(function(e) {
+        if (labelerFilter && e.user__username !== labelerFilter) return false;
+        if (typeFilter === 'training' && !e.is_training) return false;
+        if (typeFilter === 'work' && e.is_training) return false;
+        return true;
+    });
     selectedRemove.clear();
     var container = document.getElementById('existingContainer');
 
@@ -302,13 +314,17 @@ function renderExisting() {
 
     var html = '<table class="wf-table"><thead><tr>' +
         '<th><input type="checkbox" id="selectAllExisting" onchange="toggleAllExisting(this.checked)"></th>' +
-        '<th>Labeler</th><th>Task Type</th><th>Rule</th><th>Batch</th><th>Sub</th><th>Payment</th><th>Deadline</th><th>Status</th>' +
+        '<th>Labeler</th><th>Type</th><th>Task Type</th><th>Rule</th><th>Batch</th><th>Sub</th><th>Payment</th><th>Deadline</th><th>Status</th>' +
         '</tr></thead><tbody>';
     filtered.forEach(function(e) {
         var status = e.completed_at ? '<span class="wf-badge wf-badge-green">Done</span>' : '<span class="wf-badge wf-badge-gray">Active</span>';
+        var typeBadge = e.is_training
+            ? '<span class="wf-badge wf-badge-blue">Training</span>'
+            : '<span class="wf-badge wf-badge-gray">Work</span>';
         var dl = e.deadline ? new Date(e.deadline).toLocaleDateString() : '';
         html += '<tr><td><input type="checkbox" class="ex-cb" value="' + e.id + '" onchange="onExistingCheck()"></td>' +
             '<td>' + (e.user__username || '') + '</td>' +
+            '<td>' + typeBadge + '</td>' +
             '<td>' + e.task_type + '</td>' +
             '<td>' + e.rule_index + '</td>' +
             '<td>' + e.batch_id + '</td>' +

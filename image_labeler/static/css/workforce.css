@@ -79,6 +79,7 @@
 .wf-badge-yellow { background: #e0c060; color: #5a5040; }
 .wf-badge-red    { background: #e06060; color: #fff; }
 .wf-badge-gray   { background: #a9b9b9; color: #596767; }
+.wf-badge-blue   { background: #8ab9d9; color: #2a4a5a; }
 
 /* Stat cards */
 .wf-stats { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
