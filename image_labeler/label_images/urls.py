@@ -53,5 +53,8 @@ urlpatterns = [
 
     # Training completion
     path('complete_training/', views.complete_training, name='complete_training'),
+
+    # Image proxy (CORS bypass for measurement tool)
+    path('image_proxy/', views.image_proxy, name='image_proxy'),
 ]
 

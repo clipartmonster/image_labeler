@@ -771,7 +771,7 @@ if (_origCollectPromptFn) {
 // ---------------------------------------------------------------------------
 // Line-width auto-measure overlay
 // Click ON a line to auto-detect its width. Right-click to undo.
-// Scans outward in multiple angles to find the narrowest cross-section.
+// Loads image through a same-origin proxy to guarantee pixel access.
 // ---------------------------------------------------------------------------
 var _measureState = null;
 
@@ -803,43 +803,86 @@ function initMeasureOverlay(imgEl) {
     var srcCtx = srcCanvas.getContext('2d');
     var srcReady = false;
     var imgData = null;
+    var hasTransparency = false;
 
-    function tryLoadImage(useCors) {
-        var img2 = new Image();
-        if (useCors) img2.crossOrigin = 'anonymous';
-        img2.onload = function() {
-            srcCtx.drawImage(img2, 0, 0, natW, natH);
+    // Load through same-origin proxy to bypass CORS restrictions
+    var proxyUrl = '/label_images/image_proxy/?url=' + encodeURIComponent(imgEl.src);
+    var img2 = new Image();
+    img2.onload = function() {
+        srcCtx.drawImage(img2, 0, 0, natW, natH);
+        try {
+            imgData = srcCtx.getImageData(0, 0, natW, natH);
+            srcReady = true;
+            // Detect if image uses transparency
+            var d = imgData.data;
+            for (var i = 3; i < d.length; i += 16) {
+                if (d[i] < 250) { hasTransparency = true; break; }
+            }
+        } catch(e) {
+            console.warn('Measure overlay: cannot read pixel data', e);
+        }
+    };
+    img2.onerror = function() {
+        console.warn('Measure overlay: proxy image load failed, trying direct');
+        var img3 = new Image();
+        img3.crossOrigin = 'anonymous';
+        img3.onload = function() {
+            srcCtx.drawImage(img3, 0, 0, natW, natH);
             try {
                 imgData = srcCtx.getImageData(0, 0, natW, natH);
                 srcReady = true;
-            } catch(e) {
-                if (useCors) tryLoadImage(false);
+                var d = imgData.data;
+                for (var i = 3; i < d.length; i += 16) {
+                    if (d[i] < 250) { hasTransparency = true; break; }
+                }
+            } catch(e2) {
+                console.warn('Measure overlay: direct load also failed', e2);
             }
         };
-        img2.onerror = function() {
-            if (useCors) tryLoadImage(false);
-        };
-        img2.src = imgEl.src;
-    }
-    tryLoadImage(true);
+        img3.src = imgEl.src;
+    };
+    img2.src = proxyUrl;
 
     var measurements = [];
 
     var LOUPE_SIZE = 120;
     var LOUPE_ZOOM = 8;
     var LOUPE_MARGIN = 12;
-    var MAX_SCAN = 80;
+    var MAX_SCAN = 100;
 
-    function brightness(px, py) {
-        if (px < 0 || py < 0 || px >= natW || py >= natH) return 255;
+    function getPixel(px, py) {
+        if (px < 0 || py < 0 || px >= natW || py >= natH) return { r: 255, g: 255, b: 255, a: 0 };
         var idx = (py * natW + px) * 4;
         var d = imgData.data;
-        return 0.299 * d[idx] + 0.587 * d[idx+1] + 0.114 * d[idx+2];
+        return { r: d[idx], g: d[idx+1], b: d[idx+2], a: d[idx+3] };
+    }
+
+    function brightness(px, py) {
+        var p = getPixel(px, py);
+        return 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
     }
 
     function alpha(px, py) {
-        if (px < 0 || py < 0 || px >= natW || py >= natH) return 0;
-        return imgData.data[(py * natW + px) * 4 + 3];
+        return getPixel(px, py).a;
+    }
+
+    // Bilinear interpolated brightness for sub-pixel accuracy
+    function brightnessAt(fx, fy) {
+        var x0 = Math.floor(fx), y0 = Math.floor(fy);
+        var x1 = x0 + 1, y1 = y0 + 1;
+        var dx = fx - x0, dy = fy - y0;
+        var b00 = brightness(x0, y0), b10 = brightness(x1, y0);
+        var b01 = brightness(x0, y1), b11 = brightness(x1, y1);
+        return b00 * (1 - dx) * (1 - dy) + b10 * dx * (1 - dy) + b01 * (1 - dx) * dy + b11 * dx * dy;
+    }
+
+    function alphaAt(fx, fy) {
+        var x0 = Math.floor(fx), y0 = Math.floor(fy);
+        var x1 = x0 + 1, y1 = y0 + 1;
+        var dx = fx - x0, dy = fy - y0;
+        var a00 = alpha(x0, y0), a10 = alpha(x1, y0);
+        var a01 = alpha(x0, y1), a11 = alpha(x1, y1);
+        return a00 * (1 - dx) * (1 - dy) + a10 * dx * (1 - dy) + a01 * (1 - dx) * dy + a11 * dx * dy;
     }
 
     function measureWidthAt(canvasX, canvasY) {
@@ -847,15 +890,19 @@ function initMeasureOverlay(imgEl) {
 
         var cx = Math.floor(canvasX * scaleX);
         var cy = Math.floor(canvasY * scaleY);
+        if (cx < 0 || cy < 0 || cx >= natW || cy >= natH) return null;
 
         var centerBright = brightness(cx, cy);
         var centerAlpha = alpha(cx, cy);
 
-        // Sample surrounding area to estimate background brightness
+        // Decide detection mode: alpha-based for transparent images, brightness for opaque
+        var useAlphaMode = hasTransparency && centerAlpha > 128;
+
+        // Estimate background from the surrounding area using concentric samples
         var bgSamples = [];
-        for (var sd = 0; sd < 8; sd++) {
-            var sa = sd * Math.PI / 4;
-            for (var sr = 20; sr <= 60; sr += 10) {
+        for (var sd = 0; sd < 16; sd++) {
+            var sa = sd * Math.PI / 8;
+            for (var sr = 15; sr <= 80; sr += 5) {
                 var spx = Math.round(cx + Math.cos(sa) * sr);
                 var spy = Math.round(cy + Math.sin(sa) * sr);
                 if (spx >= 0 && spy >= 0 && spx < natW && spy < natH) {
@@ -864,15 +911,29 @@ function initMeasureOverlay(imgEl) {
             }
         }
         bgSamples.sort(function(a, b) { return b - a; });
-        var bgBright = bgSamples.length > 4 ? bgSamples[Math.floor(bgSamples.length * 0.25)] : 255;
-        var midBright = (centerBright + bgBright) / 2;
+
+        // Use the brightest quartile as background estimate (works for dark lines on light bg)
+        // and the darkest quartile for light lines on dark bg
+        var bgBrightHigh = bgSamples.length > 8 ? bgSamples[Math.floor(bgSamples.length * 0.15)] : 255;
+        var bgBrightLow = bgSamples.length > 8 ? bgSamples[Math.floor(bgSamples.length * 0.85)] : 0;
+
+        // Determine if we have a dark line on light background or vice versa
+        var isDarkLine = centerBright < (bgBrightHigh + bgBrightLow) / 2;
+        var bgBright = isDarkLine ? bgBrightHigh : bgBrightLow;
+        var contrast = Math.abs(centerBright - bgBright);
+
+        // Threshold at half the contrast
+        var threshold = (centerBright + bgBright) / 2;
+
+        // Bail if there's almost no contrast (clicked on background, not a line)
+        if (!useAlphaMode && contrast < 15) return null;
 
         var angles = [];
-        for (var deg = 0; deg < 180; deg += 5) {
+        for (var deg = 0; deg < 180; deg += 3) {
             angles.push(deg * Math.PI / 180);
         }
 
-        var PARALLEL_OFFSETS = [-2, -1, 0, 1, 2];
+        var PARALLEL_OFFSETS = [-3, -2, -1, 0, 1, 2, 3];
 
         var bestWidth = Infinity;
         var bestA = null, bestB = null;
@@ -893,92 +954,128 @@ function initMeasureOverlay(imgEl) {
                 var ox = cx + perpDx * off;
                 var oy = cy + perpDy * off;
 
-                var posD = findEdge(ox, oy, dx, dy, centerBright, centerAlpha, midBright);
-                var negD = findEdge(ox, oy, -dx, -dy, centerBright, centerAlpha, midBright);
+                var posD = findEdge(ox, oy, dx, dy, isDarkLine, threshold, useAlphaMode);
+                var negD = findEdge(ox, oy, -dx, -dy, isDarkLine, threshold, useAlphaMode);
 
                 if (posD !== null && negD !== null) {
-                    rayWidths.push(posD + negD);
-                    rayAs.push({ x: (ox + dx * posD) / scaleX, y: (oy + dy * posD) / scaleY });
-                    rayBs.push({ x: (ox - dx * negD) / scaleX, y: (oy - dy * negD) / scaleY });
+                    var totalW = posD + negD;
+                    if (totalW >= 0.5 && totalW < MAX_SCAN * 1.5) {
+                        rayWidths.push(totalW);
+                        rayAs.push({ x: (ox + dx * posD) / scaleX, y: (oy + dy * posD) / scaleY });
+                        rayBs.push({ x: (ox - dx * negD) / scaleX, y: (oy - dy * negD) / scaleY });
+                    }
                 }
             }
 
-            if (rayWidths.length < 2) continue;
+            if (rayWidths.length < 3) continue;
 
-            // Median of the ray widths for robustness
-            rayWidths.sort(function(a, b) { return a - b; });
-            var medIdx = Math.floor(rayWidths.length / 2);
-            var medWidth = rayWidths[medIdx];
+            // Trim outliers then take median for robustness
+            var sorted = rayWidths.slice().sort(function(a, b) { return a - b; });
+            var q1 = sorted[Math.floor(sorted.length * 0.25)];
+            var q3 = sorted[Math.floor(sorted.length * 0.75)];
+            var iqr = q3 - q1;
+            var lo = q1 - 1.5 * iqr, hi = q3 + 1.5 * iqr;
+
+            var filtered = [];
+            var filteredIdx = [];
+            for (var fi = 0; fi < rayWidths.length; fi++) {
+                if (rayWidths[fi] >= lo && rayWidths[fi] <= hi) {
+                    filtered.push(rayWidths[fi]);
+                    filteredIdx.push(fi);
+                }
+            }
+            if (filtered.length < 2) continue;
+
+            filtered.sort(function(a, b) { return a - b; });
+            var medIdx = Math.floor(filtered.length / 2);
+            var medWidth = filtered[medIdx];
+
+            // Find the original index for the median value
+            var origIdx = filteredIdx[medIdx];
 
             if (medWidth < bestWidth) {
                 bestWidth = medWidth;
-                bestA = rayAs[medIdx];
-                bestB = rayBs[medIdx];
+                bestA = rayAs[origIdx];
+                bestB = rayBs[origIdx];
             }
         }
 
         if (bestWidth === Infinity || bestWidth < 0.5) return null;
 
         return {
-            width: Math.round(bestWidth * 4) / 4,
+            width: Math.round(bestWidth * 2) / 2,
             ax: bestA.x, ay: bestA.y,
             bx: bestB.x, by: bestB.y,
             cx: canvasX, cy: canvasY
         };
     }
 
-    function findEdge(startX, startY, dx, dy, refBright, refAlpha, midBright) {
-        var useAlpha = refAlpha > 200;
-        var prevBright = brightness(Math.round(startX), Math.round(startY));
+    function findEdge(startX, startY, dx, dy, isDarkLine, threshold, useAlphaMode) {
+        var prevVal, curVal;
+
+        if (useAlphaMode) {
+            prevVal = alphaAt(startX, startY);
+            for (var step = 0.5; step <= MAX_SCAN; step += 0.5) {
+                var fx = startX + dx * step;
+                var fy = startY + dy * step;
+                if (fx < 0 || fy < 0 || fx >= natW - 1 || fy >= natH - 1) {
+                    return step;
+                }
+                curVal = alphaAt(fx, fy);
+                if (prevVal >= 128 && curVal < 128) {
+                    var range = Math.abs(prevVal - curVal);
+                    if (range < 1) return step - 0.25;
+                    return (step - 0.5) + (prevVal - 128) / range * 0.5;
+                }
+                prevVal = curVal;
+            }
+            return null;
+        }
+
+        // Brightness-based edge detection with sub-pixel stepping
+        prevVal = brightnessAt(startX, startY);
         var maxGrad = 0;
         var maxGradStep = -1;
 
-        for (var step = 1; step <= MAX_SCAN; step++) {
-            var px = Math.round(startX + dx * step);
-            var py = Math.round(startY + dy * step);
-            if (px < 0 || py < 0 || px >= natW || py >= natH) {
-                return maxGradStep > 0 ? maxGradStep : step;
+        for (var step = 0.5; step <= MAX_SCAN; step += 0.5) {
+            var fx = startX + dx * step;
+            var fy = startY + dy * step;
+            if (fx < 0 || fy < 0 || fx >= natW - 1 || fy >= natH - 1) {
+                return maxGradStep > 0 ? maxGradStep : null;
             }
 
-            if (useAlpha) {
-                var a = alpha(px, py);
-                var prevA = alpha(
-                    Math.round(startX + dx * (step - 1)),
-                    Math.round(startY + dy * (step - 1))
-                );
-                if (a < 128 && prevA >= 128) {
-                    return step - 1 + (prevA - 128) / Math.max(1, prevA - a);
-                }
-            }
-
-            var curBright = brightness(px, py);
-            var grad = Math.abs(curBright - prevBright);
+            curVal = brightnessAt(fx, fy);
+            var grad = Math.abs(curVal - prevVal);
 
             if (grad > maxGrad) {
                 maxGrad = grad;
                 maxGradStep = step;
             }
 
-            // Sub-pixel interpolation at the midpoint brightness crossing
-            var crossingUp = (refBright < midBright) && (prevBright < midBright) && (curBright >= midBright);
-            var crossingDown = (refBright > midBright) && (prevBright > midBright) && (curBright <= midBright);
-
-            if (crossingUp || crossingDown) {
-                var range = Math.abs(curBright - prevBright);
-                if (range < 1) return step - 0.5;
-                var frac = Math.abs(midBright - prevBright) / range;
-                return (step - 1) + frac;
+            // Threshold crossing: interpolate exact sub-pixel position
+            var crossed = false;
+            if (isDarkLine) {
+                crossed = prevVal < threshold && curVal >= threshold;
+            } else {
+                crossed = prevVal > threshold && curVal <= threshold;
             }
 
-            prevBright = curBright;
+            if (crossed) {
+                var range = Math.abs(curVal - prevVal);
+                if (range < 1) return step - 0.25;
+                var frac = Math.abs(threshold - prevVal) / range;
+                return (step - 0.5) + frac * 0.5;
+            }
+
+            prevVal = curVal;
         }
 
-        if (maxGrad > 20 && maxGradStep > 0) return maxGradStep - 0.5;
+        // Fallback: use the point of maximum gradient if significant enough
+        if (maxGrad > 10 && maxGradStep > 0) return maxGradStep;
         return null;
     }
 
     function drawMeasurement(m) {
-        // Line through the measurement
         ctx.beginPath();
         ctx.moveTo(m.ax, m.ay);
         ctx.lineTo(m.bx, m.by);
@@ -992,7 +1089,6 @@ function initMeasureOverlay(imgEl) {
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // Endpoints
         [{ x: m.ax, y: m.ay }, { x: m.bx, y: m.by }].forEach(function(pt) {
             ctx.beginPath();
             ctx.arc(pt.x, pt.y, 3, 0, 2 * Math.PI);
@@ -1003,13 +1099,11 @@ function initMeasureOverlay(imgEl) {
             ctx.stroke();
         });
 
-        // Click point
         ctx.beginPath();
         ctx.arc(m.cx, m.cy, 2, 0, 2 * Math.PI);
         ctx.fillStyle = '#fff';
         ctx.fill();
 
-        // Label offset from the midpoint
         var mx = (m.ax + m.bx) / 2;
         var my = (m.ay + m.by) / 2;
         var text = m.width + 'px';
@@ -1120,7 +1214,6 @@ function initMeasureOverlay(imgEl) {
         ctx.moveTo(lx, lcy); ctx.lineTo(lx + LOUPE_SIZE, lcy);
         ctx.stroke();
 
-        // Draw measurement lines inside the loupe
         for (var mi = 0; mi < measurements.length; mi++) {
             var mm = measurements[mi];
             var lax = lcx + (mm.ax - mx) * LOUPE_ZOOM;

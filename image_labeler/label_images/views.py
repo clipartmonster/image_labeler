@@ -2583,3 +2583,22 @@ def complete_training(request):
     )
 
     return JsonResponse({"ok": True})
+
+
+@login_required
+def image_proxy(request):
+    """Proxy an image URL so the browser can read its pixels (bypasses CORS)."""
+    url = request.GET.get("url", "")
+    if not url:
+        return HttpResponse("Missing url param", status=400)
+
+    try:
+        resp = requests.get(url, timeout=10, stream=True)
+        resp.raise_for_status()
+    except Exception:
+        return HttpResponse("Failed to fetch image", status=502)
+
+    content_type = resp.headers.get("Content-Type", "image/png")
+    response = HttpResponse(resp.content, content_type=content_type)
+    response["Cache-Control"] = "public, max-age=3600"
+    return response
