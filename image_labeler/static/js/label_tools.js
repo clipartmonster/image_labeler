@@ -779,40 +779,38 @@ function initMeasureOverlay(imgEl) {
     var container = imgEl.parentElement;
     container.style.position = 'relative';
 
+    var w = imgEl.offsetWidth;
+    var h = imgEl.offsetHeight;
+
     var canvas = document.createElement('canvas');
-    canvas.width = imgEl.naturalWidth || imgEl.width;
-    canvas.height = imgEl.naturalHeight || imgEl.height;
+    canvas.width = w;
+    canvas.height = h;
     canvas.style.cssText = 'position:absolute; top:' + imgEl.offsetTop + 'px; left:' + imgEl.offsetLeft + 'px; '
-        + 'width:' + imgEl.offsetWidth + 'px; height:' + imgEl.offsetHeight + 'px; z-index:10; cursor:crosshair;';
+        + 'width:' + w + 'px; height:' + h + 'px; z-index:10; cursor:crosshair;';
 
     container.appendChild(canvas);
-
     var ctx = canvas.getContext('2d');
-    ctx.drawImage(imgEl, 0, 0, canvas.width, canvas.height);
-    var baseData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
     var circles = [];
     var radius = 12;
-    var scaleX = canvas.width / imgEl.offsetWidth;
-    var scaleY = canvas.height / imgEl.offsetHeight;
 
     function redraw(hx, hy) {
-        ctx.putImageData(baseData, 0, 0);
+        ctx.clearRect(0, 0, w, h);
         for (var i = 0; i < circles.length; i++) {
             drawCircle(circles[i].x, circles[i].y, circles[i].r, 'rgba(0,25,255,0.45)', '#fff');
             ctx.fillStyle = '#fff';
-            ctx.font = 'bold ' + Math.max(10, circles[i].r * 0.8) + 'px sans-serif';
+            ctx.font = 'bold ' + Math.max(10, circles[i].r * 0.7) + 'px sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(Math.round(circles[i].r * 2), circles[i].x, circles[i].y);
+            ctx.fillText(Math.round(circles[i].r * 2) + 'px', circles[i].x, circles[i].y);
         }
         if (hx !== undefined) {
-            drawCircle(hx, hy, radius, 'rgba(0,25,255,0.25)', 'rgba(255,255,255,0.6)');
-            ctx.fillStyle = 'rgba(255,255,255,0.7)';
-            ctx.font = 'bold ' + Math.max(10, radius * 0.8) + 'px sans-serif';
+            drawCircle(hx, hy, radius, 'rgba(0,25,255,0.25)', 'rgba(255,255,255,0.7)');
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.font = 'bold ' + Math.max(10, radius * 0.7) + 'px sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(Math.round(radius * 2), hx, hy);
+            ctx.fillText(Math.round(radius * 2) + 'px', hx, hy);
         }
     }
 
@@ -826,33 +824,32 @@ function initMeasureOverlay(imgEl) {
         ctx.stroke();
     }
 
-    function onMove(e) {
+    function coords(e) {
         var rect = canvas.getBoundingClientRect();
-        redraw((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
     }
-    function onClick(e) {
-        var rect = canvas.getBoundingClientRect();
-        circles.push({ x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY, r: radius });
+
+    canvas.addEventListener('mousemove', function(e) {
+        var p = coords(e);
+        redraw(p.x, p.y);
+    });
+    canvas.addEventListener('click', function(e) {
+        var p = coords(e);
+        circles.push({ x: p.x, y: p.y, r: radius });
         redraw();
-    }
-    function onContext(e) {
+    });
+    canvas.addEventListener('contextmenu', function(e) {
         e.preventDefault();
         if (circles.length) circles.pop();
         redraw();
-    }
-    function onWheel(e) {
+    });
+    canvas.addEventListener('wheel', function(e) {
         e.preventDefault();
         radius = Math.max(3, Math.min(80, radius - Math.sign(e.deltaY) * 2));
-        var rect = canvas.getBoundingClientRect();
-        redraw((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
-    }
-    function onLeave() { redraw(); }
-
-    canvas.addEventListener('mousemove', onMove);
-    canvas.addEventListener('click', onClick);
-    canvas.addEventListener('contextmenu', onContext);
-    canvas.addEventListener('wheel', onWheel, { passive: false });
-    canvas.addEventListener('mouseleave', onLeave);
+        var p = coords(e);
+        redraw(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('mouseleave', function() { redraw(); });
 
     _measureState = { canvas: canvas, container: container };
     redraw();

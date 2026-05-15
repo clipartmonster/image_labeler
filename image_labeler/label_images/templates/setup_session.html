@@ -131,6 +131,23 @@
 .lb-deadline-late { color: #c03030; font-weight: 700; }
 .lb-deadline-urg { color: #a08020; font-weight: 600; }
 
+/* Tabs */
+.lb-tabs {
+    display: flex; gap: 0; margin-bottom: 20px;
+    border-bottom: 2px solid #c4cece;
+}
+.lb-tab {
+    padding: 9px 24px; font-size: 13px; font-weight: 600;
+    color: #6a7a7a; background: none; border: none;
+    cursor: pointer; border-bottom: 3px solid transparent;
+    margin-bottom: -2px; transition: color .12s, border-color .12s;
+    font-family: Roboto, sans-serif;
+}
+.lb-tab:hover { color: #3a5a5a; }
+.lb-tab.active { color: #2a4a4a; border-bottom-color: #3d5a5a; }
+.lb-tab-panel { display: none; }
+.lb-tab-panel.active { display: block; }
+
 /* Empty state */
 .lb-empty { text-align: center; padding: 40px 20px; color: #8a9a9a; font-size: 14px; }
 </style>
@@ -145,36 +162,14 @@
         </div>
     </div>
 
-    {% if not assignments %}
-        <p class="lb-empty">No batches assigned yet.</p>
-    {% endif %}
-
-    {% if training_groups %}
-    <h2 class="lb-section-hd">Training</h2>
-    {% for task_type, items in training_groups %}
-    <div class="lb-group">
-        <div class="lb-group-hd"><h3>{{ task_type }}</h3></div>
-        {% for a in items %}
-        <div class="lb-row">
-            <span class="lb-feat">{{ a.feature_name|default:"—" }}</span>
-            <span class="lb-imgs">{{ a.total }} imgs</span>
-            {% if a.training_done %}
-                <span class="lb-status lb-done">Done</span>
-                <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
-                   class="lb-btn lb-btn-redo">Redo</a>
-            {% else %}
-                <span class="lb-status lb-todo">Todo</span>
-                <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
-                   class="lb-btn lb-btn-start">Start</a>
-            {% endif %}
-        </div>
-        {% endfor %}
+    <div class="lb-tabs">
+        <button class="lb-tab active" onclick="lbSwitchTab('work', this)">Work</button>
+        <button class="lb-tab" onclick="lbSwitchTab('training', this)">Training</button>
     </div>
-    {% endfor %}
-    {% endif %}
 
+    <!-- Work tab (default) -->
+    <div id="lb-panel-work" class="lb-tab-panel active">
     {% if work_groups %}
-    <h2 class="lb-section-hd">Work Assignments</h2>
     {% for task_type, items in work_groups %}
     <div class="lb-group">
         <div class="lb-group-hd"><h3>{{ task_type }}</h3></div>
@@ -197,9 +192,50 @@
         {% endfor %}
     </div>
     {% endfor %}
+    {% else %}
+        <p class="lb-empty">No work batches assigned yet.</p>
     {% endif %}
+    </div>
+
+    <!-- Training tab -->
+    <div id="lb-panel-training" class="lb-tab-panel">
+    {% if training_groups %}
+    {% for task_type, items in training_groups %}
+    <div class="lb-group">
+        <div class="lb-group-hd"><h3>{{ task_type }}</h3></div>
+        {% for a in items %}
+        <div class="lb-row">
+            <span class="lb-feat">{{ a.feature_name|default:"—" }}</span>
+            <span class="lb-imgs">{{ a.total }} imgs</span>
+            {% if a.training_done %}
+                <span class="lb-status lb-done">Done</span>
+                <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
+                   class="lb-btn lb-btn-redo">Redo</a>
+            {% else %}
+                <span class="lb-status lb-todo">Todo</span>
+                <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
+                   class="lb-btn lb-btn-start">Start</a>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+    {% else %}
+        <p class="lb-empty">No training batches assigned.</p>
+    {% endif %}
+    </div>
+
 </div>
 </div>
+
+<script>
+function lbSwitchTab(tab, btn) {
+    document.querySelectorAll('.lb-tab-panel').forEach(function(p) { p.classList.remove('active'); });
+    document.querySelectorAll('.lb-tab').forEach(function(t) { t.classList.remove('active'); });
+    document.getElementById('lb-panel-' + tab).classList.add('active');
+    btn.classList.add('active');
+}
+</script>
 
 {% else %}
 <!-- ===== ADMIN VIEW ===== -->
