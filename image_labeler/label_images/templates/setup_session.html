@@ -133,18 +133,18 @@
 
 /* Tabs */
 .lb-tabs {
-    display: flex; gap: 0; margin-bottom: 20px;
-    border-bottom: 2px solid #c4cece;
+    display: flex; gap: 4px; margin-bottom: 20px;
+    background: #c4cece; border-radius: 8px; padding: 4px;
 }
 .lb-tab {
-    padding: 9px 24px; font-size: 13px; font-weight: 600;
-    color: #6a7a7a; background: none; border: none;
-    cursor: pointer; border-bottom: 3px solid transparent;
-    margin-bottom: -2px; transition: color .12s, border-color .12s;
-    font-family: Roboto, sans-serif;
+    flex: 1; padding: 9px 24px; font-size: 13px; font-weight: 600;
+    color: #5a6a6a; background: none; border: none;
+    cursor: pointer; border-radius: 6px;
+    transition: background .15s, color .15s;
+    font-family: Roboto, sans-serif; text-align: center;
 }
-.lb-tab:hover { color: #3a5a5a; }
-.lb-tab.active { color: #2a4a4a; border-bottom-color: #3d5a5a; }
+.lb-tab:hover { color: #3a4a4a; background: rgba(255,255,255,0.35); }
+.lb-tab.active { color: #2a4a4a; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 .lb-tab-panel { display: none; }
 .lb-tab-panel.active { display: block; }
 
