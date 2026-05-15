@@ -803,18 +803,25 @@ function initMeasureOverlay(imgEl) {
     var srcCtx = srcCanvas.getContext('2d');
     var srcReady = false;
     var imgData = null;
-    try {
-        var tempImg = new Image();
-        tempImg.crossOrigin = 'anonymous';
-        tempImg.onload = function() {
-            srcCtx.drawImage(tempImg, 0, 0, natW, natH);
+
+    function tryLoadImage(useCors) {
+        var img2 = new Image();
+        if (useCors) img2.crossOrigin = 'anonymous';
+        img2.onload = function() {
+            srcCtx.drawImage(img2, 0, 0, natW, natH);
             try {
                 imgData = srcCtx.getImageData(0, 0, natW, natH);
                 srcReady = true;
-            } catch(e) {}
+            } catch(e) {
+                if (useCors) tryLoadImage(false);
+            }
         };
-        tempImg.src = imgEl.src;
-    } catch(e) {}
+        img2.onerror = function() {
+            if (useCors) tryLoadImage(false);
+        };
+        img2.src = imgEl.src;
+    }
+    tryLoadImage(true);
 
     var measurements = [];
 
@@ -844,14 +851,29 @@ function initMeasureOverlay(imgEl) {
         var centerBright = brightness(cx, cy);
         var centerAlpha = alpha(cx, cy);
 
-        // Scan 18 angles (every 10 degrees from 0-170)
+        // Sample the surrounding area to find the background brightness
+        var bgSamples = [];
+        for (var sd = 0; sd < 8; sd++) {
+            var sa = sd * Math.PI / 4;
+            for (var sr = 20; sr <= 60; sr += 10) {
+                var spx = Math.round(cx + Math.cos(sa) * sr);
+                var spy = Math.round(cy + Math.sin(sa) * sr);
+                if (spx >= 0 && spy >= 0 && spx < natW && spy < natH) {
+                    bgSamples.push(brightness(spx, spy));
+                }
+            }
+        }
+        bgSamples.sort(function(a, b) { return b - a; });
+        var bgBright = bgSamples.length > 4 ? bgSamples[Math.floor(bgSamples.length * 0.25)] : 255;
+        var contrast = Math.abs(bgBright - centerBright);
+        var threshold = Math.max(25, contrast * 0.4);
+
         var angles = [];
-        for (var deg = 0; deg < 180; deg += 10) {
+        for (var deg = 0; deg < 180; deg += 5) {
             angles.push(deg * Math.PI / 180);
         }
 
         var bestWidth = Infinity;
-        var bestAngle = 0;
         var bestA = null, bestB = null;
 
         for (var ai = 0; ai < angles.length; ai++) {
@@ -859,31 +881,30 @@ function initMeasureOverlay(imgEl) {
             var dx = Math.cos(ang);
             var dy = Math.sin(ang);
 
-            var posD = findEdge(cx, cy, dx, dy, centerBright, centerAlpha);
-            var negD = findEdge(cx, cy, -dx, -dy, centerBright, centerAlpha);
+            var posD = findEdge(cx, cy, dx, dy, centerBright, centerAlpha, threshold);
+            var negD = findEdge(cx, cy, -dx, -dy, centerBright, centerAlpha, threshold);
 
             if (posD !== null && negD !== null) {
                 var total = posD + negD;
                 if (total < bestWidth) {
                     bestWidth = total;
-                    bestAngle = ang;
                     bestA = { x: (cx + dx * posD) / scaleX, y: (cy + dy * posD) / scaleY };
                     bestB = { x: (cx - dx * negD) / scaleX, y: (cy - dy * negD) / scaleY };
                 }
             }
         }
 
-        if (bestWidth === Infinity || bestWidth < 1) return null;
+        if (bestWidth === Infinity || bestWidth < 0.5) return null;
 
         return {
-            width: Math.round(bestWidth),
+            width: Math.round(bestWidth * 2) / 2,
             ax: bestA.x, ay: bestA.y,
             bx: bestB.x, by: bestB.y,
             cx: canvasX, cy: canvasY
         };
     }
 
-    function findEdge(startX, startY, dx, dy, refBright, refAlpha) {
+    function findEdge(startX, startY, dx, dy, refBright, refAlpha, threshold) {
         var useAlpha = refAlpha > 200;
 
         for (var step = 1; step <= MAX_SCAN; step++) {
@@ -899,7 +920,7 @@ function initMeasureOverlay(imgEl) {
             var b = brightness(px, py);
             var diff = Math.abs(b - refBright);
 
-            if (diff > 60) {
+            if (diff > threshold) {
                 return step - 0.5;
             }
         }
@@ -1048,6 +1069,36 @@ function initMeasureOverlay(imgEl) {
         ctx.moveTo(lcx, ly); ctx.lineTo(lcx, ly + LOUPE_SIZE);
         ctx.moveTo(lx, lcy); ctx.lineTo(lx + LOUPE_SIZE, lcy);
         ctx.stroke();
+
+        // Draw measurement lines inside the loupe
+        for (var mi = 0; mi < measurements.length; mi++) {
+            var mm = measurements[mi];
+            var lax = lcx + (mm.ax - mx) * LOUPE_ZOOM;
+            var lay = lcy + (mm.ay - my) * LOUPE_ZOOM;
+            var lbx = lcx + (mm.bx - mx) * LOUPE_ZOOM;
+            var lby = lcy + (mm.by - my) * LOUPE_ZOOM;
+
+            ctx.beginPath();
+            ctx.moveTo(lax, lay); ctx.lineTo(lbx, lby);
+            ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(lax, lay); ctx.lineTo(lbx, lby);
+            ctx.strokeStyle = '#ff3366';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            [{ x: lax, y: lay }, { x: lbx, y: lby }].forEach(function(pt) {
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 3, 0, 2 * Math.PI);
+                ctx.fillStyle = '#ff3366';
+                ctx.fill();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+        }
 
         ctx.restore();
 
