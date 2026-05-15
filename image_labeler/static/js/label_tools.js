@@ -775,8 +775,12 @@ if (_origCollectPromptFn) {
 // ---------------------------------------------------------------------------
 var _measureState = null;
 
-function initMeasureOverlay(imgEl) {
+function initMeasureOverlay(imgEl, options) {
     if (_measureState) teardownMeasureOverlay();
+
+    options = options || {};
+    var showAddButton = options.showAddButton !== false;
+    var gridSections = options.gridSections || 0;
 
     var container = imgEl.parentElement;
     container.style.position = 'relative';
@@ -896,7 +900,7 @@ function initMeasureOverlay(imgEl) {
             }
         }
         statsBar.innerHTML = parts.join('<span style="opacity:0.25;">|</span>');
-        statsBar.appendChild(addBtn);
+        if (showAddButton) statsBar.appendChild(addBtn);
 
         // Click on a group label to switch to it
         var spans = statsBar.querySelectorAll('[data-gidx]');
@@ -1338,8 +1342,49 @@ function initMeasureOverlay(imgEl) {
         ctx.fillText(LOUPE_ZOOM + 'x', lx + LOUPE_SIZE - 4, ly + LOUPE_SIZE - 3);
     }
 
+    function drawSamplingGrid() {
+        if (!gridSections) return;
+        var cw = w / gridSections;
+        var ch = h / gridSections;
+
+        // Highlight cells containing at least one measurement.
+        var visited = {};
+        for (var gi = 0; gi < measureGroups.length; gi++) {
+            for (var mi = 0; mi < measureGroups[gi].length; mi++) {
+                var mm = measureGroups[gi][mi];
+                var col = Math.min(gridSections - 1, Math.max(0, Math.floor(mm.cx / cw)));
+                var row = Math.min(gridSections - 1, Math.max(0, Math.floor(mm.cy / ch)));
+                visited[row + ',' + col] = true;
+            }
+        }
+        for (var r = 0; r < gridSections; r++) {
+            for (var c = 0; c < gridSections; c++) {
+                if (visited[r + ',' + c]) {
+                    ctx.fillStyle = 'rgba(0, 220, 70, 0.22)';
+                    ctx.fillRect(c * cw, r * ch, cw, ch);
+                }
+            }
+        }
+
+        // Grid lines on top of the fill.
+        ctx.strokeStyle = 'rgba(255, 60, 60, 0.85)';
+        ctx.lineWidth = 1;
+        for (var i = 1; i < gridSections; i++) {
+            ctx.beginPath();
+            ctx.moveTo(i * cw, 0);
+            ctx.lineTo(i * cw, h);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, i * ch);
+            ctx.lineTo(w, i * ch);
+            ctx.stroke();
+        }
+    }
+
     function redraw(mouseX, mouseY) {
         ctx.clearRect(0, 0, w, h);
+
+        drawSamplingGrid();
 
         if (mouseX !== undefined) {
             drawCrosshair(mouseX, mouseY);

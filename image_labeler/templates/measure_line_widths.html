@@ -92,8 +92,8 @@
 
         <div class="mlw-instructions">
             <strong>How to use:</strong> Click on any line to auto-measure its width.
-            Use <kbd>+</kbd> to start a new measurement group and compare different sections.
-            Right-click to undo the last measurement. Click a group label to switch groups.
+            Try to take at least one measurement in each of the 9 grid sections.
+            Right-click to undo the last measurement.
         </div>
 
         <div class="mlw-actions">
@@ -134,10 +134,11 @@
         document.getElementById('mlwCounter').textContent = (idx + 1) + ' / ' + total;
 
         var img = card.querySelector('.mlw-img');
+        var overlayOpts = { showAddButton: false, gridSections: 3 };
         if (img.complete && img.naturalWidth) {
-            initMeasureOverlay(img);
+            initMeasureOverlay(img, overlayOpts);
         } else {
-            img.onload = function() { initMeasureOverlay(img); };
+            img.onload = function() { initMeasureOverlay(img, overlayOpts); };
         }
     }
 
