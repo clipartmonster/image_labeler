@@ -769,9 +769,9 @@ if (_origCollectPromptFn) {
 }
 
 // ---------------------------------------------------------------------------
-// Line-width measurement overlay — two-point ruler with zoom loupe
+// Line-width measurement overlay — two-point ruler with offset zoom loupe
 // Click two points to measure pixel distance. Right-click to undo.
-// Magnifying loupe follows cursor for pixel-level precision.
+// Hold Shift to lock axis (H or V) for perpendicular measurements.
 // ---------------------------------------------------------------------------
 var _measureState = null;
 
@@ -792,12 +792,11 @@ function initMeasureOverlay(imgEl) {
     canvas.width = w;
     canvas.height = h;
     canvas.style.cssText = 'position:absolute; top:' + imgEl.offsetTop + 'px; left:' + imgEl.offsetLeft + 'px; '
-        + 'width:' + w + 'px; height:' + h + 'px; z-index:10; cursor:none;';
+        + 'width:' + w + 'px; height:' + h + 'px; z-index:10; cursor:crosshair;';
 
     container.appendChild(canvas);
     var ctx = canvas.getContext('2d');
 
-    // Offscreen canvas to sample the image for the zoom loupe
     var srcCanvas = document.createElement('canvas');
     srcCanvas.width = natW;
     srcCanvas.height = natH;
@@ -811,29 +810,40 @@ function initMeasureOverlay(imgEl) {
             srcReady = true;
         };
         tempImg.src = imgEl.src;
-    } catch(e) { /* CORS — loupe will just show crosshair without zoom */ }
+    } catch(e) {}
 
     var measurements = [];
     var pendingPoint = null;
 
-    var LOUPE_R = 50;
-    var LOUPE_ZOOM = 6;
+    var LOUPE_SIZE = 110;
+    var LOUPE_ZOOM = 8;
+    var LOUPE_MARGIN = 12;
+    var lockedAxis = null;
 
     function dist(ax, ay, bx, by) {
         return Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
     }
 
+    function drawCrosshair(mx, my) {
+        ctx.save();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = 'rgba(0,229,255,0.5)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(mx, 0); ctx.lineTo(mx, h);
+        ctx.moveTo(0, my); ctx.lineTo(w, my);
+        ctx.stroke();
+        ctx.restore();
+    }
+
     function drawRulerLine(ax, ay, bx, by) {
         ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(bx, by);
+        ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
         ctx.strokeStyle = 'rgba(0,0,0,0.8)';
         ctx.lineWidth = 3;
         ctx.stroke();
-
         ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(bx, by);
+        ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
         ctx.strokeStyle = '#00e5ff';
         ctx.lineWidth = 1.5;
         ctx.stroke();
@@ -849,20 +859,12 @@ function initMeasureOverlay(imgEl) {
         ctx.stroke();
     }
 
-    function drawOffsetLabel(bx, by, d) {
-        var text = Math.round(d) + 'px';
+    function drawPill(text, lx, ly) {
         ctx.font = 'bold 12px sans-serif';
         var tw = ctx.measureText(text).width;
-        var pad = 4;
-        var offset = 14;
-
-        var lx = bx + offset;
-        var ly = by - offset;
-        if (lx + tw + pad * 2 > w) lx = bx - offset - tw - pad * 2;
-        if (ly - 8 - pad < 0) ly = by + offset + 16;
-
+        var pad = 5;
         var rx = lx - pad, ry = ly - 8 - pad, rw = tw + pad * 2, rh = 16 + pad * 2, rr = 4;
-        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
         ctx.beginPath();
         ctx.moveTo(rx + rr, ry);
         ctx.lineTo(rx + rw - rr, ry);
@@ -875,78 +877,128 @@ function initMeasureOverlay(imgEl) {
         ctx.arcTo(rx, ry, rx + rr, ry, rr);
         ctx.closePath();
         ctx.fill();
-
         ctx.fillStyle = '#fff';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillText(text, lx, ly);
     }
 
+    function drawOffsetLabel(bx, by, d) {
+        var text = Math.round(d) + 'px';
+        ctx.font = 'bold 12px sans-serif';
+        var tw = ctx.measureText(text).width;
+        var offset = 16;
+        var lx = bx + offset;
+        var ly = by - offset;
+        if (lx + tw + 12 > w) lx = bx - offset - tw - 10;
+        if (ly - 16 < 0) ly = by + offset + 16;
+        drawPill(text, lx, ly);
+    }
+
     function drawLoupe(mx, my) {
-        if (!srcReady) {
-            // Fallback crosshair when image not available
-            ctx.beginPath();
-            ctx.moveTo(mx - 8, my); ctx.lineTo(mx + 8, my);
-            ctx.moveTo(mx, my - 8); ctx.lineTo(mx, my + 8);
-            ctx.strokeStyle = '#00e5ff';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-            return;
+        if (!srcReady) return;
+
+        // Position loupe in a corner away from the cursor
+        var lx, ly;
+        if (mx < w / 2) {
+            lx = w - LOUPE_SIZE - LOUPE_MARGIN;
+        } else {
+            lx = LOUPE_MARGIN;
         }
+        if (my < h / 2) {
+            ly = h - LOUPE_SIZE - LOUPE_MARGIN;
+        } else {
+            ly = LOUPE_MARGIN;
+        }
+
+        var cx = lx + LOUPE_SIZE / 2;
+        var cy = ly + LOUPE_SIZE / 2;
+        var halfSrc = (LOUPE_SIZE / 2 / LOUPE_ZOOM);
 
         ctx.save();
+
+        // Clip to rounded rect
+        var rr = 6;
         ctx.beginPath();
-        ctx.arc(mx, my, LOUPE_R, 0, 2 * Math.PI);
+        ctx.moveTo(lx + rr, ly);
+        ctx.lineTo(lx + LOUPE_SIZE - rr, ly);
+        ctx.arcTo(lx + LOUPE_SIZE, ly, lx + LOUPE_SIZE, ly + rr, rr);
+        ctx.lineTo(lx + LOUPE_SIZE, ly + LOUPE_SIZE - rr);
+        ctx.arcTo(lx + LOUPE_SIZE, ly + LOUPE_SIZE, lx + LOUPE_SIZE - rr, ly + LOUPE_SIZE, rr);
+        ctx.lineTo(lx + rr, ly + LOUPE_SIZE);
+        ctx.arcTo(lx, ly + LOUPE_SIZE, lx, ly + LOUPE_SIZE - rr, rr);
+        ctx.lineTo(lx, ly + rr);
+        ctx.arcTo(lx, ly, lx + rr, ly, rr);
+        ctx.closePath();
         ctx.clip();
 
-        var srcX = mx * scaleX - (LOUPE_R / LOUPE_ZOOM) * scaleX;
-        var srcY = my * scaleY - (LOUPE_R / LOUPE_ZOOM) * scaleY;
-        var srcW = (LOUPE_R * 2 / LOUPE_ZOOM) * scaleX;
-        var srcH = (LOUPE_R * 2 / LOUPE_ZOOM) * scaleY;
+        // Draw zoomed image
+        var srcX = mx * scaleX - halfSrc * scaleX;
+        var srcY = my * scaleY - halfSrc * scaleY;
+        var srcW = (LOUPE_SIZE / LOUPE_ZOOM) * scaleX;
+        var srcH = (LOUPE_SIZE / LOUPE_ZOOM) * scaleY;
 
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(srcCanvas, srcX, srcY, srcW, srcH,
-                      mx - LOUPE_R, my - LOUPE_R, LOUPE_R * 2, LOUPE_R * 2);
+        ctx.drawImage(srcCanvas, srcX, srcY, srcW, srcH, lx, ly, LOUPE_SIZE, LOUPE_SIZE);
         ctx.imageSmoothingEnabled = true;
 
-        // Grid lines for pixel visibility
-        var pixelSize = LOUPE_ZOOM;
-        if (pixelSize >= 4) {
-            ctx.strokeStyle = 'rgba(128,128,128,0.25)';
-            ctx.lineWidth = 0.5;
-            for (var gx = mx - LOUPE_R; gx <= mx + LOUPE_R; gx += pixelSize) {
-                ctx.beginPath(); ctx.moveTo(gx, my - LOUPE_R); ctx.lineTo(gx, my + LOUPE_R); ctx.stroke();
-            }
-            for (var gy = my - LOUPE_R; gy <= my + LOUPE_R; gy += pixelSize) {
-                ctx.beginPath(); ctx.moveTo(mx - LOUPE_R, gy); ctx.lineTo(mx + LOUPE_R, gy); ctx.stroke();
-            }
+        // Pixel grid
+        var pxSize = LOUPE_ZOOM;
+        ctx.strokeStyle = 'rgba(128,128,128,0.2)';
+        ctx.lineWidth = 0.5;
+        for (var gx = 0; gx <= LOUPE_SIZE; gx += pxSize) {
+            ctx.beginPath(); ctx.moveTo(lx + gx, ly); ctx.lineTo(lx + gx, ly + LOUPE_SIZE); ctx.stroke();
+        }
+        for (var gy = 0; gy <= LOUPE_SIZE; gy += pxSize) {
+            ctx.beginPath(); ctx.moveTo(lx, ly + gy); ctx.lineTo(lx + LOUPE_SIZE, ly + gy); ctx.stroke();
         }
 
-        // Crosshair in center
-        ctx.strokeStyle = '#00e5ff';
-        ctx.lineWidth = 1;
+        // Highlight center pixel
+        ctx.strokeStyle = '#ff3366';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(cx - pxSize / 2, cy - pxSize / 2, pxSize, pxSize);
+
+        // Full crosshair through center
+        ctx.strokeStyle = 'rgba(255,51,102,0.4)';
+        ctx.lineWidth = 0.5;
         ctx.beginPath();
-        ctx.moveTo(mx - 6, my); ctx.lineTo(mx + 6, my);
-        ctx.moveTo(mx, my - 6); ctx.lineTo(mx, my + 6);
+        ctx.moveTo(cx, ly); ctx.lineTo(cx, ly + LOUPE_SIZE);
+        ctx.moveTo(lx, cy); ctx.lineTo(lx + LOUPE_SIZE, cy);
         ctx.stroke();
 
         ctx.restore();
 
-        // Loupe border
-        ctx.beginPath();
-        ctx.arc(mx, my, LOUPE_R, 0, 2 * Math.PI);
-        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        // Border
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
         ctx.lineWidth = 2;
-        ctx.stroke();
         ctx.beginPath();
-        ctx.arc(mx, my, LOUPE_R - 1, 0, 2 * Math.PI);
-        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-        ctx.lineWidth = 1;
+        ctx.moveTo(lx + rr, ly);
+        ctx.lineTo(lx + LOUPE_SIZE - rr, ly);
+        ctx.arcTo(lx + LOUPE_SIZE, ly, lx + LOUPE_SIZE, ly + rr, rr);
+        ctx.lineTo(lx + LOUPE_SIZE, ly + LOUPE_SIZE - rr);
+        ctx.arcTo(lx + LOUPE_SIZE, ly + LOUPE_SIZE, lx + LOUPE_SIZE - rr, ly + LOUPE_SIZE, rr);
+        ctx.lineTo(lx + rr, ly + LOUPE_SIZE);
+        ctx.arcTo(lx, ly + LOUPE_SIZE, lx, ly + LOUPE_SIZE - rr, rr);
+        ctx.lineTo(lx, ly + rr);
+        ctx.arcTo(lx, ly, lx + rr, ly, rr);
+        ctx.closePath();
         ctx.stroke();
+
+        // Zoom label
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(LOUPE_ZOOM + 'x', lx + LOUPE_SIZE - 4, ly + LOUPE_SIZE - 3);
     }
 
     function redraw(mouseX, mouseY) {
         ctx.clearRect(0, 0, w, h);
+
+        // Crosshair guides
+        if (mouseX !== undefined) {
+            drawCrosshair(mouseX, mouseY);
+        }
 
         for (var i = 0; i < measurements.length; i++) {
             var m = measurements[i];
@@ -973,14 +1025,26 @@ function initMeasureOverlay(imgEl) {
 
     function coords(e) {
         var rect = canvas.getBoundingClientRect();
-        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        var raw = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        var srcPxX = Math.floor(raw.x * scaleX);
+        var srcPxY = Math.floor(raw.y * scaleY);
+        return { x: (srcPxX + 0.5) / scaleX, y: (srcPxY + 0.5) / scaleY };
     }
 
     function snapToAxis(p, e) {
-        if (!e.shiftKey || !pendingPoint) return p;
+        if (!e.shiftKey || !pendingPoint) {
+            lockedAxis = null;
+            return p;
+        }
         var dx = Math.abs(p.x - pendingPoint.x);
         var dy = Math.abs(p.y - pendingPoint.y);
-        if (dx > dy) {
+        if (!lockedAxis) {
+            if (dx < 8 && dy < 8) {
+                return p;
+            }
+            lockedAxis = (dx >= dy) ? 'h' : 'v';
+        }
+        if (lockedAxis === 'h') {
             return { x: p.x, y: pendingPoint.y };
         } else {
             return { x: pendingPoint.x, y: p.y };
@@ -996,10 +1060,12 @@ function initMeasureOverlay(imgEl) {
         var p = snapToAxis(coords(e), e);
         if (!pendingPoint) {
             pendingPoint = { x: p.x, y: p.y };
+            lockedAxis = null;
         } else {
             var d = dist(pendingPoint.x, pendingPoint.y, p.x, p.y);
             measurements.push({ ax: pendingPoint.x, ay: pendingPoint.y, bx: p.x, by: p.y, d: d });
             pendingPoint = null;
+            lockedAxis = null;
         }
         redraw(p.x, p.y);
     });
@@ -1008,6 +1074,7 @@ function initMeasureOverlay(imgEl) {
         e.preventDefault();
         if (pendingPoint) {
             pendingPoint = null;
+            lockedAxis = null;
         } else if (measurements.length) {
             measurements.pop();
         }
