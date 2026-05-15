@@ -20,11 +20,11 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunSQL(
             sql=(
-                "ALTER TABLE label_data.line_width_samples "
+                'ALTER TABLE "label_data.line_width_samples" '
                 "ADD COLUMN IF NOT EXISTS date_created DATE NOT NULL DEFAULT NOW();"
             ),
             reverse_sql=(
-                "ALTER TABLE label_data.line_width_samples "
+                'ALTER TABLE "label_data.line_width_samples" '
                 "DROP COLUMN IF EXISTS date_created;"
             ),
         ),
