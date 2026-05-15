@@ -885,6 +885,7 @@ class line_width_sample_table(models.Model):
     image_height = models.IntegerField()
     labeler_id = models.CharField()
     status = models.CharField()
+    date_created = models.DateField(auto_now_add=True)
 
     class Meta:
         managed = False
