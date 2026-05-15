@@ -769,9 +769,9 @@ if (_origCollectPromptFn) {
 }
 
 // ---------------------------------------------------------------------------
-// Line-width measurement overlay — two-point ruler with offset zoom loupe
-// Click two points to measure pixel distance. Right-click to undo.
-// Hold Shift to lock axis (H or V) for perpendicular measurements.
+// Line-width auto-measure overlay
+// Click ON a line to auto-detect its width. Right-click to undo.
+// Scans outward in multiple angles to find the narrowest cross-section.
 // ---------------------------------------------------------------------------
 var _measureState = null;
 
@@ -802,68 +802,156 @@ function initMeasureOverlay(imgEl) {
     srcCanvas.height = natH;
     var srcCtx = srcCanvas.getContext('2d');
     var srcReady = false;
+    var imgData = null;
     try {
         var tempImg = new Image();
         tempImg.crossOrigin = 'anonymous';
         tempImg.onload = function() {
             srcCtx.drawImage(tempImg, 0, 0, natW, natH);
-            srcReady = true;
+            try {
+                imgData = srcCtx.getImageData(0, 0, natW, natH);
+                srcReady = true;
+            } catch(e) {}
         };
         tempImg.src = imgEl.src;
     } catch(e) {}
 
     var measurements = [];
-    var pendingPoint = null;
 
-    var LOUPE_SIZE = 110;
+    var LOUPE_SIZE = 120;
     var LOUPE_ZOOM = 8;
     var LOUPE_MARGIN = 12;
-    var lockedAxis = null;
+    var MAX_SCAN = 80;
 
-    function dist(ax, ay, bx, by) {
-        return Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
+    function brightness(px, py) {
+        if (px < 0 || py < 0 || px >= natW || py >= natH) return 255;
+        var idx = (py * natW + px) * 4;
+        var d = imgData.data;
+        return 0.299 * d[idx] + 0.587 * d[idx+1] + 0.114 * d[idx+2];
     }
 
-    function drawCrosshair(mx, my) {
-        ctx.save();
-        ctx.setLineDash([4, 4]);
-        ctx.strokeStyle = 'rgba(0,229,255,0.5)';
-        ctx.lineWidth = 0.5;
-        ctx.beginPath();
-        ctx.moveTo(mx, 0); ctx.lineTo(mx, h);
-        ctx.moveTo(0, my); ctx.lineTo(w, my);
-        ctx.stroke();
-        ctx.restore();
+    function alpha(px, py) {
+        if (px < 0 || py < 0 || px >= natW || py >= natH) return 0;
+        return imgData.data[(py * natW + px) * 4 + 3];
     }
 
-    function drawRulerLine(ax, ay, bx, by) {
+    function measureWidthAt(canvasX, canvasY) {
+        if (!srcReady || !imgData) return null;
+
+        var cx = Math.floor(canvasX * scaleX);
+        var cy = Math.floor(canvasY * scaleY);
+
+        var centerBright = brightness(cx, cy);
+        var centerAlpha = alpha(cx, cy);
+
+        // Scan 18 angles (every 10 degrees from 0-170)
+        var angles = [];
+        for (var deg = 0; deg < 180; deg += 10) {
+            angles.push(deg * Math.PI / 180);
+        }
+
+        var bestWidth = Infinity;
+        var bestAngle = 0;
+        var bestA = null, bestB = null;
+
+        for (var ai = 0; ai < angles.length; ai++) {
+            var ang = angles[ai];
+            var dx = Math.cos(ang);
+            var dy = Math.sin(ang);
+
+            var posD = findEdge(cx, cy, dx, dy, centerBright, centerAlpha);
+            var negD = findEdge(cx, cy, -dx, -dy, centerBright, centerAlpha);
+
+            if (posD !== null && negD !== null) {
+                var total = posD + negD;
+                if (total < bestWidth) {
+                    bestWidth = total;
+                    bestAngle = ang;
+                    bestA = { x: (cx + dx * posD) / scaleX, y: (cy + dy * posD) / scaleY };
+                    bestB = { x: (cx - dx * negD) / scaleX, y: (cy - dy * negD) / scaleY };
+                }
+            }
+        }
+
+        if (bestWidth === Infinity || bestWidth < 1) return null;
+
+        return {
+            width: Math.round(bestWidth),
+            ax: bestA.x, ay: bestA.y,
+            bx: bestB.x, by: bestB.y,
+            cx: canvasX, cy: canvasY
+        };
+    }
+
+    function findEdge(startX, startY, dx, dy, refBright, refAlpha) {
+        var useAlpha = refAlpha > 200;
+
+        for (var step = 1; step <= MAX_SCAN; step++) {
+            var px = Math.round(startX + dx * step);
+            var py = Math.round(startY + dy * step);
+            if (px < 0 || py < 0 || px >= natW || py >= natH) return step;
+
+            if (useAlpha) {
+                var a = alpha(px, py);
+                if (a < 128) return step - 0.5;
+            }
+
+            var b = brightness(px, py);
+            var diff = Math.abs(b - refBright);
+
+            if (diff > 60) {
+                return step - 0.5;
+            }
+        }
+        return null;
+    }
+
+    function drawMeasurement(m) {
+        // Line through the measurement
         ctx.beginPath();
-        ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
-        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.moveTo(m.ax, m.ay);
+        ctx.lineTo(m.bx, m.by);
+        ctx.strokeStyle = 'rgba(0,0,0,0.7)';
         ctx.lineWidth = 3;
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
-        ctx.strokeStyle = '#00e5ff';
+        ctx.moveTo(m.ax, m.ay);
+        ctx.lineTo(m.bx, m.by);
+        ctx.strokeStyle = '#ff3366';
         ctx.lineWidth = 1.5;
         ctx.stroke();
-    }
 
-    function drawEndpoint(x, y) {
+        // Endpoints
+        [{ x: m.ax, y: m.ay }, { x: m.bx, y: m.by }].forEach(function(pt) {
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, 3, 0, 2 * Math.PI);
+            ctx.fillStyle = '#ff3366';
+            ctx.fill();
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        });
+
+        // Click point
         ctx.beginPath();
-        ctx.arc(x, y, 4, 0, 2 * Math.PI);
-        ctx.fillStyle = '#00e5ff';
+        ctx.arc(m.cx, m.cy, 2, 0, 2 * Math.PI);
+        ctx.fillStyle = '#fff';
         ctx.fill();
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-    }
 
-    function drawPill(text, lx, ly) {
-        ctx.font = 'bold 12px sans-serif';
+        // Label offset from the midpoint
+        var mx = (m.ax + m.bx) / 2;
+        var my = (m.ay + m.by) / 2;
+        var text = m.width + 'px';
+        ctx.font = 'bold 13px sans-serif';
         var tw = ctx.measureText(text).width;
         var pad = 5;
-        var rx = lx - pad, ry = ly - 8 - pad, rw = tw + pad * 2, rh = 16 + pad * 2, rr = 4;
+
+        var lx = mx + 16;
+        var ly = my - 16;
+        if (lx + tw + pad * 2 > w) lx = mx - 16 - tw - pad * 2;
+        if (ly - 14 < 0) ly = my + 20;
+
+        var rx = lx - pad, ry = ly - 9 - pad, rw = tw + pad * 2, rh = 18 + pad * 2, rr = 4;
         ctx.fillStyle = 'rgba(0,0,0,0.85)';
         ctx.beginPath();
         ctx.moveTo(rx + rr, ry);
@@ -877,28 +965,28 @@ function initMeasureOverlay(imgEl) {
         ctx.arcTo(rx, ry, rx + rr, ry, rr);
         ctx.closePath();
         ctx.fill();
+
         ctx.fillStyle = '#fff';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillText(text, lx, ly);
     }
 
-    function drawOffsetLabel(bx, by, d) {
-        var text = Math.round(d) + 'px';
-        ctx.font = 'bold 12px sans-serif';
-        var tw = ctx.measureText(text).width;
-        var offset = 16;
-        var lx = bx + offset;
-        var ly = by - offset;
-        if (lx + tw + 12 > w) lx = bx - offset - tw - 10;
-        if (ly - 16 < 0) ly = by + offset + 16;
-        drawPill(text, lx, ly);
+    function drawCrosshair(mx, my) {
+        ctx.save();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = 'rgba(0,229,255,0.4)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(mx, 0); ctx.lineTo(mx, h);
+        ctx.moveTo(0, my); ctx.lineTo(w, my);
+        ctx.stroke();
+        ctx.restore();
     }
 
     function drawLoupe(mx, my) {
         if (!srcReady) return;
 
-        // Position loupe in a corner away from the cursor
         var lx, ly;
         if (mx < w / 2) {
             lx = w - LOUPE_SIZE - LOUPE_MARGIN;
@@ -911,13 +999,11 @@ function initMeasureOverlay(imgEl) {
             ly = LOUPE_MARGIN;
         }
 
-        var cx = lx + LOUPE_SIZE / 2;
-        var cy = ly + LOUPE_SIZE / 2;
-        var halfSrc = (LOUPE_SIZE / 2 / LOUPE_ZOOM);
+        var lcx = lx + LOUPE_SIZE / 2;
+        var lcy = ly + LOUPE_SIZE / 2;
 
         ctx.save();
 
-        // Clip to rounded rect
         var rr = 6;
         ctx.beginPath();
         ctx.moveTo(lx + rr, ly);
@@ -932,7 +1018,7 @@ function initMeasureOverlay(imgEl) {
         ctx.closePath();
         ctx.clip();
 
-        // Draw zoomed image
+        var halfSrc = (LOUPE_SIZE / 2 / LOUPE_ZOOM);
         var srcX = mx * scaleX - halfSrc * scaleX;
         var srcY = my * scaleY - halfSrc * scaleY;
         var srcW = (LOUPE_SIZE / LOUPE_ZOOM) * scaleX;
@@ -942,9 +1028,8 @@ function initMeasureOverlay(imgEl) {
         ctx.drawImage(srcCanvas, srcX, srcY, srcW, srcH, lx, ly, LOUPE_SIZE, LOUPE_SIZE);
         ctx.imageSmoothingEnabled = true;
 
-        // Pixel grid
         var pxSize = LOUPE_ZOOM;
-        ctx.strokeStyle = 'rgba(128,128,128,0.2)';
+        ctx.strokeStyle = 'rgba(128,128,128,0.18)';
         ctx.lineWidth = 0.5;
         for (var gx = 0; gx <= LOUPE_SIZE; gx += pxSize) {
             ctx.beginPath(); ctx.moveTo(lx + gx, ly); ctx.lineTo(lx + gx, ly + LOUPE_SIZE); ctx.stroke();
@@ -953,22 +1038,19 @@ function initMeasureOverlay(imgEl) {
             ctx.beginPath(); ctx.moveTo(lx, ly + gy); ctx.lineTo(lx + LOUPE_SIZE, ly + gy); ctx.stroke();
         }
 
-        // Highlight center pixel
         ctx.strokeStyle = '#ff3366';
         ctx.lineWidth = 2;
-        ctx.strokeRect(cx - pxSize / 2, cy - pxSize / 2, pxSize, pxSize);
+        ctx.strokeRect(lcx - pxSize / 2, lcy - pxSize / 2, pxSize, pxSize);
 
-        // Full crosshair through center
-        ctx.strokeStyle = 'rgba(255,51,102,0.4)';
+        ctx.strokeStyle = 'rgba(255,51,102,0.35)';
         ctx.lineWidth = 0.5;
         ctx.beginPath();
-        ctx.moveTo(cx, ly); ctx.lineTo(cx, ly + LOUPE_SIZE);
-        ctx.moveTo(lx, cy); ctx.lineTo(lx + LOUPE_SIZE, cy);
+        ctx.moveTo(lcx, ly); ctx.lineTo(lcx, ly + LOUPE_SIZE);
+        ctx.moveTo(lx, lcy); ctx.lineTo(lx + LOUPE_SIZE, lcy);
         ctx.stroke();
 
         ctx.restore();
 
-        // Border
         ctx.strokeStyle = 'rgba(0,0,0,0.5)';
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -984,9 +1066,8 @@ function initMeasureOverlay(imgEl) {
         ctx.closePath();
         ctx.stroke();
 
-        // Zoom label
         ctx.font = 'bold 10px sans-serif';
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'bottom';
         ctx.fillText(LOUPE_ZOOM + 'x', lx + LOUPE_SIZE - 4, ly + LOUPE_SIZE - 3);
@@ -995,27 +1076,12 @@ function initMeasureOverlay(imgEl) {
     function redraw(mouseX, mouseY) {
         ctx.clearRect(0, 0, w, h);
 
-        // Crosshair guides
         if (mouseX !== undefined) {
             drawCrosshair(mouseX, mouseY);
         }
 
         for (var i = 0; i < measurements.length; i++) {
-            var m = measurements[i];
-            drawRulerLine(m.ax, m.ay, m.bx, m.by);
-            drawEndpoint(m.ax, m.ay);
-            drawEndpoint(m.bx, m.by);
-            drawOffsetLabel(m.bx, m.by, m.d);
-        }
-
-        if (pendingPoint) {
-            drawEndpoint(pendingPoint.x, pendingPoint.y);
-            if (mouseX !== undefined) {
-                drawRulerLine(pendingPoint.x, pendingPoint.y, mouseX, mouseY);
-                drawEndpoint(mouseX, mouseY);
-                var d = dist(pendingPoint.x, pendingPoint.y, mouseX, mouseY);
-                drawOffsetLabel(mouseX, mouseY, d);
-            }
+            drawMeasurement(measurements[i]);
         }
 
         if (mouseX !== undefined) {
@@ -1031,53 +1097,23 @@ function initMeasureOverlay(imgEl) {
         return { x: (srcPxX + 0.5) / scaleX, y: (srcPxY + 0.5) / scaleY };
     }
 
-    function snapToAxis(p, e) {
-        if (!e.shiftKey || !pendingPoint) {
-            lockedAxis = null;
-            return p;
-        }
-        var dx = Math.abs(p.x - pendingPoint.x);
-        var dy = Math.abs(p.y - pendingPoint.y);
-        if (!lockedAxis) {
-            if (dx < 8 && dy < 8) {
-                return p;
-            }
-            lockedAxis = (dx >= dy) ? 'h' : 'v';
-        }
-        if (lockedAxis === 'h') {
-            return { x: p.x, y: pendingPoint.y };
-        } else {
-            return { x: pendingPoint.x, y: p.y };
-        }
-    }
-
     canvas.addEventListener('mousemove', function(e) {
-        var p = snapToAxis(coords(e), e);
+        var p = coords(e);
         redraw(p.x, p.y);
     });
 
     canvas.addEventListener('click', function(e) {
-        var p = snapToAxis(coords(e), e);
-        if (!pendingPoint) {
-            pendingPoint = { x: p.x, y: p.y };
-            lockedAxis = null;
-        } else {
-            var d = dist(pendingPoint.x, pendingPoint.y, p.x, p.y);
-            measurements.push({ ax: pendingPoint.x, ay: pendingPoint.y, bx: p.x, by: p.y, d: d });
-            pendingPoint = null;
-            lockedAxis = null;
+        var p = coords(e);
+        var m = measureWidthAt(p.x, p.y);
+        if (m) {
+            measurements.push(m);
         }
         redraw(p.x, p.y);
     });
 
     canvas.addEventListener('contextmenu', function(e) {
         e.preventDefault();
-        if (pendingPoint) {
-            pendingPoint = null;
-            lockedAxis = null;
-        } else if (measurements.length) {
-            measurements.pop();
-        }
+        if (measurements.length) measurements.pop();
         var p = coords(e);
         redraw(p.x, p.y);
     });
