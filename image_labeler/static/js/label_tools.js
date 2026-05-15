@@ -781,6 +781,8 @@ function initMeasureOverlay(imgEl, options) {
     options = options || {};
     var showAddButton = options.showAddButton !== false;
     var gridSections = options.gridSections || 0;
+    var samplesPerSection = options.samplesPerSection || 0;
+    var externalStatsTarget = options.statsTarget || null;
 
     var container = imgEl.parentElement;
     container.style.position = 'relative';
@@ -851,14 +853,20 @@ function initMeasureOverlay(imgEl, options) {
     var measureGroups = [[]];
     var currentGroup = 0;
 
-    // Floating stats bar + new-group button
-    var statsBar = document.createElement('div');
-    statsBar.style.cssText = 'position:absolute; top:' + imgEl.offsetTop + 'px; left:' + imgEl.offsetLeft + 'px; '
-        + 'z-index:12; display:flex; align-items:center; gap:6px; padding:4px 8px; '
-        + 'background:rgba(0,0,0,0.82); border-radius:0 0 6px 0; font:bold 11px sans-serif; color:#fff; '
-        + 'pointer-events:auto; user-select:none; flex-wrap:wrap; max-width:' + w + 'px;';
-    statsBar.innerHTML = '';
-    container.appendChild(statsBar);
+    // Stats bar: either the caller's element, or a floating overlay on the image.
+    var statsBar;
+    if (externalStatsTarget) {
+        statsBar = externalStatsTarget;
+        statsBar.innerHTML = '';
+    } else {
+        statsBar = document.createElement('div');
+        statsBar.style.cssText = 'position:absolute; top:' + imgEl.offsetTop + 'px; left:' + imgEl.offsetLeft + 'px; '
+            + 'z-index:12; display:flex; align-items:center; gap:6px; padding:4px 8px; '
+            + 'background:rgba(0,0,0,0.82); border-radius:0 0 6px 0; font:bold 11px sans-serif; color:#fff; '
+            + 'pointer-events:auto; user-select:none; flex-wrap:wrap; max-width:' + w + 'px;';
+        statsBar.innerHTML = '';
+        container.appendChild(statsBar);
+    }
 
     var addBtn = document.createElement('button');
     addBtn.textContent = '+';
@@ -882,7 +890,67 @@ function initMeasureOverlay(imgEl, options) {
         return { min: mn, max: mx, avg: avg, n: widths.length };
     }
 
+    function renderSectionPanel() {
+        var counts = getSectionCounts();
+        var needed = samplesPerSection;
+        var totalNeeded = gridSections * gridSections * needed;
+        var totalDone = 0;
+        var sectionsDone = 0;
+        for (var k in counts) {
+            totalDone += Math.min(counts[k], needed);
+            if (counts[k] >= needed) sectionsDone += 1;
+        }
+
+        var html = '<div class="mlw-panel-section">'
+            + '<div class="mlw-panel-title">Progress</div>'
+            + '<div class="mlw-panel-meter">'
+            +   '<div class="mlw-panel-meter-fill" style="width:' + Math.round(100 * totalDone / totalNeeded) + '%;"></div>'
+            + '</div>'
+            + '<div class="mlw-panel-meter-label">'
+            +   sectionsDone + ' / ' + (gridSections * gridSections) + ' sections complete '
+            +   '<span style="opacity:0.6;">(' + totalDone + ' / ' + totalNeeded + ' samples)</span>'
+            + '</div>'
+            + '<div class="mlw-panel-grid">';
+        for (var r = 0; r < gridSections; r++) {
+            for (var c = 0; c < gridSections; c++) {
+                var n = counts[r + ',' + c];
+                var cls = n >= needed ? 'mlw-cell-done' : (n > 0 ? 'mlw-cell-partial' : 'mlw-cell-empty');
+                var content = n >= needed ? '✓' : (n + '/' + needed);
+                html += '<div class="mlw-cell ' + cls + '">' + content + '</div>';
+            }
+        }
+        html += '</div></div>';
+
+        // Overall measurement stats.
+        var allWidths = [];
+        for (var gi = 0; gi < measureGroups.length; gi++)
+            for (var mi = 0; mi < measureGroups[gi].length; mi++)
+                allWidths.push(measureGroups[gi][mi].width);
+        html += '<div class="mlw-panel-section">'
+            + '<div class="mlw-panel-title">Measurements</div>';
+        if (allWidths.length === 0) {
+            html += '<div class="mlw-panel-empty">Click on a line to start measuring.</div>';
+        } else {
+            var mn = Math.min.apply(null, allWidths);
+            var mx = Math.max.apply(null, allWidths);
+            var avg = Math.round(allWidths.reduce(function(a, b) { return a + b; }, 0) / allWidths.length * 2) / 2;
+            html += '<div class="mlw-panel-row"><span>Count</span><strong>' + allWidths.length + '</strong></div>'
+                +  '<div class="mlw-panel-row"><span>Min</span><strong>' + mn + ' px</strong></div>'
+                +  '<div class="mlw-panel-row"><span>Avg</span><strong>' + avg + ' px</strong></div>'
+                +  '<div class="mlw-panel-row"><span>Max</span><strong>' + mx + ' px</strong></div>';
+        }
+        html += '</div>';
+
+        statsBar.innerHTML = html;
+    }
+
     function updateStatsBar() {
+        // Rich per-section panel (rule-2 measurement page).
+        if (externalStatsTarget && gridSections && samplesPerSection) {
+            renderSectionPanel();
+            return;
+        }
+
         var parts = [];
         for (var gi = 0; gi < measureGroups.length; gi++) {
             var s = groupStats(measureGroups[gi]);
@@ -1342,25 +1410,42 @@ function initMeasureOverlay(imgEl, options) {
         ctx.fillText(LOUPE_ZOOM + 'x', lx + LOUPE_SIZE - 4, ly + LOUPE_SIZE - 3);
     }
 
-    function drawSamplingGrid() {
-        if (!gridSections) return;
+    function getSectionCounts() {
+        // Returns { 'row,col': count } over the canvas grid. Always defined for
+        // every cell so callers don't need to defensively check.
+        var counts = {};
+        if (!gridSections) return counts;
         var cw = w / gridSections;
         var ch = h / gridSections;
-
-        // Highlight cells containing at least one measurement.
-        var visited = {};
+        for (var r = 0; r < gridSections; r++)
+            for (var c = 0; c < gridSections; c++)
+                counts[r + ',' + c] = 0;
         for (var gi = 0; gi < measureGroups.length; gi++) {
             for (var mi = 0; mi < measureGroups[gi].length; mi++) {
                 var mm = measureGroups[gi][mi];
                 var col = Math.min(gridSections - 1, Math.max(0, Math.floor(mm.cx / cw)));
                 var row = Math.min(gridSections - 1, Math.max(0, Math.floor(mm.cy / ch)));
-                visited[row + ',' + col] = true;
+                counts[row + ',' + col] += 1;
             }
         }
+        return counts;
+    }
+
+    function drawSamplingGrid() {
+        if (!gridSections) return;
+        var cw = w / gridSections;
+        var ch = h / gridSections;
+        var counts = getSectionCounts();
+        var needed = samplesPerSection || 1;
+
         for (var r = 0; r < gridSections; r++) {
             for (var c = 0; c < gridSections; c++) {
-                if (visited[r + ',' + c]) {
+                var n = counts[r + ',' + c];
+                if (n >= needed) {
                     ctx.fillStyle = 'rgba(0, 220, 70, 0.22)';
+                    ctx.fillRect(c * cw, r * ch, cw, ch);
+                } else if (n > 0) {
+                    ctx.fillStyle = 'rgba(255, 200, 0, 0.18)';
                     ctx.fillRect(c * cw, r * ch, cw, ch);
                 }
             }
@@ -1442,7 +1527,15 @@ function initMeasureOverlay(imgEl, options) {
     canvas.addEventListener('mouseleave', function() { redraw(); });
 
     window._mlwMeasureGroups = measureGroups;
-    _measureState = { canvas: canvas, container: container, statsBar: statsBar };
+    _measureState = {
+        canvas: canvas,
+        container: container,
+        statsBar: statsBar,
+        statsBarOwned: !externalStatsTarget,
+        getSectionCounts: getSectionCounts,
+        gridSections: gridSections,
+        samplesPerSection: samplesPerSection
+    };
     updateStatsBar();
     redraw();
 }
@@ -1450,7 +1543,13 @@ function initMeasureOverlay(imgEl, options) {
 function teardownMeasureOverlay() {
     if (!_measureState) return;
     _measureState.canvas.remove();
-    if (_measureState.statsBar) _measureState.statsBar.remove();
+    if (_measureState.statsBar) {
+        if (_measureState.statsBarOwned) {
+            _measureState.statsBar.remove();
+        } else {
+            _measureState.statsBar.innerHTML = '';
+        }
+    }
     _measureState = null;
     window._mlwMeasureGroups = null;
     var btn = document.querySelector('.measure-btn.active');

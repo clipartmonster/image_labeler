@@ -4,7 +4,7 @@
 {% block content %}
 <style>
 .mlw-page {
-    max-width: 960px; margin: 20px auto; padding: 0 16px;
+    max-width: 1180px; margin: 20px auto; padding: 0 16px;
     font-family: Roboto, 'Segoe UI', sans-serif;
 }
 .mlw-header {
@@ -21,33 +21,90 @@
 }
 .mlw-card.active { display: block; }
 
-.mlw-img-wrap {
-    position: relative; display: inline-block; margin: 0 auto;
-    max-width: 100%; text-align: center;
-}
-.mlw-img-wrap img {
-    max-width: 100%; max-height: 520px; border-radius: 6px;
-    display: block; margin: 0 auto;
-}
 .mlw-asset-id {
     font-size: 12px; color: #6a7a7a; text-align: center;
-    margin-bottom: 8px; font-weight: 600;
+    margin: 0 0 12px; font-weight: 600;
+}
+
+.mlw-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 18px;
+    align-items: start;
+}
+
+.mlw-img-wrap {
+    position: relative; max-width: 100%;
+    background: #fff; border-radius: 6px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 200px;
+}
+.mlw-img-wrap img {
+    max-width: 100%; max-height: 560px; border-radius: 6px;
+    display: block; margin: 0;
+}
+
+.mlw-stats {
+    background: #fff; border-radius: 8px; padding: 16px 18px;
+    font-size: 13px; color: #3a4a4a; line-height: 1.5;
+    align-self: stretch;
+}
+.mlw-panel-section + .mlw-panel-section {
+    margin-top: 18px; padding-top: 16px; border-top: 1px solid #e2e8e8;
+}
+.mlw-panel-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.6px; color: #6a7a7a; margin-bottom: 10px;
+}
+.mlw-panel-meter {
+    height: 6px; background: #e2e8e8; border-radius: 3px;
+    overflow: hidden; margin-bottom: 6px;
+}
+.mlw-panel-meter-fill {
+    height: 100%; background: linear-gradient(90deg, #f0b400, #3a9a3a);
+    border-radius: 3px; transition: width .15s ease;
+}
+.mlw-panel-meter-label {
+    font-size: 12px; color: #3a4a4a; font-weight: 600; margin-bottom: 12px;
+}
+.mlw-panel-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+    margin-bottom: 4px;
+}
+.mlw-cell {
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+    border-radius: 4px; font-size: 13px; font-weight: 700;
+    border: 1.5px solid transparent;
+}
+.mlw-cell-empty   { background: #f0f3f3; color: #98a8a8; border-color: #d8e0e0; }
+.mlw-cell-partial { background: rgba(240, 180, 0, 0.18); color: #8a6a00; border-color: rgba(240, 180, 0, 0.5); }
+.mlw-cell-done    { background: rgba(58, 154, 58, 0.18); color: #2a6a2a; border-color: rgba(58, 154, 58, 0.55); }
+
+.mlw-panel-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 3px 0; font-size: 13px;
+}
+.mlw-panel-row span  { color: #6a7a7a; }
+.mlw-panel-row strong { color: #2a4a4a; font-weight: 700; }
+.mlw-panel-empty {
+    font-size: 12px; color: #98a8a8; font-style: italic;
 }
 
 .mlw-instructions {
-    background: #fff; border-radius: 8px; padding: 14px 18px;
-    margin-top: 16px; font-size: 13px; color: #3a4a4a; line-height: 1.6;
+    background: #fff; border-radius: 8px; padding: 12px 16px;
+    margin-top: 16px; font-size: 12.5px; color: #3a4a4a; line-height: 1.55;
 }
 .mlw-instructions strong { color: #2a4a4a; }
-.mlw-instructions kbd {
-    display: inline-block; padding: 1px 6px; border-radius: 3px;
-    background: #e8ecec; border: 1px solid #c0caca; font-size: 12px;
-    font-family: monospace; color: #3a4a4a;
+
+.mlw-status {
+    text-align: center; min-height: 18px;
+    margin-top: 12px; font-size: 13px; font-weight: 600;
+    color: #b03030;
 }
 
 .mlw-actions {
     display: flex; gap: 10px; align-items: center;
-    margin-top: 16px; justify-content: center;
+    margin-top: 8px; justify-content: center;
 }
 .mlw-btn {
     padding: 10px 28px; border-radius: 6px; border: none;
@@ -61,8 +118,7 @@
 .mlw-btn-skip:hover { background: #eef4f4; }
 .mlw-btn-save { background: #409393; color: #fff; }
 .mlw-btn-save:hover { background: #357e7e; }
-.mlw-btn-done { background: #3a6a3a; color: #fff; }
-.mlw-btn-done:hover { background: #2e5e2e; }
+.mlw-btn-save:disabled { background: #a0b4b4; cursor: not-allowed; }
 
 .mlw-done-msg {
     text-align: center; padding: 60px 20px;
@@ -73,6 +129,10 @@
     display: inline-block; margin-top: 16px;
     padding: 10px 28px; background: #409393; color: #fff;
     border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600;
+}
+
+@media (max-width: 820px) {
+    .mlw-layout { grid-template-columns: 1fr; }
 }
 </style>
 
@@ -86,15 +146,21 @@
     <div class="mlw-card {% if forloop.first %}active{% endif %}"
          data-idx="{{ forloop.counter0 }}" data-asset-id="{{ asset.asset_id }}">
         <p class="mlw-asset-id">Asset {{ asset.asset_id }}</p>
-        <div class="mlw-img-wrap">
-            <img class="mlw-img" src="{{ asset.image_link }}" alt="Asset {{ asset.asset_id }}">
+
+        <div class="mlw-layout">
+            <div class="mlw-img-wrap">
+                <img class="mlw-img" src="{{ asset.image_link }}" alt="Asset {{ asset.asset_id }}">
+            </div>
+            <aside class="mlw-stats"></aside>
         </div>
 
         <div class="mlw-instructions">
             <strong>How to use:</strong> Click on any line to auto-measure its width.
-            Try to take at least one measurement in each of the 9 grid sections.
+            Take at least <strong>3 measurements in each of the 9 grid sections</strong>.
             Right-click to undo the last measurement.
         </div>
+
+        <div class="mlw-status"></div>
 
         <div class="mlw-actions">
             <button class="mlw-btn mlw-btn-skip" onclick="mlwSkip()">Skip</button>
@@ -119,6 +185,15 @@
     var ruleIndex = {{ rule_index }};
     var batchId = '{{ batch_id }}';
     var largeSub = '{{ large_sub_batch }}';
+    var SAMPLES_PER_SECTION = 3;
+    var GRID_SECTIONS = 3;
+
+    function setStatus(card, msg, kind) {
+        var el = card.querySelector('.mlw-status');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.style.color = kind === 'info' ? '#3a6a6a' : '#b03030';
+    }
 
     function activateCard(idx) {
         teardownMeasureOverlay();
@@ -132,24 +207,21 @@
         var card = cards[idx];
         card.classList.add('active');
         document.getElementById('mlwCounter').textContent = (idx + 1) + ' / ' + total;
+        setStatus(card, '');
 
         var img = card.querySelector('.mlw-img');
-        var overlayOpts = { showAddButton: false, gridSections: 3 };
+        var statsTarget = card.querySelector('.mlw-stats');
+        var overlayOpts = {
+            showAddButton: false,
+            gridSections: GRID_SECTIONS,
+            samplesPerSection: SAMPLES_PER_SECTION,
+            statsTarget: statsTarget
+        };
         if (img.complete && img.naturalWidth) {
             initMeasureOverlay(img, overlayOpts);
         } else {
             img.onload = function() { initMeasureOverlay(img, overlayOpts); };
         }
-    }
-
-    function getMeasurements() {
-        if (!_measureState) return [];
-        var groups = [];
-        var statsBar = _measureState.statsBar;
-        if (!statsBar) return [];
-        /* Access measureGroups from the overlay's closure isn't possible directly,
-           so we read from the stats bar DOM or store globally. */
-        return window._mlwMeasureGroups || [];
     }
 
     window.mlwSkip = function() {
@@ -162,12 +234,23 @@
         var assetId = card.getAttribute('data-asset-id');
         var groups = window._mlwMeasureGroups || [[]];
 
+        // Gate: every section must have at least SAMPLES_PER_SECTION measurements.
+        var counts = (_measureState && _measureState.getSectionCounts)
+            ? _measureState.getSectionCounts() : {};
+        var missing = 0;
+        for (var k in counts) if (counts[k] < SAMPLES_PER_SECTION) missing += 1;
+        if (missing > 0) {
+            setStatus(card,
+                missing + ' section' + (missing === 1 ? '' : 's') + ' still need at least '
+                + SAMPLES_PER_SECTION + ' measurement' + (SAMPLES_PER_SECTION === 1 ? '' : 's') + ' each.');
+            return;
+        }
+
         var allMeasurements = [];
         for (var gi = 0; gi < groups.length; gi++) {
             for (var mi = 0; mi < groups[gi].length; mi++) {
                 var m = groups[gi][mi];
                 allMeasurements.push({
-                    group_index: gi,
                     width: m.width,
                     x_coord: Math.round(m.cx),
                     y_coord: Math.round(m.cy)
@@ -175,14 +258,10 @@
             }
         }
 
-        if (allMeasurements.length === 0) {
-            if (!confirm('No measurements taken. Skip this image?')) return;
-            teardownMeasureOverlay();
-            activateCard(currentIdx + 1);
-            return;
-        }
+        setStatus(card, 'Saving…', 'info');
 
-        /* Save each measurement as a line_width_sample row */
+        var authKey = (typeof API_ACCESS_KEY !== 'undefined' && API_ACCESS_KEY) ? API_ACCESS_KEY : '';
+
         var promises = allMeasurements.map(function(meas, i) {
             var data = {
                 asset_id: parseInt(assetId),
@@ -198,9 +277,17 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': window.LABELING_API_ACCESS_KEY || ''
+                    'Authorization': authKey
                 },
                 body: JSON.stringify(data)
+            }).then(function(r) {
+                // fetch resolves on 4xx/5xx, so check explicitly.
+                if (!r.ok) {
+                    return r.text().then(function(t) {
+                        throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 200));
+                    });
+                }
+                return r;
             });
         });
 
@@ -209,8 +296,7 @@
             activateCard(currentIdx + 1);
         }).catch(function(err) {
             console.error('Save failed', err);
-            teardownMeasureOverlay();
-            activateCard(currentIdx + 1);
+            setStatus(card, 'Save failed: ' + (err && err.message ? err.message : err));
         });
     };
 
