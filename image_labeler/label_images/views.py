@@ -1993,9 +1993,20 @@ from .models import (
 
 @labeler_required
 def labeler_earnings(request):
+    from labeling_api.models import labelling_rules as LR
+
     assignments = BatchAssignment.objects.filter(user=request.user).order_by("-deadline")
-    completed = [a for a in assignments if a.completed_at]
-    pending = [a for a in assignments if not a.completed_at]
+
+    rule_titles = {}
+    for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
+        rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
+
+    def annotate(a):
+        a.feature_name = rule_titles.get((a.task_type, a.rule_index), "")
+        return a
+
+    completed = [annotate(a) for a in assignments if a.completed_at]
+    pending = [annotate(a) for a in assignments if not a.completed_at]
 
     completed_total = sum(a.payment_amount for a in completed)
     pending_total = sum(a.payment_amount for a in pending)

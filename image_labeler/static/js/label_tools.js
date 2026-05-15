@@ -769,9 +769,9 @@ if (_origCollectPromptFn) {
 }
 
 // ---------------------------------------------------------------------------
-// Line-width measurement overlay — two-point ruler (visual only, no data saved)
-// Click two points to measure pixel distance. Right-click to undo last.
-// Dual-stroke rendering (dark outline + bright inner) for contrast on any bg.
+// Line-width measurement overlay — two-point ruler with zoom loupe
+// Click two points to measure pixel distance. Right-click to undo.
+// Magnifying loupe follows cursor for pixel-level precision.
 // ---------------------------------------------------------------------------
 var _measureState = null;
 
@@ -783,18 +783,41 @@ function initMeasureOverlay(imgEl) {
 
     var w = imgEl.offsetWidth;
     var h = imgEl.offsetHeight;
+    var natW = imgEl.naturalWidth || w;
+    var natH = imgEl.naturalHeight || h;
+    var scaleX = natW / w;
+    var scaleY = natH / h;
 
     var canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
     canvas.style.cssText = 'position:absolute; top:' + imgEl.offsetTop + 'px; left:' + imgEl.offsetLeft + 'px; '
-        + 'width:' + w + 'px; height:' + h + 'px; z-index:10; cursor:crosshair;';
+        + 'width:' + w + 'px; height:' + h + 'px; z-index:10; cursor:none;';
 
     container.appendChild(canvas);
     var ctx = canvas.getContext('2d');
 
+    // Offscreen canvas to sample the image for the zoom loupe
+    var srcCanvas = document.createElement('canvas');
+    srcCanvas.width = natW;
+    srcCanvas.height = natH;
+    var srcCtx = srcCanvas.getContext('2d');
+    var srcReady = false;
+    try {
+        var tempImg = new Image();
+        tempImg.crossOrigin = 'anonymous';
+        tempImg.onload = function() {
+            srcCtx.drawImage(tempImg, 0, 0, natW, natH);
+            srcReady = true;
+        };
+        tempImg.src = imgEl.src;
+    } catch(e) { /* CORS — loupe will just show crosshair without zoom */ }
+
     var measurements = [];
     var pendingPoint = null;
+
+    var LOUPE_R = 50;
+    var LOUPE_ZOOM = 6;
 
     function dist(ax, ay, bx, by) {
         return Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
@@ -826,17 +849,20 @@ function initMeasureOverlay(imgEl) {
         ctx.stroke();
     }
 
-    function drawLabel(ax, ay, bx, by, d) {
-        var mx = (ax + bx) / 2;
-        var my = (ay + by) / 2;
+    function drawOffsetLabel(bx, by, d) {
         var text = Math.round(d) + 'px';
-
         ctx.font = 'bold 12px sans-serif';
         var tw = ctx.measureText(text).width;
         var pad = 4;
+        var offset = 14;
 
-        ctx.fillStyle = 'rgba(0,0,0,0.75)';
-        var rx = mx - tw / 2 - pad, ry = my - 8 - pad, rw = tw + pad * 2, rh = 16 + pad * 2, rr = 4;
+        var lx = bx + offset;
+        var ly = by - offset;
+        if (lx + tw + pad * 2 > w) lx = bx - offset - tw - pad * 2;
+        if (ly - 8 - pad < 0) ly = by + offset + 16;
+
+        var rx = lx - pad, ry = ly - 8 - pad, rw = tw + pad * 2, rh = 16 + pad * 2, rr = 4;
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
         ctx.beginPath();
         ctx.moveTo(rx + rr, ry);
         ctx.lineTo(rx + rw - rr, ry);
@@ -851,9 +877,72 @@ function initMeasureOverlay(imgEl) {
         ctx.fill();
 
         ctx.fillStyle = '#fff';
-        ctx.textAlign = 'center';
+        ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(text, mx, my);
+        ctx.fillText(text, lx, ly);
+    }
+
+    function drawLoupe(mx, my) {
+        if (!srcReady) {
+            // Fallback crosshair when image not available
+            ctx.beginPath();
+            ctx.moveTo(mx - 8, my); ctx.lineTo(mx + 8, my);
+            ctx.moveTo(mx, my - 8); ctx.lineTo(mx, my + 8);
+            ctx.strokeStyle = '#00e5ff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            return;
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(mx, my, LOUPE_R, 0, 2 * Math.PI);
+        ctx.clip();
+
+        var srcX = mx * scaleX - (LOUPE_R / LOUPE_ZOOM) * scaleX;
+        var srcY = my * scaleY - (LOUPE_R / LOUPE_ZOOM) * scaleY;
+        var srcW = (LOUPE_R * 2 / LOUPE_ZOOM) * scaleX;
+        var srcH = (LOUPE_R * 2 / LOUPE_ZOOM) * scaleY;
+
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(srcCanvas, srcX, srcY, srcW, srcH,
+                      mx - LOUPE_R, my - LOUPE_R, LOUPE_R * 2, LOUPE_R * 2);
+        ctx.imageSmoothingEnabled = true;
+
+        // Grid lines for pixel visibility
+        var pixelSize = LOUPE_ZOOM;
+        if (pixelSize >= 4) {
+            ctx.strokeStyle = 'rgba(128,128,128,0.25)';
+            ctx.lineWidth = 0.5;
+            for (var gx = mx - LOUPE_R; gx <= mx + LOUPE_R; gx += pixelSize) {
+                ctx.beginPath(); ctx.moveTo(gx, my - LOUPE_R); ctx.lineTo(gx, my + LOUPE_R); ctx.stroke();
+            }
+            for (var gy = my - LOUPE_R; gy <= my + LOUPE_R; gy += pixelSize) {
+                ctx.beginPath(); ctx.moveTo(mx - LOUPE_R, gy); ctx.lineTo(mx + LOUPE_R, gy); ctx.stroke();
+            }
+        }
+
+        // Crosshair in center
+        ctx.strokeStyle = '#00e5ff';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(mx - 6, my); ctx.lineTo(mx + 6, my);
+        ctx.moveTo(mx, my - 6); ctx.lineTo(mx, my + 6);
+        ctx.stroke();
+
+        ctx.restore();
+
+        // Loupe border
+        ctx.beginPath();
+        ctx.arc(mx, my, LOUPE_R, 0, 2 * Math.PI);
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(mx, my, LOUPE_R - 1, 0, 2 * Math.PI);
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
     }
 
     function redraw(mouseX, mouseY) {
@@ -864,7 +953,7 @@ function initMeasureOverlay(imgEl) {
             drawRulerLine(m.ax, m.ay, m.bx, m.by);
             drawEndpoint(m.ax, m.ay);
             drawEndpoint(m.bx, m.by);
-            drawLabel(m.ax, m.ay, m.bx, m.by, m.d);
+            drawOffsetLabel(m.bx, m.by, m.d);
         }
 
         if (pendingPoint) {
@@ -873,10 +962,12 @@ function initMeasureOverlay(imgEl) {
                 drawRulerLine(pendingPoint.x, pendingPoint.y, mouseX, mouseY);
                 drawEndpoint(mouseX, mouseY);
                 var d = dist(pendingPoint.x, pendingPoint.y, mouseX, mouseY);
-                drawLabel(pendingPoint.x, pendingPoint.y, mouseX, mouseY, d);
+                drawOffsetLabel(mouseX, mouseY, d);
             }
-        } else if (mouseX !== undefined) {
-            drawEndpoint(mouseX, mouseY);
+        }
+
+        if (mouseX !== undefined) {
+            drawLoupe(mouseX, mouseY);
         }
     }
 
@@ -885,13 +976,24 @@ function initMeasureOverlay(imgEl) {
         return { x: e.clientX - rect.left, y: e.clientY - rect.top };
     }
 
+    function snapToAxis(p, e) {
+        if (!e.shiftKey || !pendingPoint) return p;
+        var dx = Math.abs(p.x - pendingPoint.x);
+        var dy = Math.abs(p.y - pendingPoint.y);
+        if (dx > dy) {
+            return { x: p.x, y: pendingPoint.y };
+        } else {
+            return { x: pendingPoint.x, y: p.y };
+        }
+    }
+
     canvas.addEventListener('mousemove', function(e) {
-        var p = coords(e);
+        var p = snapToAxis(coords(e), e);
         redraw(p.x, p.y);
     });
 
     canvas.addEventListener('click', function(e) {
-        var p = coords(e);
+        var p = snapToAxis(coords(e), e);
         if (!pendingPoint) {
             pendingPoint = { x: p.x, y: p.y };
         } else {

@@ -23,11 +23,12 @@
         <h2>Completed Batches</h2>
         <table class="wf-table">
             <thead>
-                <tr><th>Task</th><th>Rule</th><th>Batch / Sub</th><th>Payment</th><th>Completed</th></tr>
+                <tr><th>Feature</th><th>Task</th><th>Rule</th><th>Batch / Sub</th><th>Payment</th><th>Completed</th></tr>
             </thead>
             <tbody>
             {% for a in completed_assignments %}
                 <tr>
+                    <td>{{ a.feature_name|default:"—" }}</td>
                     <td>{{ a.task_type }}</td>
                     <td>{{ a.rule_index }}</td>
                     <td>{{ a.batch_id }} / {{ a.large_sub_batch }}</td>
@@ -45,11 +46,12 @@
         <h2>In Progress</h2>
         <table class="wf-table">
             <thead>
-                <tr><th>Task</th><th>Rule</th><th>Batch / Sub</th><th>Payment</th><th>Deadline</th></tr>
+                <tr><th>Feature</th><th>Task</th><th>Rule</th><th>Batch / Sub</th><th>Payment</th><th>Deadline</th></tr>
             </thead>
             <tbody>
             {% for a in pending_assignments %}
                 <tr>
+                    <td>{{ a.feature_name|default:"—" }}</td>
                     <td>{{ a.task_type }}</td>
                     <td>{{ a.rule_index }}</td>
                     <td>{{ a.batch_id }} / {{ a.large_sub_batch }}</td>

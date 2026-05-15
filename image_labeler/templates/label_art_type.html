@@ -144,7 +144,7 @@
             <h1 class = 'label_option rule' >{{asset.asset_id}}</h1>                                             
             <img id = "image_{{asset.asset_id}}" class="design" data-src="{{asset.image_link}}" src="{{ asset.image_link }}" >
             {% if task_type == "line_width_type" %}
-            <button class="measure-btn" onclick="toggleMeasureOverlay(this)" title="Ruler: click two points to measure distance in px. Right-click to undo.">Ruler</button>
+            <button class="measure-btn" onclick="toggleMeasureOverlay(this)" title="Ruler: click two points to measure distance in px. Hold Shift to snap H/V. Right-click to undo.">Ruler</button>
             {% endif %}
         </div>
         
