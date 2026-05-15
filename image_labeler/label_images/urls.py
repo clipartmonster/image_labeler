@@ -26,6 +26,7 @@ urlpatterns = [
     path('label_testing/', views.label_testing, name = 'label_testing'),
     path('select_primary_colors/', views.select_primary_colors, name = 'select_primary_colors'),
     path('select_line_widths/', views.select_line_widths, name = 'select_line_widths'),
+    path('measure_line_widths/', views.measure_line_widths, name='measure_line_widths'),
     path('correct_mismatch_labels/', views.correct_mismatch_labels, name = 'correct_mismatch_labels'),
 
     path('manage_rules/', views.manage_rules, name = 'manage_rules'),

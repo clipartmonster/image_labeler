@@ -184,6 +184,9 @@
             <span class="lb-deadline {% if a.deadline_status == 'overdue' %}lb-deadline-late{% elif a.deadline_status == 'urgent' %}lb-deadline-urg{% endif %}">{{ a.deadline|date:"M d" }}{% if a.deadline_status == "overdue" %} LATE{% endif %}</span>
             {% if a.training_required %}
                 <span class="lb-btn lb-btn-locked">Locked</span>
+            {% elif a.task_type == "line_width_type" and a.rule_index == 2 %}
+                <a href="/label_images/measure_line_widths/?labeler_id={{ request.user.username }}&rule_indexes=%5B{{ a.rule_index }}%5D&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}"
+                   class="lb-btn lb-btn-label">Measure</a>
             {% else %}
                 <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}"
                    class="lb-btn lb-btn-label">Label</a>

@@ -158,6 +158,57 @@ def select_line_widths(request):
 
 
 @login_required
+def measure_line_widths(request):
+    """Measurement-tool based line-width labeling (replaces the 9-section circle approach)."""
+
+    labeler_id = request.GET.get("labeler_id", request.user.username)
+    batch_id = request.GET.get("batch_id", 1)
+    large_sub_batch = request.GET.get("large_sub_batch", 1)
+
+    rule_indexes_raw = request.GET.get("rule_indexes", "[]")
+    try:
+        rule_indexes = json.loads(rule_indexes_raw)
+    except (json.JSONDecodeError, TypeError):
+        rule_indexes = rule_indexes_raw
+    if not isinstance(rule_indexes, list):
+        rule_indexes = [rule_indexes]
+    rule_index = int(rule_indexes[0]) if rule_indexes else int(request.GET.get("rule_index", 2))
+
+    header = {
+        "Content-Type": "application/json",
+        "Authorization": settings.API_ACCESS_KEY,
+    }
+
+    api_url = f"{settings.LABELING_API_BASE_URL}/get_asset_batch/"
+    data = {
+        "batch_type": "large_sub_batch",
+        "large_sub_batch": large_sub_batch,
+        "batch_id": batch_id,
+        "task_type": "line_width_type",
+        "rule_index": rule_index,
+    }
+    response = requests.get(api_url, json=data, headers=header)
+    assets_to_label = json.loads(response.content)["asset_batch"]
+
+    from labeling_api.models import line_width_sample_table
+    already_sampled = set(
+        line_width_sample_table.objects
+        .filter(labeler_id=labeler_id)
+        .values_list("asset_id", flat=True)
+    )
+    assets_to_label = [a for a in assets_to_label if a["asset_id"] not in already_sampled]
+
+    return render(request, "measure_line_widths.html", {
+        "assets_to_label": assets_to_label,
+        "labeler_id": labeler_id,
+        "rule_index": rule_index,
+        "batch_id": batch_id,
+        "large_sub_batch": large_sub_batch,
+        "total_count": len(assets_to_label),
+    })
+
+
+@login_required
 def select_primary_colors(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_asset_batch/"

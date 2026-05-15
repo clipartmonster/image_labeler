@@ -1,0 +1,225 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+<style>
+.mlw-page {
+    max-width: 960px; margin: 20px auto; padding: 0 16px;
+    font-family: Roboto, 'Segoe UI', sans-serif;
+}
+.mlw-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px; padding: 14px 20px;
+    background: #bdc7c7; border-radius: 10px;
+}
+.mlw-header h1 { margin: 0; font-size: 18px; color: #3a4a4a; font-weight: 700; }
+.mlw-header .mlw-counter { font-size: 14px; color: #5a6a6a; font-weight: 600; }
+
+.mlw-card {
+    background: #bdc7c7; border-radius: 10px; padding: 20px;
+    margin-bottom: 16px; display: none;
+}
+.mlw-card.active { display: block; }
+
+.mlw-img-wrap {
+    position: relative; display: inline-block; margin: 0 auto;
+    max-width: 100%; text-align: center;
+}
+.mlw-img-wrap img {
+    max-width: 100%; max-height: 520px; border-radius: 6px;
+    display: block; margin: 0 auto;
+}
+.mlw-asset-id {
+    font-size: 12px; color: #6a7a7a; text-align: center;
+    margin-bottom: 8px; font-weight: 600;
+}
+
+.mlw-instructions {
+    background: #fff; border-radius: 8px; padding: 14px 18px;
+    margin-top: 16px; font-size: 13px; color: #3a4a4a; line-height: 1.6;
+}
+.mlw-instructions strong { color: #2a4a4a; }
+.mlw-instructions kbd {
+    display: inline-block; padding: 1px 6px; border-radius: 3px;
+    background: #e8ecec; border: 1px solid #c0caca; font-size: 12px;
+    font-family: monospace; color: #3a4a4a;
+}
+
+.mlw-actions {
+    display: flex; gap: 10px; align-items: center;
+    margin-top: 16px; justify-content: center;
+}
+.mlw-btn {
+    padding: 10px 28px; border-radius: 6px; border: none;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    font-family: Roboto, sans-serif; transition: background .15s;
+}
+.mlw-btn-skip {
+    background: transparent; color: #5a7878;
+    border: 1px solid #a0b4b4; padding: 9px 24px;
+}
+.mlw-btn-skip:hover { background: #eef4f4; }
+.mlw-btn-save { background: #409393; color: #fff; }
+.mlw-btn-save:hover { background: #357e7e; }
+.mlw-btn-done { background: #3a6a3a; color: #fff; }
+.mlw-btn-done:hover { background: #2e5e2e; }
+
+.mlw-done-msg {
+    text-align: center; padding: 60px 20px;
+    font-size: 18px; color: #3a4a4a; font-weight: 600;
+    background: #bdc7c7; border-radius: 10px;
+}
+.mlw-done-msg a {
+    display: inline-block; margin-top: 16px;
+    padding: 10px 28px; background: #409393; color: #fff;
+    border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600;
+}
+</style>
+
+<div class="mlw-page">
+    <div class="mlw-header">
+        <h1>Line Width Measurement</h1>
+        <span class="mlw-counter" id="mlwCounter">1 / {{ total_count }}</span>
+    </div>
+
+    {% for asset in assets_to_label %}
+    <div class="mlw-card {% if forloop.first %}active{% endif %}"
+         data-idx="{{ forloop.counter0 }}" data-asset-id="{{ asset.asset_id }}">
+        <p class="mlw-asset-id">Asset {{ asset.asset_id }}</p>
+        <div class="mlw-img-wrap">
+            <img class="mlw-img" src="{{ asset.image_link }}" alt="Asset {{ asset.asset_id }}">
+        </div>
+
+        <div class="mlw-instructions">
+            <strong>How to use:</strong> Click on any line to auto-measure its width.
+            Use <kbd>+</kbd> to start a new measurement group and compare different sections.
+            Right-click to undo the last measurement. Click a group label to switch groups.
+        </div>
+
+        <div class="mlw-actions">
+            <button class="mlw-btn mlw-btn-skip" onclick="mlwSkip()">Skip</button>
+            <button class="mlw-btn mlw-btn-save" onclick="mlwSave()">Save &amp; Next</button>
+        </div>
+    </div>
+    {% endfor %}
+
+    <div class="mlw-done-msg" id="mlwDone" style="display:none;">
+        All images measured!
+        <br>
+        <a href="/label_images/setup_session/">Back to Dashboard</a>
+    </div>
+</div>
+
+<script>
+(function() {
+    var cards = document.querySelectorAll('.mlw-card');
+    var currentIdx = 0;
+    var total = cards.length;
+    var labelerId = '{{ labeler_id }}';
+    var ruleIndex = {{ rule_index }};
+    var batchId = '{{ batch_id }}';
+    var largeSub = '{{ large_sub_batch }}';
+
+    function activateCard(idx) {
+        teardownMeasureOverlay();
+        cards.forEach(function(c) { c.classList.remove('active'); });
+        if (idx >= total) {
+            document.getElementById('mlwDone').style.display = 'block';
+            document.getElementById('mlwCounter').textContent = 'Done';
+            return;
+        }
+        currentIdx = idx;
+        var card = cards[idx];
+        card.classList.add('active');
+        document.getElementById('mlwCounter').textContent = (idx + 1) + ' / ' + total;
+
+        var img = card.querySelector('.mlw-img');
+        if (img.complete && img.naturalWidth) {
+            initMeasureOverlay(img);
+        } else {
+            img.onload = function() { initMeasureOverlay(img); };
+        }
+    }
+
+    function getMeasurements() {
+        if (!_measureState) return [];
+        var groups = [];
+        var statsBar = _measureState.statsBar;
+        if (!statsBar) return [];
+        /* Access measureGroups from the overlay's closure isn't possible directly,
+           so we read from the stats bar DOM or store globally. */
+        return window._mlwMeasureGroups || [];
+    }
+
+    window.mlwSkip = function() {
+        teardownMeasureOverlay();
+        activateCard(currentIdx + 1);
+    };
+
+    window.mlwSave = function() {
+        var card = cards[currentIdx];
+        var assetId = card.getAttribute('data-asset-id');
+        var groups = window._mlwMeasureGroups || [[]];
+
+        var allMeasurements = [];
+        for (var gi = 0; gi < groups.length; gi++) {
+            for (var mi = 0; mi < groups[gi].length; mi++) {
+                var m = groups[gi][mi];
+                allMeasurements.push({
+                    group_index: gi,
+                    width: m.width,
+                    x_coord: Math.round(m.cx),
+                    y_coord: Math.round(m.cy)
+                });
+            }
+        }
+
+        if (allMeasurements.length === 0) {
+            if (!confirm('No measurements taken. Skip this image?')) return;
+            teardownMeasureOverlay();
+            activateCard(currentIdx + 1);
+            return;
+        }
+
+        /* Save each measurement as a line_width_sample row */
+        var promises = allMeasurements.map(function(meas, i) {
+            var data = {
+                asset_id: parseInt(assetId),
+                sample_index: i + 1,
+                x_coord: meas.x_coord,
+                y_coord: meas.y_coord,
+                radius: meas.width,
+                image_width: card.querySelector('.mlw-img').naturalWidth,
+                image_height: card.querySelector('.mlw-img').naturalHeight,
+                labeler_id: labelerId
+            };
+            return fetch(window.LABELING_API_BASE_URL + '/collect_line_width_sample/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': window.LABELING_API_ACCESS_KEY || ''
+                },
+                body: JSON.stringify(data)
+            });
+        });
+
+        Promise.all(promises).then(function() {
+            teardownMeasureOverlay();
+            activateCard(currentIdx + 1);
+        }).catch(function(err) {
+            console.error('Save failed', err);
+            teardownMeasureOverlay();
+            activateCard(currentIdx + 1);
+        });
+    };
+
+    if (total > 0) {
+        activateCard(0);
+    } else {
+        document.getElementById('mlwDone').style.display = 'block';
+        document.getElementById('mlwCounter').textContent = 'Done';
+    }
+})();
+</script>
+
+{% endblock %}

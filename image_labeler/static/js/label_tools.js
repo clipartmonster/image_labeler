@@ -1396,6 +1396,7 @@ function initMeasureOverlay(imgEl) {
 
     canvas.addEventListener('mouseleave', function() { redraw(); });
 
+    window._mlwMeasureGroups = measureGroups;
     _measureState = { canvas: canvas, container: container, statsBar: statsBar };
     redraw();
 }
@@ -1405,6 +1406,7 @@ function teardownMeasureOverlay() {
     _measureState.canvas.remove();
     if (_measureState.statsBar) _measureState.statsBar.remove();
     _measureState = null;
+    window._mlwMeasureGroups = null;
     var btn = document.querySelector('.measure-btn.active');
     if (btn) btn.classList.remove('active');
 }
