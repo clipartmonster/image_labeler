@@ -76,9 +76,16 @@
     border-radius: 4px; font-size: 13px; font-weight: 700;
     border: 1.5px solid transparent;
 }
+.mlw-cell { cursor: pointer; user-select: none; transition: transform .08s; }
+.mlw-cell:hover { transform: scale(1.05); }
 .mlw-cell-empty   { background: #f0f3f3; color: #98a8a8; border-color: #d8e0e0; }
 .mlw-cell-partial { background: rgba(240, 180, 0, 0.18); color: #8a6a00; border-color: rgba(240, 180, 0, 0.5); }
 .mlw-cell-done    { background: rgba(58, 154, 58, 0.18); color: #2a6a2a; border-color: rgba(58, 154, 58, 0.55); }
+.mlw-cell-skip    { background: #e0e4e4; color: #6a7878; border-color: #c0c8c8; border-style: dashed; }
+
+.mlw-panel-hint {
+    font-size: 11px; color: #7a8a8a; margin-top: 8px; line-height: 1.4;
+}
 
 .mlw-panel-row {
     display: flex; justify-content: space-between; align-items: center;
@@ -157,7 +164,7 @@
         <div class="mlw-instructions">
             <strong>How to use:</strong> Click on any line to auto-measure its width.
             Take at least <strong>3 measurements in each of the 9 grid sections</strong>.
-            Right-click to undo the last measurement.
+            Right-click to undo. If a section has no lines, <strong>click it in the panel on the right</strong> to skip.
         </div>
 
         <div class="mlw-status"></div>
@@ -232,17 +239,44 @@
     window.mlwSave = function() {
         var card = cards[currentIdx];
         var assetId = card.getAttribute('data-asset-id');
-        var groups = window._mlwMeasureGroups || [[]];
+        var groups = window._mlwMeasureGroups;
 
-        // Gate: every section must have at least SAMPLES_PER_SECTION measurements.
-        var counts = (_measureState && _measureState.getSectionCounts)
-            ? _measureState.getSectionCounts() : {};
+        console.log('[mlwSave] start', {
+            assetId: assetId,
+            measureStateExists: !!_measureState,
+            hasGetSectionCounts: !!(_measureState && _measureState.getSectionCounts),
+            mlwMeasureGroups: groups,
+            groupsLength: groups ? groups.length : 0
+        });
+
+        // Hard fail if the overlay isn't initialised — otherwise the validation
+        // gate below would silently pass when there is nothing to save.
+        if (!_measureState || !_measureState.getSectionCounts || !groups) {
+            setStatus(card, 'Measurement overlay not ready. Please click on the image to measure, then try again.');
+            console.warn('[mlwSave] aborting: overlay not initialised');
+            return;
+        }
+
+        var counts = _measureState.getSectionCounts();
+        var ignored = _measureState.ignoredSections || {};
+        var sectionsExpected = GRID_SECTIONS * GRID_SECTIONS;
         var missing = 0;
-        for (var k in counts) if (counts[k] < SAMPLES_PER_SECTION) missing += 1;
+        var countedSections = 0;
+        for (var k in counts) {
+            countedSections += 1;
+            if (ignored[k]) continue;
+            if (counts[k] < SAMPLES_PER_SECTION) missing += 1;
+        }
+        if (countedSections < sectionsExpected) {
+            setStatus(card, 'Could not read section counts. Please refresh the page.');
+            console.warn('[mlwSave] aborting: section counts incomplete', counts);
+            return;
+        }
         if (missing > 0) {
             setStatus(card,
                 missing + ' section' + (missing === 1 ? '' : 's') + ' still need at least '
-                + SAMPLES_PER_SECTION + ' measurement' + (SAMPLES_PER_SECTION === 1 ? '' : 's') + ' each.');
+                + SAMPLES_PER_SECTION + ' measurement' + (SAMPLES_PER_SECTION === 1 ? '' : 's') + ' each. '
+                + 'Click a section in the panel to skip if it has no lines.');
             return;
         }
 
@@ -258,9 +292,15 @@
             }
         }
 
-        setStatus(card, 'Saving…', 'info');
+        if (allMeasurements.length === 0) {
+            setStatus(card, 'No measurements to save. Click on lines in the image first.');
+            console.warn('[mlwSave] aborting: zero measurements collected');
+            return;
+        }
 
         var authKey = (typeof API_ACCESS_KEY !== 'undefined' && API_ACCESS_KEY) ? API_ACCESS_KEY : '';
+        console.log('[mlwSave] sending', allMeasurements.length, 'measurements, authKey set:', !!authKey);
+        setStatus(card, 'Saving ' + allMeasurements.length + ' measurements…', 'info');
 
         var promises = allMeasurements.map(function(meas, i) {
             var data = {
@@ -281,7 +321,7 @@
                 },
                 body: JSON.stringify(data)
             }).then(function(r) {
-                // fetch resolves on 4xx/5xx, so check explicitly.
+                console.log('[mlwSave] response', i + 1, 'status:', r.status);
                 if (!r.ok) {
                     return r.text().then(function(t) {
                         throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 200));
@@ -292,10 +332,11 @@
         });
 
         Promise.all(promises).then(function() {
+            console.log('[mlwSave] all saved, advancing');
             teardownMeasureOverlay();
             activateCard(currentIdx + 1);
         }).catch(function(err) {
-            console.error('Save failed', err);
+            console.error('[mlwSave] failed', err);
             setStatus(card, 'Save failed: ' + (err && err.message ? err.message : err));
         });
     };

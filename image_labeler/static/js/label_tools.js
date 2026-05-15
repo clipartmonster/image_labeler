@@ -852,6 +852,17 @@ function initMeasureOverlay(imgEl, options) {
     var GROUP_COLORS = ['#ff3366', '#33aaff', '#44cc66', '#ff9933', '#cc66ff', '#ffcc00'];
     var measureGroups = [[]];
     var currentGroup = 0;
+    // Sections marked by the labeler as "no lines here" — counted as satisfied
+    // for save validation. Keyed by "row,col".
+    var ignoredSections = {};
+
+    function toggleSectionIgnored(r, c) {
+        var k = r + ',' + c;
+        if (ignoredSections[k]) delete ignoredSections[k];
+        else ignoredSections[k] = true;
+        updateStatsBar();
+        redraw();
+    }
 
     // Stats bar: either the caller's element, or a floating overlay on the image.
     var statsBar;
@@ -893,33 +904,54 @@ function initMeasureOverlay(imgEl, options) {
     function renderSectionPanel() {
         var counts = getSectionCounts();
         var needed = samplesPerSection;
-        var totalNeeded = gridSections * gridSections * needed;
+        var totalSections = gridSections * gridSections;
+        var ignoredCount = 0;
+        for (var ik in ignoredSections) ignoredCount += 1;
+        var activeSections = totalSections - ignoredCount;
+        var totalNeeded = activeSections * needed;
         var totalDone = 0;
         var sectionsDone = 0;
         for (var k in counts) {
+            if (ignoredSections[k]) continue;
             totalDone += Math.min(counts[k], needed);
             if (counts[k] >= needed) sectionsDone += 1;
         }
+        var pct = totalNeeded > 0 ? Math.round(100 * totalDone / totalNeeded) : 100;
 
         var html = '<div class="mlw-panel-section">'
             + '<div class="mlw-panel-title">Progress</div>'
             + '<div class="mlw-panel-meter">'
-            +   '<div class="mlw-panel-meter-fill" style="width:' + Math.round(100 * totalDone / totalNeeded) + '%;"></div>'
+            +   '<div class="mlw-panel-meter-fill" style="width:' + pct + '%;"></div>'
             + '</div>'
             + '<div class="mlw-panel-meter-label">'
-            +   sectionsDone + ' / ' + (gridSections * gridSections) + ' sections complete '
-            +   '<span style="opacity:0.6;">(' + totalDone + ' / ' + totalNeeded + ' samples)</span>'
+            +   sectionsDone + ' / ' + activeSections + ' sections complete '
+            +   '<span style="opacity:0.6;">(' + totalDone + ' / ' + totalNeeded + ' samples'
+            +   (ignoredCount ? ', ' + ignoredCount + ' skipped' : '') + ')</span>'
             + '</div>'
             + '<div class="mlw-panel-grid">';
         for (var r = 0; r < gridSections; r++) {
             for (var c = 0; c < gridSections; c++) {
-                var n = counts[r + ',' + c];
-                var cls = n >= needed ? 'mlw-cell-done' : (n > 0 ? 'mlw-cell-partial' : 'mlw-cell-empty');
-                var content = n >= needed ? '✓' : (n + '/' + needed);
-                html += '<div class="mlw-cell ' + cls + '">' + content + '</div>';
+                var key = r + ',' + c;
+                var n = counts[key];
+                var cls, content;
+                if (ignoredSections[key]) {
+                    cls = 'mlw-cell-skip';
+                    content = '—';
+                } else if (n >= needed) {
+                    cls = 'mlw-cell-done';
+                    content = '✓';
+                } else {
+                    cls = n > 0 ? 'mlw-cell-partial' : 'mlw-cell-empty';
+                    content = n + '/' + needed;
+                }
+                html += '<div class="mlw-cell ' + cls + '" data-section="' + key
+                    + '" title="Click to ' + (ignoredSections[key] ? 'include' : 'skip')
+                    + ' this section">' + content + '</div>';
             }
         }
-        html += '</div></div>';
+        html += '</div>'
+            + '<div class="mlw-panel-hint">Click a section to skip it if there are no lines there.</div>'
+            + '</div>';
 
         // Overall measurement stats.
         var allWidths = [];
@@ -942,6 +974,16 @@ function initMeasureOverlay(imgEl, options) {
         html += '</div>';
 
         statsBar.innerHTML = html;
+
+        var cellEls = statsBar.querySelectorAll('.mlw-cell[data-section]');
+        for (var ci = 0; ci < cellEls.length; ci++) {
+            cellEls[ci].addEventListener('click', (function(sec) {
+                return function() {
+                    var parts = sec.split(',');
+                    toggleSectionIgnored(parseInt(parts[0]), parseInt(parts[1]));
+                };
+            })(cellEls[ci].getAttribute('data-section')));
+        }
     }
 
     function updateStatsBar() {
@@ -1440,7 +1482,13 @@ function initMeasureOverlay(imgEl, options) {
 
         for (var r = 0; r < gridSections; r++) {
             for (var c = 0; c < gridSections; c++) {
-                var n = counts[r + ',' + c];
+                var key = r + ',' + c;
+                if (ignoredSections[key]) {
+                    ctx.fillStyle = 'rgba(120, 120, 130, 0.28)';
+                    ctx.fillRect(c * cw, r * ch, cw, ch);
+                    continue;
+                }
+                var n = counts[key];
                 if (n >= needed) {
                     ctx.fillStyle = 'rgba(0, 220, 70, 0.22)';
                     ctx.fillRect(c * cw, r * ch, cw, ch);
@@ -1533,6 +1581,8 @@ function initMeasureOverlay(imgEl, options) {
         statsBar: statsBar,
         statsBarOwned: !externalStatsTarget,
         getSectionCounts: getSectionCounts,
+        ignoredSections: ignoredSections,
+        toggleSectionIgnored: toggleSectionIgnored,
         gridSections: gridSections,
         samplesPerSection: samplesPerSection
     };
