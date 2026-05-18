@@ -1048,10 +1048,10 @@ function initMeasureOverlay(imgEl, options) {
     }
     updateStatsBar();
 
-    var LOUPE_SIZE = 120;
-    var LOUPE_ZOOM = 8;
+    var LOUPE_SIZE = 160;
+    var LOUPE_ZOOM = 6;
     var LOUPE_MARGIN = 12;
-    var MAX_SCAN = 100;
+    var MAX_SCAN = Math.floor(LOUPE_SIZE / 2 / LOUPE_ZOOM);
 
     function getPixel(px, py) {
         if (px < 0 || py < 0 || px >= natW || py >= natH) return { r: 255, g: 255, b: 255, a: 0 };
@@ -1101,11 +1101,13 @@ function initMeasureOverlay(imgEl, options) {
         // Decide detection mode: alpha-based for transparent images, brightness for opaque
         var useAlphaMode = hasTransparency && centerAlpha > 128;
 
-        // Estimate background from the surrounding area using concentric samples
+        // Estimate background from within the loupe's visible radius
         var bgSamples = [];
+        var bgMinR = Math.max(2, Math.ceil(MAX_SCAN * 0.4));
+        var bgMaxR = MAX_SCAN;
         for (var sd = 0; sd < 16; sd++) {
             var sa = sd * Math.PI / 8;
-            for (var sr = 15; sr <= 80; sr += 5) {
+            for (var sr = bgMinR; sr <= bgMaxR; sr += 1) {
                 var spx = Math.round(cx + Math.cos(sa) * sr);
                 var spy = Math.round(cy + Math.sin(sa) * sr);
                 if (spx >= 0 && spy >= 0 && spx < natW && spy < natH) {
@@ -1115,8 +1117,6 @@ function initMeasureOverlay(imgEl, options) {
         }
         bgSamples.sort(function(a, b) { return b - a; });
 
-        // Use the brightest quartile as background estimate (works for dark lines on light bg)
-        // and the darkest quartile for light lines on dark bg
         var bgBrightHigh = bgSamples.length > 8 ? bgSamples[Math.floor(bgSamples.length * 0.15)] : 255;
         var bgBrightLow = bgSamples.length > 8 ? bgSamples[Math.floor(bgSamples.length * 0.85)] : 0;
 

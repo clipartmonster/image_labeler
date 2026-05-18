@@ -45,14 +45,44 @@
                     {% endfor %}
                 </ol>
 
-                {% for img in guide.reference_images.all %}
-                    {% if not img.directive %}
-                    <div style="display:inline-block; margin:6px 4px 0 0; vertical-align:top;">
-                        <img src="{{ img.image_url }}" class="sidebar-example-img" style="max-width:120px; max-height:90px; border-radius:4px; cursor:pointer; border:2px solid {% if img.label == 'yes' %}#4a8a4a{% elif img.label == 'no' %}#8a4a4a{% else %}#3a4a4a{% endif %};" onclick="openImageLightbox(this.src, '{{ img.caption|escapejs }}')">
-                        {% if img.caption %}<div style="font-size:10px; color:#8a9a9a; margin-top:2px;">{{ img.caption }}</div>{% endif %}
+                {% if guide.reference_images.all %}
+                <div style="margin-top:10px;">
+                    <div style="margin-bottom:6px;">
+                        <span style="font-size:11px; font-weight:600; color:#a0e0a0; background:rgba(100,200,100,0.1); padding:2px 6px; border-radius:3px;">YES</span>
                     </div>
-                    {% endif %}
-                {% endfor %}
+                    <div style="display:flex; flex-wrap:wrap; gap:5px;">
+                    {% for img in guide.reference_images.all %}
+                        {% if img.label == 'yes' %}
+                        <div style="display:inline-block; vertical-align:top;">
+                            <img src="{{ img.image_url }}" class="sidebar-example-img" style="max-width:90px; max-height:68px; border-radius:4px; cursor:pointer; border:2px solid #4a8a4a;" onclick="openImageLightbox(this.src, '{{ img.caption|escapejs }}')">
+                            {% if img.caption %}<div style="font-size:9px; color:#8a9a9a; margin-top:2px; max-width:90px;">{{ img.caption }}</div>{% endif %}
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                    </div>
+                    <div style="margin-top:8px; margin-bottom:6px;">
+                        <span style="font-size:11px; font-weight:600; color:#e0a0a0; background:rgba(200,100,100,0.1); padding:2px 6px; border-radius:3px;">NO</span>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:5px;">
+                    {% for img in guide.reference_images.all %}
+                        {% if img.label == 'no' %}
+                        <div style="display:inline-block; vertical-align:top;">
+                            <img src="{{ img.image_url }}" class="sidebar-example-img" style="max-width:90px; max-height:68px; border-radius:4px; cursor:pointer; border:2px solid #8a4a4a;" onclick="openImageLightbox(this.src, '{{ img.caption|escapejs }}')">
+                            {% if img.caption %}<div style="font-size:9px; color:#8a9a9a; margin-top:2px; max-width:90px;">{{ img.caption }}</div>{% endif %}
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                    </div>
+                    {% for img in guide.reference_images.all %}
+                        {% if img.label != 'yes' and img.label != 'no' %}
+                        <div style="display:inline-block; margin:6px 4px 0 0; vertical-align:top;">
+                            <img src="{{ img.image_url }}" class="sidebar-example-img" style="max-width:90px; max-height:68px; border-radius:4px; cursor:pointer; border:2px solid #3a4a4a;" onclick="openImageLightbox(this.src, '{{ img.caption|escapejs }}')">
+                            {% if img.caption %}<div style="font-size:9px; color:#8a9a9a; margin-top:2px; max-width:90px;">{{ img.caption }}</div>{% endif %}
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
             </div>
             {% endfor %}
 
@@ -61,45 +91,34 @@
                 {% if rule.rule_index != 0 %}
                 <div style="margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid #3a4a4a;">
                     <h3 style="color:#e8f0f0; font-size:15px; margin:0 0 6px; font-weight:700;">Rule {{ rule.rule_index }}: {{ rule.title }}</h3>
-                    <div class="rule-prompt">{{ rule.description }}
-                        {% if rule.directives %}
-                        <ul style="margin:6px 0 0; padding-left:16px;">
-                            {% for d in rule.directives %}
-                            <li>{{ d.directive }}</li>
-                            {% endfor %}
-                        </ul>
-                        {% endif %}
-                    </div>
+                    <div class="rule-prompt">{{ rule.description }}</div>
 
-                    {% if rule.examples %}
-                    <div style="margin-top:10px;">
-                        <div style="margin-bottom:8px;">
-                            <span style="font-size:12px; font-weight:600; color:#a0e0a0; background:rgba(100,200,100,0.1); padding:3px 8px; border-radius:4px;">YES examples</span>
-                        </div>
-                        <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                            {% for example in rule.examples %}
-                                {% if example.example_type == 'correct' %}
+                    {% if rule.directives %}
+                    <ul style="margin:6px 0 0; padding-left:16px; color:#c0d8d8; font-size:13px; line-height:1.6;">
+                        {% for d in rule.directives %}
+                        <li style="margin-bottom:4px;">{{ d.directive }}</li>
+                        {% endfor %}
+                    </ul>
+
+                    {% for d in rule.directives %}
+                        {% if d.examples %}
+                        <div style="margin-top:8px;">
+                            {% if d.valence == 'correct' or d.valence == 'yes' %}
+                            <span style="font-size:11px; font-weight:600; color:#a0e0a0; background:rgba(100,200,100,0.1); padding:2px 6px; border-radius:3px;">YES</span>
+                            {% elif d.valence == 'incorrect' or d.valence == 'no' %}
+                            <span style="font-size:11px; font-weight:600; color:#e0a0a0; background:rgba(200,100,100,0.1); padding:2px 6px; border-radius:3px;">NO</span>
+                            {% endif %}
+                            <div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:4px;">
+                                {% for ex in d.examples %}
                                 <div style="display:inline-block; vertical-align:top;">
-                                    <img src="{{ example.image_path }}" class="sidebar-example-img" style="max-width:100px; max-height:75px; border-radius:4px; cursor:pointer; border:2px solid #4a8a4a;" onclick="openImageLightbox(this.src, '{{ example.caption|escapejs }}')">
-                                    {% if example.caption %}<div style="font-size:9px; color:#8a9a9a; margin-top:2px; max-width:100px;">{{ example.caption }}</div>{% endif %}
+                                    <img src="{{ ex.image_link }}" class="sidebar-example-img" style="max-width:90px; max-height:68px; border-radius:4px; cursor:pointer; border:2px solid {% if d.valence == 'correct' or d.valence == 'yes' %}#4a8a4a{% else %}#8a4a4a{% endif %};" onclick="openImageLightbox(this.src, '{{ ex.caption|escapejs }}')">
+                                    {% if ex.caption %}<div style="font-size:9px; color:#8a9a9a; margin-top:2px; max-width:90px;">{{ ex.caption }}</div>{% endif %}
                                 </div>
-                                {% endif %}
-                            {% endfor %}
+                                {% endfor %}
+                            </div>
                         </div>
-                        <div style="margin-top:8px; margin-bottom:8px;">
-                            <span style="font-size:12px; font-weight:600; color:#e0a0a0; background:rgba(200,100,100,0.1); padding:3px 8px; border-radius:4px;">NO examples</span>
-                        </div>
-                        <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                            {% for example in rule.examples %}
-                                {% if example.example_type == 'incorrect' %}
-                                <div style="display:inline-block; vertical-align:top;">
-                                    <img src="{{ example.image_path }}" class="sidebar-example-img" style="max-width:100px; max-height:75px; border-radius:4px; cursor:pointer; border:2px solid #8a4a4a;" onclick="openImageLightbox(this.src, '{{ example.caption|escapejs }}')">
-                                    {% if example.caption %}<div style="font-size:9px; color:#8a9a9a; margin-top:2px; max-width:100px;">{{ example.caption }}</div>{% endif %}
-                                </div>
-                                {% endif %}
-                            {% endfor %}
-                        </div>
-                    </div>
+                        {% endif %}
+                    {% endfor %}
                     {% endif %}
 
                     <div id="dynamic_examples_{{ rule.rule_index }}"></div>
