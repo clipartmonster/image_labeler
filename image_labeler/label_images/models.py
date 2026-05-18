@@ -51,6 +51,7 @@ class BatchAssignment(models.Model):
     batch_id = models.IntegerField()
     large_sub_batch = models.IntegerField()
     payment_amount = models.DecimalField(max_digits=8, decimal_places=2)
+    bonus_amount = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     deadline = models.DateTimeField()
     assigned_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)

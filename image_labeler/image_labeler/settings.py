@@ -311,7 +311,7 @@ LOGIN_REDIRECT_URL = "/label_images/front_page/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 # Labeler payment: default per-batch rate (can be overridden per BatchAssignment).
-LABELER_PAY_PER_BATCH = os.getenv("LABELER_PAY_PER_BATCH", "15.00")
+LABELER_PAY_PER_BATCH = os.getenv("LABELER_PAY_PER_BATCH", "20.00")
 
 # Workforce management defaults (overridable per-batch on BatchAssignment).
 LABELER_DEFAULT_NUM_LABELERS = int(os.getenv("LABELER_DEFAULT_NUM_LABELERS", "2"))

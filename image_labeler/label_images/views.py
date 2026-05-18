@@ -81,6 +81,7 @@ def assign_batch(request):
     batch_id = int(request.POST.get("batch_id", 1))
     large_sub_batch = int(request.POST.get("large_sub_batch", 1))
     payment = request.POST.get("payment_amount", settings.LABELER_PAY_PER_BATCH)
+    bonus = request.POST.get("bonus_amount", "0")
     deadline_str = request.POST.get("deadline")
 
     user = User.objects.get(username=username)
@@ -95,6 +96,7 @@ def assign_batch(request):
         large_sub_batch=large_sub_batch,
         defaults={
             "payment_amount": payment,
+            "bonus_amount": bonus,
             "deadline": deadline_dt,
         },
     )
@@ -428,6 +430,7 @@ def setup_session(request):
                 "batch_id": a.batch_id,
                 "large_sub_batch": a.large_sub_batch,
                 "payment_amount": a.payment_amount,
+                "bonus_amount": getattr(a, "bonus_amount", 0) or 0,
                 "deadline": a.deadline,
                 "deadline_status": deadline_status,
                 "total": total,
@@ -2242,6 +2245,7 @@ def admin_bulk_assign_save(request):
     sub_batches = data.get("sub_batches", [])
     labeler_ids = data.get("labeler_ids", [])
     payment = data.get("payment_amount", settings.LABELER_PAY_PER_BATCH)
+    bonus = data.get("bonus_amount", "0")
     deadline_str = data.get("deadline")
     num_labelers = data.get("num_labelers_target", getattr(settings, "LABELER_DEFAULT_NUM_LABELERS", 2))
 
@@ -2271,6 +2275,7 @@ def admin_bulk_assign_save(request):
                 large_sub_batch=sb["large_sub_batch"],
                 defaults={
                     "payment_amount": payment,
+                    "bonus_amount": bonus,
                     "deadline": deadline_dt,
                     "num_labelers_target": num_labelers,
                 },
@@ -2633,6 +2638,206 @@ def complete_training(request):
         time_seconds=max(time_seconds, 1),
     )
 
+    return JsonResponse({"ok": True})
+
+
+@admin_required
+def admin_manage_training(request):
+    """Admin page to manage training sets per user."""
+    from django.contrib.auth.models import User
+    from .models import BatchAssignment, TrainingBatchAsset
+
+    labeler_users = list(
+        User.objects.filter(is_superuser=False, is_staff=True)
+        .order_by("username")
+        .values_list("username", flat=True)
+    )
+
+    from labeling_api.models import labelling_rules as LR
+    rules = list(
+        LR.objects.filter(task_type__in=[
+            "asset_type", "clip_art_type", "color_fill_type",
+            "mono_color_type", "multi_color_type",
+        ])
+        .values("task_type", "rule_index", "title")
+        .order_by("task_type", "rule_index")
+    )
+
+    training_assignments = list(
+        BatchAssignment.objects.filter(is_training=True)
+        .select_related("user")
+        .values(
+            "id", "user__username", "task_type", "rule_index",
+            "completed_at", "payment_amount",
+        )
+    )
+
+    training_asset_counts = {}
+    for ta in TrainingBatchAsset.objects.values("assignment_id").annotate(cnt=Count("id")):
+        training_asset_counts[ta["assignment_id"]] = ta["cnt"]
+
+    for a in training_assignments:
+        a["asset_count"] = training_asset_counts.get(a["id"], 0)
+
+    return render(request, "admin_manage_training.html", {
+        "labeler_users_json": json.dumps(labeler_users),
+        "rules_json": json.dumps(rules, default=str),
+        "training_assignments_json": json.dumps(training_assignments, default=str),
+    })
+
+
+@admin_required_ajax
+def admin_training_create(request):
+    """AJAX: create a training batch assignment for a user."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    from django.contrib.auth.models import User
+    from .models import BatchAssignment, TrainingBatchAsset
+    from labeling_api.models import assets_w_rule_labels, label_data_selected_assets_new
+
+    data = json.loads(request.body)
+    username = data.get("username")
+    task_type = data.get("task_type")
+    rule_index = int(data.get("rule_index", 0))
+    asset_count = int(data.get("asset_count", 150))
+    min_agreement = float(data.get("min_agreement", 0.9))
+
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return JsonResponse({"error": f"User '{username}' not found"}, status=404)
+
+    from django.utils import timezone
+    from datetime import timedelta
+    deadline = timezone.now() + timedelta(days=30)
+
+    assignment, created = BatchAssignment.objects.get_or_create(
+        user=user,
+        task_type=task_type,
+        rule_index=rule_index,
+        batch_id=0,
+        large_sub_batch=0,
+        defaults={
+            "payment_amount": settings.LABELER_PAY_PER_BATCH,
+            "deadline": deadline,
+            "is_training": True,
+        },
+    )
+
+    reconciled = list(
+        assets_w_rule_labels.objects
+        .filter(task_type=task_type, rule_index=rule_index, percent_agree__gte=min_agreement)
+        .values_list("asset_id", "label")
+    )
+
+    if not reconciled:
+        return JsonResponse({"error": "No reconciled assets found for this rule"}, status=400)
+
+    sampled = random.sample(reconciled, min(asset_count, len(reconciled)))
+    sampled_ids = [a[0] for a in sampled]
+    label_map = {a[0]: a[1] for a in sampled}
+
+    image_links = dict(
+        label_data_selected_assets_new.objects
+        .filter(asset_id__in=sampled_ids)
+        .values_list("asset_id", "image_link")
+    )
+
+    assets_with_links = [
+        (aid, image_links[aid], label_map[aid])
+        for aid in sampled_ids if aid in image_links
+    ]
+
+    if not assets_with_links:
+        return JsonResponse({"error": "No images found for sampled assets"}, status=400)
+
+    new_assets = TrainingBatchAsset.objects.bulk_create(
+        [
+            TrainingBatchAsset(
+                assignment=assignment,
+                asset_id=aid,
+                image_link=link,
+                correct_label=label,
+            )
+            for aid, link, label in assets_with_links
+        ],
+        ignore_conflicts=True,
+    )
+
+    total_count = TrainingBatchAsset.objects.filter(assignment=assignment).count()
+
+    return JsonResponse({
+        "ok": True,
+        "assignment_id": assignment.id,
+        "username": username,
+        "task_type": task_type,
+        "rule_index": rule_index,
+        "assets_added": len(assets_with_links),
+        "total_assets": total_count,
+        "created": created,
+    })
+
+
+@admin_required_ajax
+def admin_training_remove(request):
+    """AJAX: remove a training batch assignment (and its assets)."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    from .models import BatchAssignment, TrainingBatchAsset
+
+    data = json.loads(request.body)
+    assignment_id = data.get("assignment_id")
+
+    try:
+        assignment = BatchAssignment.objects.get(pk=assignment_id, is_training=True)
+    except BatchAssignment.DoesNotExist:
+        return JsonResponse({"error": "Training assignment not found"}, status=404)
+
+    asset_count = TrainingBatchAsset.objects.filter(assignment=assignment).count()
+    TrainingBatchAsset.objects.filter(assignment=assignment).delete()
+    assignment.delete()
+
+    return JsonResponse({"ok": True, "deleted_assets": asset_count})
+
+
+@admin_required_ajax
+def admin_training_assets(request):
+    """AJAX: get asset list for a training assignment."""
+    from .models import BatchAssignment, TrainingBatchAsset
+
+    assignment_id = request.GET.get("assignment_id")
+    try:
+        assignment = BatchAssignment.objects.get(pk=assignment_id, is_training=True)
+    except BatchAssignment.DoesNotExist:
+        return JsonResponse({"error": "Training assignment not found"}, status=404)
+
+    assets = list(
+        TrainingBatchAsset.objects.filter(assignment=assignment)
+        .values("id", "asset_id", "image_link", "correct_label")
+        .order_by("id")
+    )
+    return JsonResponse({"assets": assets, "assignment_id": assignment.id})
+
+
+@admin_required_ajax
+def admin_training_remove_asset(request):
+    """AJAX: remove a single asset from a training set."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    from .models import TrainingBatchAsset
+
+    data = json.loads(request.body)
+    asset_pk = data.get("asset_pk")
+
+    try:
+        asset = TrainingBatchAsset.objects.get(pk=asset_pk)
+    except TrainingBatchAsset.DoesNotExist:
+        return JsonResponse({"error": "Asset not found"}, status=404)
+
+    asset.delete()
     return JsonResponse({"ok": True})
 
 

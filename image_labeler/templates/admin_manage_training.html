@@ -1,0 +1,277 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+<div class="wf-page">
+    <div class="wf-nav">
+        <a href="/label_images/setup_session/">Session Setup</a>
+        <a href="/label_images/admin/labelers/">Labelers</a>
+        <a href="/label_images/admin/bulk_assign/">Bulk Assign</a>
+        <a href="/label_images/admin/training/" class="active">Training</a>
+        <a href="/label_images/admin/performance/">Performance</a>
+        <a href="/label_images/rules/">Rules</a>
+    </div>
+
+    <h1>Manage Training Sets</h1>
+    <p class="wf-muted" style="margin-bottom:18px;">
+        Create, view, and remove training batches for each labeler. Training batches use reconciled assets with known correct answers.
+    </p>
+
+    <!-- Create Training Set -->
+    <div class="wf-card" style="margin-bottom:20px;">
+        <h2 style="margin-top:0; font-size:1rem;">Create Training Set</h2>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Labeler</label>
+                <select id="trainLabeler" class="wf-select" style="width:160px;">
+                    <option value="">-- select --</option>
+                </select>
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Task Type</label>
+                <select id="trainTaskType" class="wf-select" style="width:160px;" onchange="onTrainTaskTypeChange()">
+                    <option value="">-- select --</option>
+                </select>
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Rule</label>
+                <select id="trainRule" class="wf-select" style="width:200px;">
+                    <option value="">-- select task type first --</option>
+                </select>
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Assets</label>
+                <input id="trainAssetCount" type="number" min="10" max="500" value="150" class="wf-input" style="width:80px;">
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Min Agreement</label>
+                <input id="trainMinAgreement" type="number" min="0.5" max="1.0" step="0.05" value="0.9" class="wf-input" style="width:80px;">
+            </div>
+            <button class="wf-btn wf-btn-primary" onclick="createTraining()" style="height:36px;">Create</button>
+        </div>
+        <p id="createTrainStatus" class="wf-muted" style="min-height:1.4em; margin-top:8px;"></p>
+    </div>
+
+    <!-- Existing Training Sets -->
+    <div class="wf-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+            <h2 style="margin:0; font-size:1rem;">Existing Training Sets</h2>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <label class="wf-muted" style="font-size:.8rem;">Filter by labeler:</label>
+                <select id="filterLabeler" class="wf-select" style="width:160px;" onchange="renderTrainingSets()">
+                    <option value="">All</option>
+                </select>
+            </div>
+        </div>
+        <div id="trainingTable" style="max-height:500px; overflow-y:auto;"></div>
+    </div>
+
+    <!-- Asset Preview Modal -->
+    <div id="assetModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:#1e1e2e; border-radius:12px; padding:24px 28px; width:700px; max-width:95vw; max-height:90vh; overflow-y:auto; color:#cdd6f4; font-family:Roboto; position:relative;">
+            <button onclick="closeAssetModal()" style="position:absolute; top:12px; right:16px; background:none; border:none; color:#cdd6f4; font-size:1.4rem; cursor:pointer;">&#x2715;</button>
+            <h2 id="assetModalTitle" style="margin:0 0 16px; font-size:1rem; color:#cba6f7;">Training Assets</h2>
+            <div id="assetModalContent" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:10px;"></div>
+            <p id="assetModalStatus" class="wf-muted" style="margin-top:12px; min-height:1.4em;"></p>
+        </div>
+    </div>
+</div>
+
+<script>
+var _labelers = {{ labeler_users_json|safe }};
+var _rules = {{ rules_json|safe }};
+var _trainingSets = {{ training_assignments_json|safe }};
+
+function getCsrfToken() { var c = document.cookie.match(/csrftoken=([^;]+)/); return c ? c[1] : ''; }
+
+(function init() {
+    var labelerSel = document.getElementById('trainLabeler');
+    var filterSel = document.getElementById('filterLabeler');
+    _labelers.forEach(function(u) {
+        var o = document.createElement('option'); o.value = u; o.textContent = u;
+        labelerSel.appendChild(o);
+        var o2 = o.cloneNode(true);
+        filterSel.appendChild(o2);
+    });
+
+    var ttSet = new Set(_rules.map(function(r) { return r.task_type; }));
+    var ttSel = document.getElementById('trainTaskType');
+    ttSet.forEach(function(tt) {
+        var o = document.createElement('option'); o.value = tt; o.textContent = tt;
+        ttSel.appendChild(o);
+    });
+
+    renderTrainingSets();
+})();
+
+function onTrainTaskTypeChange() {
+    var tt = document.getElementById('trainTaskType').value;
+    var ruleSel = document.getElementById('trainRule');
+    ruleSel.innerHTML = '<option value="">-- select --</option>';
+    _rules.forEach(function(r) {
+        if (r.task_type === tt) {
+            var o = document.createElement('option');
+            o.value = r.rule_index;
+            o.textContent = 'Rule ' + r.rule_index + (r.title ? ' — ' + r.title : '');
+            ruleSel.appendChild(o);
+        }
+    });
+}
+
+function createTraining() {
+    var username = document.getElementById('trainLabeler').value;
+    var taskType = document.getElementById('trainTaskType').value;
+    var ruleIndex = document.getElementById('trainRule').value;
+    var assetCount = document.getElementById('trainAssetCount').value;
+    var minAgreement = document.getElementById('trainMinAgreement').value;
+    var status = document.getElementById('createTrainStatus');
+
+    if (!username || !taskType || !ruleIndex) {
+        status.style.color = '#bd4444';
+        status.textContent = 'Please select a labeler, task type, and rule.';
+        return;
+    }
+
+    status.style.color = '#6f7a7a';
+    status.textContent = 'Creating training set\u2026';
+
+    fetch('/label_images/admin/training/create/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({
+            username: username,
+            task_type: taskType,
+            rule_index: ruleIndex,
+            asset_count: parseInt(assetCount),
+            min_agreement: parseFloat(minAgreement),
+        }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            status.style.color = '#bd4444';
+            status.textContent = data.error;
+            return;
+        }
+        status.style.color = '#5a8a5a';
+        status.textContent = (data.created ? 'Created new' : 'Updated existing') +
+            ' training set for ' + data.username + ': ' + data.task_type +
+            ' rule ' + data.rule_index + ' (' + data.total_assets + ' assets).';
+
+        _trainingSets.push({
+            id: data.assignment_id,
+            user__username: data.username,
+            task_type: data.task_type,
+            rule_index: data.rule_index,
+            asset_count: data.total_assets,
+            completed_at: null,
+            payment_amount: '20.00',
+        });
+        renderTrainingSets();
+    });
+}
+
+function renderTrainingSets() {
+    var filterLabeler = document.getElementById('filterLabeler').value;
+    var filtered = _trainingSets.filter(function(a) {
+        if (filterLabeler && a.user__username !== filterLabeler) return false;
+        return true;
+    });
+
+    if (!filtered.length) {
+        document.getElementById('trainingTable').innerHTML = '<p class="wf-muted" style="text-align:center; padding:20px;">No training sets found.</p>';
+        return;
+    }
+
+    var html = '<table class="wf-table"><thead><tr>' +
+        '<th>Labeler</th><th>Task Type</th><th>Rule</th><th>Assets</th><th>Status</th><th>Actions</th>' +
+        '</tr></thead><tbody>';
+
+    filtered.forEach(function(a) {
+        var status = a.completed_at
+            ? '<span class="wf-badge wf-badge-green">Done</span>'
+            : '<span class="wf-badge wf-badge-gray">Pending</span>';
+        var ruleName = '';
+        _rules.forEach(function(r) {
+            if (r.task_type === a.task_type && r.rule_index == a.rule_index) ruleName = r.title || '';
+        });
+
+        html += '<tr>' +
+            '<td>' + a.user__username + '</td>' +
+            '<td>' + a.task_type + '</td>' +
+            '<td>Rule ' + a.rule_index + (ruleName ? ' — ' + ruleName : '') + '</td>' +
+            '<td>' + (a.asset_count || 0) + '</td>' +
+            '<td>' + status + '</td>' +
+            '<td>' +
+                '<button class="wf-btn wf-btn-sm wf-btn-primary" onclick="viewAssets(' + a.id + ', \'' + a.user__username + '\', \'' + a.task_type + '\', ' + a.rule_index + ')">View</button> ' +
+                '<button class="wf-btn wf-btn-sm wf-btn-danger" onclick="removeTraining(' + a.id + ', this)">Remove</button>' +
+            '</td></tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('trainingTable').innerHTML = html;
+}
+
+function removeTraining(assignmentId, btn) {
+    if (!confirm('Remove this training set and all its assets?')) return;
+    btn.disabled = true;
+
+    fetch('/label_images/admin/training/remove/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({assignment_id: assignmentId}),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert(data.error); btn.disabled = false; return; }
+        _trainingSets = _trainingSets.filter(function(a) { return a.id !== assignmentId; });
+        renderTrainingSets();
+    });
+}
+
+function viewAssets(assignmentId, username, taskType, ruleIndex) {
+    document.getElementById('assetModal').style.display = 'flex';
+    document.getElementById('assetModalTitle').textContent = 'Training Assets — ' + username + ' / ' + taskType + ' Rule ' + ruleIndex;
+    document.getElementById('assetModalContent').innerHTML = '<p class="wf-muted">Loading\u2026</p>';
+    document.getElementById('assetModalStatus').textContent = '';
+
+    fetch('/label_images/admin/training/assets/?assignment_id=' + assignmentId)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            document.getElementById('assetModalContent').innerHTML = '<p style="color:#bd4444;">' + data.error + '</p>';
+            return;
+        }
+        var html = '';
+        data.assets.forEach(function(asset) {
+            var borderColor = asset.correct_label === 1 ? '#5a8a5a' : '#bd4444';
+            var labelText = asset.correct_label === 1 ? 'YES' : 'NO';
+            html += '<div style="position:relative; text-align:center;">' +
+                '<img src="' + asset.image_link + '" style="width:100%; border-radius:6px; border:3px solid ' + borderColor + ';" onclick="openImageLightbox && openImageLightbox(this.src, \'\')">' +
+                '<div style="font-size:10px; color:' + borderColor + '; font-weight:700; margin-top:2px;">' + labelText + '</div>' +
+                '<button onclick="removeAsset(' + asset.id + ', this)" style="position:absolute; top:2px; right:2px; background:rgba(189,68,68,0.85); color:#fff; border:none; border-radius:50%; width:20px; height:20px; font-size:12px; cursor:pointer; line-height:1;">&times;</button>' +
+                '</div>';
+        });
+        document.getElementById('assetModalContent').innerHTML = html || '<p class="wf-muted">No assets in this training set.</p>';
+        document.getElementById('assetModalStatus').textContent = data.assets.length + ' assets total';
+    });
+}
+
+function removeAsset(assetPk, btn) {
+    btn.disabled = true;
+    fetch('/label_images/admin/training/remove_asset/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({asset_pk: assetPk}),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert(data.error); btn.disabled = false; return; }
+        btn.closest('div').remove();
+    });
+}
+
+function closeAssetModal() {
+    document.getElementById('assetModal').style.display = 'none';
+}
+</script>
+{% endblock %}

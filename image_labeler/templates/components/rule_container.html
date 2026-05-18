@@ -7,7 +7,6 @@
                 <h1 class = 'option title'>{{rule.id}}</h1>
             </div>
             <div style = 'display:grid; grid-template-rows:15px auto; align-items: center;'>
-                <!-- <h1 class = 'field_label' style = 'font-size:16px; color:#799494'>Title:</h1> -->
                 <h1 class = 'field_label'> {{rule.title}} </h1>                            
             </div>
 
@@ -19,50 +18,40 @@
 
         <div class = detail style = 'display:none'>
 
-            <div class = 'feature container'>
-                <div></div>
-                <div class = 'manage_rule container' >
+            <div style='display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;'>
+                <!-- Description -->
+                <div class = 'manage_rule container' style='grid-column:1/3;'>
                     <div>
                         <h1 class = 'field_label manage_rule'>Description:</h1>
-                        <h3 class = 'rule text copy'> {{rule.description}} </h3>  
+                        <h3 class = 'rule text copy' style='white-space:pre-wrap;'> {{rule.description}} </h3>  
                     </div>                          
                     <img class = 'image icon' src="{% static 'images/manage_rules/edit_icon.png' %}" >
-                   
                 </div>
-                                        
-            </div>
 
-            <div class = 'feature container'>
-                <div></div>
-                <div class = 'manage_rule container' >
+                <!-- Prompt -->
+                <div class = 'manage_rule container' style='grid-column:1/3;'>
                     <div>
                         <h1 class = 'field_label manage_rule'>Prompt:</h1>
                         <h3 class = 'rule text copy'> {{rule.prompt}} </h3>  
                     </div>                          
                     <img class = 'image icon' src="{% static 'images/manage_rules/edit_icon.png' %}" >
-                    
                 </div>
-                                        
             </div>
 
-            <div class = 'feature container'>
-                <div></div>
-                <div class = 'copy container'>
-                    <h1 class = 'field_label manage_rule'>Directives:</h1>
-                        <div >
-                            {% for directive in rule.directives %}
-                                <div style= "background-color:#c1e4e4; margin-bottom:10px; border-radius:8px; padding:10px">
-                                    <h3 class = 'rule text directives'> {{directive.directive}} </h3>
-                                    <div style = 'display:flex; gap:8px'>
-                                        {% for examples in directive.examples %}
-                                            <img class="manage_rule example thumbnail" src="{{examples.image_link}}"> 
-                                        {% endfor %}
-                                        <img class = "manage_rule example thumbnail" src = "{% static 'images/manage_rules/add_example_icon.png' %}"></img>
-                                    </div>
-                                </div>
+            <!-- Directives section -->
+            <div style='margin-bottom:10px;'>
+                <h1 class = 'field_label manage_rule' style='margin-bottom:8px;'>Directives:</h1>
+                {% for directive in rule.directives %}
+                    <div style="background-color:#c1e4e4; margin-bottom:10px; border-radius:8px; padding:12px;">
+                        <h3 class = 'rule text directives'> {{directive.directive}} </h3>
+                        <div style = 'display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;'>
+                            {% for examples in directive.examples %}
+                                <img class="manage_rule example thumbnail" src="{{examples.image_link}}" style="cursor:pointer;" onclick="this.classList.toggle('manage-rule-expanded')"> 
                             {% endfor %}
-                        </div>                            
-                </div>                     
+                            <img class = "manage_rule example thumbnail" src = "{% static 'images/manage_rules/add_example_icon.png' %}">
+                        </div>
+                    </div>
+                {% endfor %}
             </div>
 
         </div>
@@ -70,4 +59,3 @@
     </div>
    
 </div>
-               

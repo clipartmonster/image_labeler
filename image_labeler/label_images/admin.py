@@ -15,7 +15,7 @@ class UserProfileAdmin(admin.ModelAdmin):
 class BatchAssignmentAdmin(admin.ModelAdmin):
     list_display = (
         "user", "task_type", "rule_index", "batch_id",
-        "large_sub_batch", "payment_amount", "deadline", "completed_at",
+        "large_sub_batch", "payment_amount", "bonus_amount", "deadline", "completed_at",
     )
     list_filter = ("user", "task_type", "completed_at")
     search_fields = ("user__username",)

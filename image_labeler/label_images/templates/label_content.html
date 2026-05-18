@@ -48,7 +48,7 @@
                 {% for img in guide.reference_images.all %}
                     {% if not img.directive %}
                     <div style="display:inline-block; margin:6px 4px 0 0; vertical-align:top;">
-                        <img src="{{ img.image_url }}" style="max-width:120px; max-height:90px; border-radius:4px; border:2px solid {% if img.label == 'yes' %}#4a8a4a{% elif img.label == 'no' %}#8a4a4a{% else %}#3a4a4a{% endif %};">
+                        <img src="{{ img.image_url }}" class="sidebar-example-img" style="max-width:120px; max-height:90px; border-radius:4px; cursor:pointer; border:2px solid {% if img.label == 'yes' %}#4a8a4a{% elif img.label == 'no' %}#8a4a4a{% else %}#3a4a4a{% endif %};" onclick="openImageLightbox(this.src, '{{ img.caption|escapejs }}')">
                         {% if img.caption %}<div style="font-size:10px; color:#8a9a9a; margin-top:2px;">{{ img.caption }}</div>{% endif %}
                     </div>
                     {% endif %}
@@ -159,8 +159,64 @@
     </script>
     {% endif %}
 
+    <!-- Image Lightbox Overlay -->
+    <div id="imageLightbox" style="display:none; position:fixed; inset:0; z-index:2000; background:rgba(0,0,0,0.85); align-items:center; justify-content:center; cursor:zoom-out;" onclick="closeImageLightbox()">
+        <div style="position:relative; max-width:90vw; max-height:90vh;" onclick="event.stopPropagation()">
+            <img id="lightboxImg" src="" style="max-width:90vw; max-height:85vh; border-radius:8px; box-shadow:0 4px 30px rgba(0,0,0,0.5); cursor:grab;" draggable="false">
+            <div id="lightboxCaption" style="text-align:center; color:#e0e0e0; font-size:13px; margin-top:8px; font-family:Roboto,sans-serif;"></div>
+            <button onclick="closeImageLightbox()" style="position:absolute; top:-12px; right:-12px; background:#444; color:#fff; border:none; border-radius:50%; width:30px; height:30px; font-size:18px; cursor:pointer; line-height:1;">&times;</button>
+        </div>
+    </div>
+
+    <!-- Magnify lens for labeling images -->
+    <div id="magnifyLens" style="display:none; position:fixed; width:180px; height:180px; border-radius:50%; border:3px solid #409393; box-shadow:0 4px 20px rgba(0,0,0,0.4); pointer-events:none; z-index:1500; background-repeat:no-repeat; overflow:hidden;"></div>
+
     <script>
     window._taskType = '{{ task_type }}';
+
+    /* Lightbox for enlarging images */
+    function openImageLightbox(src, caption) {
+        var lb = document.getElementById('imageLightbox');
+        var img = document.getElementById('lightboxImg');
+        var cap = document.getElementById('lightboxCaption');
+        img.src = src;
+        cap.textContent = caption || '';
+        lb.style.display = 'flex';
+    }
+    function closeImageLightbox() {
+        document.getElementById('imageLightbox').style.display = 'none';
+    }
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeImageLightbox();
+    });
+
+    /* Magnify lens for label images */
+    (function() {
+        var lens = document.getElementById('magnifyLens');
+        var zoomLevel = 2.5;
+        var activeImg = null;
+
+        document.querySelectorAll('.design.dark.container img.design').forEach(function(img) {
+            img.style.cursor = 'crosshair';
+            img.addEventListener('mouseenter', function() { activeImg = img; lens.style.display = 'block'; });
+            img.addEventListener('mouseleave', function() { activeImg = null; lens.style.display = 'none'; });
+            img.addEventListener('mousemove', function(e) {
+                if (!activeImg) return;
+                var rect = activeImg.getBoundingClientRect();
+                var x = e.clientX - rect.left;
+                var y = e.clientY - rect.top;
+                var percX = x / rect.width;
+                var percY = y / rect.height;
+
+                lens.style.left = (e.clientX - 90) + 'px';
+                lens.style.top = (e.clientY - 90) + 'px';
+                lens.style.backgroundImage = 'url(' + activeImg.src + ')';
+                lens.style.backgroundSize = (rect.width * zoomLevel) + 'px ' + (rect.height * zoomLevel) + 'px';
+                lens.style.backgroundPosition = (-percX * rect.width * zoomLevel + 90) + 'px ' + (-percY * rect.height * zoomLevel + 90) + 'px';
+            });
+        });
+    })();
+
     // Load dynamic examples from RuleExample model
     (function() {
         var taskType = '{{ collection_data.task_type }}';
@@ -174,7 +230,7 @@
                     if (data.yes_examples && data.yes_examples.length) {
                         html += '<div class="examples-section"><h3 class="yes-label">YES examples</h3><div class="example-grid">';
                         data.yes_examples.forEach(function(ex) {
-                            html += '<div class="example-item"><img src="' + ex.image_url + '">';
+                            html += '<div class="example-item"><img src="' + ex.image_url + '" class="sidebar-example-img" onclick="openImageLightbox(this.src, \'' + (ex.caption || '').replace(/'/g, "\\'") + '\')" style="cursor:pointer;">';
                             if (ex.caption) html += '<div class="caption">' + ex.caption + '</div>';
                             html += '</div>';
                         });
@@ -183,7 +239,7 @@
                     if (data.no_examples && data.no_examples.length) {
                         html += '<div class="examples-section"><h3 class="no-label">NO examples</h3><div class="example-grid">';
                         data.no_examples.forEach(function(ex) {
-                            html += '<div class="example-item"><img src="' + ex.image_url + '">';
+                            html += '<div class="example-item"><img src="' + ex.image_url + '" class="sidebar-example-img" onclick="openImageLightbox(this.src, \'' + (ex.caption || '').replace(/'/g, "\\'") + '\')" style="cursor:pointer;">';
                             if (ex.caption) html += '<div class="caption">' + ex.caption + '</div>';
                             html += '</div>';
                         });

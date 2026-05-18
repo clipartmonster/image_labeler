@@ -2,46 +2,100 @@
 
 <div class = 'light container'>
 
-    <div style = 'margin:20px'>
+    <div style = 'margin:20px 20px 10px'>
         <h1 class = 'field_label'>Add a Rule</h1>
     </div>
 
-    <div class = 'rule_container add_rule'>
+    <div class = 'rule_container add_rule' style='display:grid; grid-template-columns:1fr 1fr; gap:20px; padding:20px;'>
 
-        <div style = 'margin:20px'>
-            <h1 class = 'field_label manage_rule'>Title</h1>
-            <input type="text" id = title class="text field add_rule" value = 'title'>
-        </div>
-
-        <div style = 'margin:20px'>
-            <h1 class = 'field_label manage_rule'>Description</h1>
-            <input type="text"  id = description class="text field add_rule"  value = 'description'>
-        </div>
-
-        <div style = 'margin:20px'>
-            <h1 class = 'field_label manage_rule'>Prompt</h1>
-            <input type="text"  id = prompt class="text field add_rule"  value = 'prompt'>
-        </div>
-
-        <div style = 'margin:20px; '>
-            <h1 class = 'field_label manage_rule'>Directive(s)</h1>
-
-            <div class = 'directive container' style = 'display: flex; gap:5px; margin-bottom:10px'>
-
-                <!-- <div class = 'option button circle directive'>
-                    <h1 class = 'option title'>+</h1>
-                </div>
-
-                <div class = 'option button circle directive'>
-                    <h1 class = 'option title'>-</h1>
-                </div> -->
-
-                <input type="text"  id = directive class="text field add_rule directive"  placeholder='directive'>
-            
+        <!-- Left column: form fields -->
+        <div>
+            <div style = 'margin-bottom:16px'>
+                <h1 class = 'field_label manage_rule' style='margin-bottom:4px;'>Title</h1>
+                <input type="text" id = title class="text field add_rule" placeholder='Rule title'>
             </div>
+
+            <div style = 'margin-bottom:16px'>
+                <h1 class = 'field_label manage_rule' style='margin-bottom:4px;'>Description</h1>
+                <textarea id="description" class="text field add_rule" placeholder="Rule description (supports paragraphs)" rows="4" style="width:100%; resize:vertical; white-space:pre-wrap; font-family:Roboto; font-size:16px; color:#596767; border-radius:5px; background-color:#bed3d3; border:2px solid #c6dfdf; padding:8px; box-sizing:border-box;"></textarea>
+            </div>
+
+            <div style = 'margin-bottom:16px'>
+                <h1 class = 'field_label manage_rule' style='margin-bottom:4px;'>Prompt</h1>
+                <input type="text" id = prompt class="text field add_rule" placeholder='Labeling prompt'>
+            </div>
+
+            <div style = 'margin-bottom:16px'>
+                <h1 class = 'field_label manage_rule' style='margin-bottom:4px;'>Directive(s)</h1>
+
+                <div class = 'directive container' style = 'display: flex; gap:5px; margin-bottom:10px'>
+                    <input type="text" id = directive class="text field add_rule directive" placeholder='Add a directive (click to add more)'>
+                </div>
+            </div>
+
+            <button class = 'add_rule' onclick = "add_a_rule()" style='margin-top:8px;'>Add Rule</button>
         </div>
 
-        <button class = 'add_rule' onclick = "add_a_rule()">Add Rule</button>
+        <!-- Right column: image preview -->
+        <div style='background:#a9b9b9; border-radius:10px; padding:16px; display:flex; flex-direction:column; align-items:center; gap:12px;'>
+            <h1 class='field_label manage_rule' style='margin:0; align-self:flex-start;'>Image Preview</h1>
+            <div id="add_rule_image_preview" style='flex:1; display:flex; align-items:center; justify-content:center; width:100%; min-height:200px; background:#bdc7c7; border-radius:8px; border:2px dashed #969d9d; cursor:pointer; overflow:hidden; position:relative;' onclick="document.getElementById('add_rule_image_input').click()">
+                <p id="add_rule_image_placeholder" style='color:#799494; font-family:Roboto; font-size:14px; text-align:center; margin:0;'>Click to add an image<br><span style="font-size:12px;">(or paste a URL below)</span></p>
+                <img id="add_rule_preview_img" src="" style='display:none; max-width:100%; max-height:100%; border-radius:6px; cursor:zoom-in; transition:transform 0.2s;' onclick="event.stopPropagation(); this.classList.toggle('expanded');">
+            </div>
+            <input type="file" id="add_rule_image_input" accept="image/*" style="display:none;" onchange="previewRuleImage(this)">
+            <input type="text" id="add_rule_image_url" class="text field add_rule" placeholder="Or paste image URL here" style="width:100%; box-sizing:border-box;" oninput="previewRuleImageFromUrl(this.value)">
+            <button type="button" onclick="toggleImageExpand()" style="background:#799494; color:#d2e2e2; border:1px solid #6a8a8a; border-radius:5px; padding:6px 14px; font-size:12px; cursor:pointer; font-family:Roboto; font-weight:600;">Expand Image</button>
+        </div>
 
     </div>
 </div>
+
+<style>
+#add_rule_preview_img.expanded {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 90vw;
+    max-height: 90vh;
+    z-index: 2000;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+    cursor: zoom-out;
+}
+#add_rule_preview_img.expanded ~ #add_rule_expand_overlay {
+    display: block;
+}
+</style>
+
+<script>
+function previewRuleImage(input) {
+    if (input.files && input.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function(e) { showRulePreview(e.target.result); };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+function previewRuleImageFromUrl(url) {
+    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+        showRulePreview(url);
+    }
+}
+function showRulePreview(src) {
+    var img = document.getElementById('add_rule_preview_img');
+    var placeholder = document.getElementById('add_rule_image_placeholder');
+    img.src = src;
+    img.style.display = 'block';
+    placeholder.style.display = 'none';
+}
+function toggleImageExpand() {
+    var img = document.getElementById('add_rule_preview_img');
+    if (img.src && img.style.display !== 'none') {
+        if (typeof openImageLightbox === 'function') {
+            openImageLightbox(img.src, '');
+        } else {
+            img.classList.toggle('expanded');
+        }
+    }
+}
+</script>

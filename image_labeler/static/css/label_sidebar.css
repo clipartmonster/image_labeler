@@ -70,6 +70,7 @@
     background: #243838;
     border-radius: 6px;
     border-left: 3px solid #799494;
+    white-space: pre-wrap;
 }
 
 .rules-sidebar .examples-section {
@@ -119,4 +120,12 @@
 .labeling-main {
     width: 100%;
     overflow-x: hidden;
+}
+
+.sidebar-example-img {
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.sidebar-example-img:hover {
+    transform: scale(1.08);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
 }

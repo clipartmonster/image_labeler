@@ -7,6 +7,7 @@
         <a href="/label_images/setup_session/">Session Setup</a>
         <a href="/label_images/admin/labelers/">Labelers</a>
         <a href="/label_images/admin/bulk_assign/" class="active">Bulk Assign</a>
+        <a href="/label_images/admin/training/">Training</a>
         <a href="/label_images/admin/performance/">Performance</a>
         <a href="/label_images/rules/">Rules</a>
     </div>
@@ -60,6 +61,10 @@
         <div>
             <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Payment ($)</label>
             <input id="payInput" type="number" step="0.01" value="{{ default_pay }}" class="wf-input" style="width:100px;">
+        </div>
+        <div>
+            <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Bonus ($)</label>
+            <input id="bonusInput" type="number" step="0.01" value="0" class="wf-input" style="width:100px;" placeholder="0.00">
         </div>
         <div>
             <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Deadline</label>
@@ -259,6 +264,7 @@ function submitAssignments() {
         sub_batches: sbList,
         labeler_ids: Array.from(selectedLabelers).map(Number),
         payment_amount: document.getElementById('payInput').value,
+        bonus_amount: document.getElementById('bonusInput').value || '0',
         deadline: deadline,
         num_labelers_target: parseInt(document.getElementById('numLabelersInput').value),
     };

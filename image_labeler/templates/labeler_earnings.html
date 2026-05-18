@@ -23,7 +23,7 @@
         <h2>Completed Batches</h2>
         <table class="wf-table">
             <thead>
-                <tr><th>Feature</th><th>Task</th><th>Rule</th><th>Batch / Sub</th><th>Payment</th><th>Completed</th></tr>
+                <tr><th>Feature</th><th>Task</th><th>Rule</th><th>Batch / Sub</th><th>Payment</th><th>Bonus</th><th>Completed</th></tr>
             </thead>
             <tbody>
             {% for a in completed_assignments %}
@@ -33,6 +33,7 @@
                     <td>{{ a.rule_index }}</td>
                     <td>{{ a.batch_id }} / {{ a.large_sub_batch }}</td>
                     <td><strong style="color:#5a8a5a;">${{ a.payment_amount }}</strong></td>
+                    <td>{% if a.bonus_amount %}<strong style="color:#4a7a9a;">${{ a.bonus_amount }}</strong>{% else %}—{% endif %}</td>
                     <td>{{ a.completed_at|date:"M d, Y" }}</td>
                 </tr>
             {% endfor %}
@@ -46,7 +47,7 @@
         <h2>In Progress</h2>
         <table class="wf-table">
             <thead>
-                <tr><th>Feature</th><th>Task</th><th>Rule</th><th>Batch / Sub</th><th>Payment</th><th>Deadline</th></tr>
+                <tr><th>Feature</th><th>Task</th><th>Rule</th><th>Batch / Sub</th><th>Payment</th><th>Bonus</th><th>Deadline</th></tr>
             </thead>
             <tbody>
             {% for a in pending_assignments %}
@@ -56,6 +57,7 @@
                     <td>{{ a.rule_index }}</td>
                     <td>{{ a.batch_id }} / {{ a.large_sub_batch }}</td>
                     <td><strong>${{ a.payment_amount }}</strong></td>
+                    <td>{% if a.bonus_amount %}<strong style="color:#4a7a9a;">${{ a.bonus_amount }}</strong>{% else %}—{% endif %}</td>
                     <td>{{ a.deadline|date:"M d, Y" }}</td>
                 </tr>
             {% endfor %}

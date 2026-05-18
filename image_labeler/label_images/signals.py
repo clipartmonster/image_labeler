@@ -31,7 +31,9 @@ def create_profile_for_new_user(sender, instance, created, **kwargs):
     )
 
 
-@receiver(post_save, sender=User)
+## Auto-assign disabled — training sets are now managed manually via the admin UI.
+## To re-enable, uncomment the @receiver decorator below.
+# @receiver(post_save, sender=User)
 def auto_assign_training_batches(sender, instance, created, **kwargs):
     """When a new labeler is created, build training batches from reconciled assets."""
     if not created:
