@@ -811,7 +811,22 @@ function initMeasureOverlay(imgEl, options) {
     var imgData = null;
     var hasTransparency = false;
 
-    // Load through same-origin proxy to bypass CORS restrictions
+    var loadingBanner = document.createElement('div');
+    loadingBanner.style.cssText = 'position:absolute; top:' + imgEl.offsetTop + 'px; left:' + imgEl.offsetLeft + 'px; '
+        + 'width:' + w + 'px; text-align:center; padding:8px 0; z-index:15; '
+        + 'background:rgba(0,0,0,0.7); color:#fff; font:600 13px sans-serif; '
+        + 'border-radius:0 0 6px 6px; pointer-events:none;';
+    loadingBanner.textContent = 'Loading pixel data…';
+    container.appendChild(loadingBanner);
+
+    function onPixelDataReady() {
+        if (loadingBanner.parentNode) loadingBanner.remove();
+    }
+    function onPixelDataFailed() {
+        loadingBanner.textContent = 'Pixel data unavailable – clicks may not register';
+        loadingBanner.style.background = 'rgba(176,48,48,0.85)';
+    }
+
     var proxyUrl = '/label_images/image_proxy/?url=' + encodeURIComponent(imgEl.src);
     var img2 = new Image();
     img2.onload = function() {
@@ -819,13 +834,14 @@ function initMeasureOverlay(imgEl, options) {
         try {
             imgData = srcCtx.getImageData(0, 0, natW, natH);
             srcReady = true;
-            // Detect if image uses transparency
             var d = imgData.data;
             for (var i = 3; i < d.length; i += 16) {
                 if (d[i] < 250) { hasTransparency = true; break; }
             }
+            onPixelDataReady();
         } catch(e) {
             console.warn('Measure overlay: cannot read pixel data', e);
+            onPixelDataFailed();
         }
     };
     img2.onerror = function() {
@@ -841,9 +857,15 @@ function initMeasureOverlay(imgEl, options) {
                 for (var i = 3; i < d.length; i += 16) {
                     if (d[i] < 250) { hasTransparency = true; break; }
                 }
+                onPixelDataReady();
             } catch(e2) {
                 console.warn('Measure overlay: direct load also failed', e2);
+                onPixelDataFailed();
             }
+        };
+        img3.onerror = function() {
+            console.warn('Measure overlay: direct load also failed');
+            onPixelDataFailed();
         };
         img3.src = imgEl.src;
     };
@@ -1580,6 +1602,7 @@ function initMeasureOverlay(imgEl, options) {
         container: container,
         statsBar: statsBar,
         statsBarOwned: !externalStatsTarget,
+        loadingBanner: loadingBanner,
         getSectionCounts: getSectionCounts,
         ignoredSections: ignoredSections,
         toggleSectionIgnored: toggleSectionIgnored,
@@ -1593,6 +1616,9 @@ function initMeasureOverlay(imgEl, options) {
 function teardownMeasureOverlay() {
     if (!_measureState) return;
     _measureState.canvas.remove();
+    if (_measureState.loadingBanner && _measureState.loadingBanner.parentNode) {
+        _measureState.loadingBanner.remove();
+    }
     if (_measureState.statsBar) {
         if (_measureState.statsBarOwned) {
             _measureState.statsBar.remove();

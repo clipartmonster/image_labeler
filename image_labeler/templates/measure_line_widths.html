@@ -184,7 +184,7 @@
 </div>
 
 <script>
-(function() {
+function _mlwBoot() {
     var cards = document.querySelectorAll('.mlw-card');
     var currentIdx = 0;
     var total = cards.length;
@@ -200,6 +200,16 @@
         if (!el) return;
         el.textContent = msg || '';
         el.style.color = kind === 'info' ? '#3a6a6a' : '#b03030';
+    }
+
+    function initOverlayWhenReady(img, overlayOpts, card) {
+        requestAnimationFrame(function() {
+            if (img.offsetWidth > 0 && img.offsetHeight > 0) {
+                initMeasureOverlay(img, overlayOpts);
+            } else {
+                requestAnimationFrame(function() { initMeasureOverlay(img, overlayOpts); });
+            }
+        });
     }
 
     function activateCard(idx) {
@@ -225,9 +235,14 @@
             statsTarget: statsTarget
         };
         if (img.complete && img.naturalWidth) {
-            initMeasureOverlay(img, overlayOpts);
+            initOverlayWhenReady(img, overlayOpts, card);
+        } else if (img.complete && !img.naturalWidth) {
+            setStatus(card, 'Image failed to load. Try skipping this asset.');
         } else {
-            img.onload = function() { initMeasureOverlay(img, overlayOpts); };
+            img.onload = function() { initOverlayWhenReady(img, overlayOpts, card); };
+            img.onerror = function() {
+                setStatus(card, 'Image failed to load. Try skipping this asset.');
+            };
         }
     }
 
@@ -347,7 +362,13 @@
         document.getElementById('mlwDone').style.display = 'block';
         document.getElementById('mlwCounter').textContent = 'Done';
     }
-})();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _mlwBoot);
+} else {
+    _mlwBoot();
+}
 </script>
 
 {% endblock %}
