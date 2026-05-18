@@ -117,6 +117,13 @@ function loadReconcileCount(rule_index) {
             if (btn) btn.style.display = 'none'
             return
         }
+
+        if (task_type === 'line_width_type' && String(rule_index) === '2') {
+            countText.textContent = 'Line width measurement only needs one label per asset — no reconciliation required.'
+            if (btn) btn.style.display = 'none'
+            return
+        }
+
         countText.textContent = 'Loading…'
         if (btn) btn.style.display = 'none'
 

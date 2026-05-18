@@ -192,10 +192,10 @@ def measure_line_widths(request):
     response = requests.get(api_url, json=data, headers=header)
     assets_to_label = json.loads(response.content)["asset_batch"]
 
+    # Only one label per asset is needed — exclude assets measured by anyone.
     from labeling_api.models import line_width_sample_table
     already_sampled = set(
         line_width_sample_table.objects
-        .filter(labeler_id=labeler_id)
         .values_list("asset_id", flat=True)
     )
     assets_to_label = [a for a in assets_to_label if a["asset_id"] not in already_sampled]
