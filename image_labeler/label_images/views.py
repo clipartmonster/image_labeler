@@ -385,6 +385,7 @@ def setup_session(request):
                 "feature_name": rule_titles.get((a.task_type, a.rule_index), ""),
                 "batch_id": a.batch_id,
                 "large_sub_batch": a.large_sub_batch,
+                "payment_amount": a.payment_amount,
                 "total": total,
                 "completed": total if is_done else 0,
                 "progress_pct": 100 if is_done else 0,
