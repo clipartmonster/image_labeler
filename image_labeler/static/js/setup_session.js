@@ -371,6 +371,12 @@ function show_batch_indicator_container(rule_index){
         btn.classList.add('active_rule');
         _modalRuleIndex = ri;
 
+        const task_type = getSelectedTaskType();
+        const bsInput = document.getElementById('batch_size_input');
+        if (bsInput) {
+            bsInput.value = (task_type === 'line_width_type' && String(ri) === '2') ? '100' : '500';
+        }
+
         // show step 2 and load batch/model options
         document.getElementById('sub_batch_step2').style.display = 'block';
         loadBatchAndModelOptions(ri);

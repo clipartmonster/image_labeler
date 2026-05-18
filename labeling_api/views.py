@@ -1724,9 +1724,8 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
         )
         lw_df = pd.DataFrame(list(lw_counts_qs))
         if not lw_df.empty:
-            lw_df["rule_index"] = 1
+            lw_df["rule_index"] = 2
             if not asset_label_counts.empty:
-                # Take the maximum count from either source per asset.
                 combined = pd.concat(
                     [asset_label_counts, lw_df[["asset_id", "rule_index", "_cnt"]]],
                     ignore_index=True,
@@ -1737,10 +1736,17 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
             else:
                 asset_label_counts = lw_df[["asset_id", "rule_index", "_cnt"]]
 
+    # Rule 2 line_width only needs 1 label per asset; others need 2.
     if not asset_label_counts.empty:
         asset_label_counts = asset_label_counts.rename(columns={"_cnt": "count"})
         asset_label_counts["task_type"] = task_type
-        asset_label_counts["completed"] = (asset_label_counts["count"] >= 2).astype(int)
+        if task_type == "line_width_type":
+            asset_label_counts["completed"] = asset_label_counts.apply(
+                lambda r: int(r["count"] >= 1) if r["rule_index"] == 2 else int(r["count"] >= 2),
+                axis=1,
+            )
+        else:
+            asset_label_counts["completed"] = (asset_label_counts["count"] >= 2).astype(int)
         asset_label_counts["one_label"] = (asset_label_counts["count"] == 1).astype(int)
     else:
         asset_label_counts = pd.DataFrame(
