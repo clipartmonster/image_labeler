@@ -2701,7 +2701,6 @@ def admin_training_create(request):
     task_type = data.get("task_type")
     rule_index = int(data.get("rule_index", 0))
     asset_count = int(data.get("asset_count", 150))
-    min_agreement = float(data.get("min_agreement", 0.9))
 
     try:
         user = User.objects.get(username=username)
@@ -2727,7 +2726,7 @@ def admin_training_create(request):
 
     reconciled = list(
         assets_w_rule_labels.objects
-        .filter(task_type=task_type, rule_index=rule_index, percent_agree__gte=min_agreement)
+        .filter(task_type=task_type, rule_index=rule_index)
         .values_list("asset_id", "label")
     )
 

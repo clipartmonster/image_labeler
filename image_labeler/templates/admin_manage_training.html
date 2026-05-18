@@ -43,10 +43,6 @@
                 <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Assets</label>
                 <input id="trainAssetCount" type="number" min="10" max="500" value="150" class="wf-input" style="width:80px;">
             </div>
-            <div>
-                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Min Agreement</label>
-                <input id="trainMinAgreement" type="number" min="0.5" max="1.0" step="0.05" value="0.9" class="wf-input" style="width:80px;">
-            </div>
             <button class="wf-btn wf-btn-primary" onclick="createTraining()" style="height:36px;">Create</button>
         </div>
         <p id="createTrainStatus" class="wf-muted" style="min-height:1.4em; margin-top:8px;"></p>
@@ -123,7 +119,6 @@ function createTraining() {
     var taskType = document.getElementById('trainTaskType').value;
     var ruleIndex = document.getElementById('trainRule').value;
     var assetCount = document.getElementById('trainAssetCount').value;
-    var minAgreement = document.getElementById('trainMinAgreement').value;
     var status = document.getElementById('createTrainStatus');
 
     if (!username || !taskType || !ruleIndex) {
@@ -143,7 +138,6 @@ function createTraining() {
             task_type: taskType,
             rule_index: ruleIndex,
             asset_count: parseInt(assetCount),
-            min_agreement: parseFloat(minAgreement),
         }),
     })
     .then(function(r) { return r.json(); })
