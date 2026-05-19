@@ -137,6 +137,25 @@ class TrainingResult(models.Model):
         return f"{self.user.username} {self.task_type}/rule{self.rule_index}: {self.correct}/{self.total}"
 
 
+class TrainingLabelResponse(models.Model):
+    """Per-asset answer recorded when a labeler completes a training session."""
+    assignment = models.ForeignKey(
+        BatchAssignment, on_delete=models.CASCADE, related_name="training_responses",
+    )
+    training_result = models.ForeignKey(
+        TrainingResult, on_delete=models.CASCADE, related_name="label_responses",
+    )
+    asset_id = models.BigIntegerField()
+    user_answer = models.CharField(max_length=10, help_text="yes, no, or none")
+    is_correct = models.BooleanField()
+
+    class Meta:
+        indexes = [models.Index(fields=["assignment", "asset_id"])]
+
+    def __str__(self):
+        return f"Training {self.asset_id}: {self.user_answer}"
+
+
 # ---------------------------------------------------------------------------
 # Training batch assets — reconciled assets assigned for labeler training
 # ---------------------------------------------------------------------------

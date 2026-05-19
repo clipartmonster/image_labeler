@@ -177,6 +177,7 @@ function direct_hotkey_action(hotkey) {
                 fd.append('correct', stats.correct);
                 fd.append('total', stats.total);
                 fd.append('time_seconds', elapsed);
+                fd.append('answers', JSON.stringify(stats.answers || []));
                 fetch('/label_images/complete_training/', { method: 'POST', body: fd })
                     .finally(function() {
                         window.location.href = '/label_images/setup_session/';
@@ -376,6 +377,11 @@ function close_listing_container(element){
             if (window._trainingStats) {
                 window._trainingStats.total++;
                 if (isCorrect) window._trainingStats.correct++;
+                window._trainingStats.answers.push({
+                    asset_id: assetId,
+                    answer: userAnswer || 'none',
+                    is_correct: isCorrect
+                });
             }
 
             var fb = document.createElement('div');

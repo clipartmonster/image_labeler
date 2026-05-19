@@ -9,7 +9,6 @@
         <a href="/label_images/admin/bulk_assign/">Bulk Assign</a>
         <a href="/label_images/admin/training/">Training</a>
         <a href="/label_images/admin/performance/" class="active">Performance</a>
-        <a href="/label_images/admin/labeler_labels/">Label Review</a>
         <a href="/label_images/rules/">Rules</a>
     </div>
 
@@ -69,10 +68,22 @@
                     <th>Time</th>
                     <th>Per Img</th>
                     <th>Date</th>
+                    <th></th>
                 </tr></thead>
                 <tbody id="trainBody"></tbody>
             </table>
             <p id="trainEmpty" class="wf-muted" style="display:none;">No training results yet.</p>
+
+            <div id="trainDetailWrap" style="display:none; margin-top:20px;">
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                    <button onclick="closeTrainDetail()" style="font-size:12px; padding:4px 12px; background:#8a9c9c; border:none; border-radius:4px; color:#fff; cursor:pointer;">← Back</button>
+                    <h2 id="trainDetailTitle" style="margin:0; font-size:15px; color:#2a3a3a;"></h2>
+                </div>
+                <p id="trainDetailNote" class="wf-muted" style="display:none; margin:0 0 10px; font-size:12px;"></p>
+                <div id="trainDetailStats" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;"></div>
+                <div id="trainDetailGrid" class="ll-grid"></div>
+                <p id="trainDetailEmpty" class="wf-muted" style="display:none;">No labels found.</p>
+            </div>
         </div>
     </div>
 </div>
@@ -103,6 +114,30 @@
 .pf-tag-done { background:#7aaa72; color:#fff; }
 .pf-tag-active { background:#409393; color:#fff; }
 .pf-tag-late { background:#bd4444; color:#fff; }
+.ll-grid {
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap:8px;
+}
+.ll-card {
+    background:#dae2e2; border-radius:6px; overflow:hidden; font-size:11px; color:#2a3a3a;
+}
+.ll-card img {
+    width:100%; aspect-ratio:1/1; object-fit:contain; background:#f0f0f0; display:block;
+}
+.ll-card-body { padding:6px 8px; }
+.ll-card-id { font-size:10px; color:#6f7a7a; }
+.ll-answer { font-weight:700; font-size:13px; margin:2px 0; }
+.ll-right  { color:#2a7a4a; }
+.ll-wrong  { color:#bd4444; }
+.ll-none   { color:#999; font-style:italic; }
+.ll-correct-lbl { color:#6f7a7a; }
+.ll-view-btn {
+    font-size:11px; padding:3px 10px; background:#409393; color:#fff;
+    border:none; border-radius:3px; cursor:pointer; white-space:nowrap;
+}
+.ll-view-btn:hover { background:#357e7e; }
+.ll-view-btn:disabled { background:#b0c4c4; cursor:default; }
 </style>
 
 <script>
@@ -117,6 +152,7 @@ var _perfData = null;
 })();
 
 function switchTab(name) {
+    if (name !== 'training') closeTrainDetail();
     ['work','training'].forEach(function(t) {
         document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
         document.querySelector('.pf-tab[data-tab="' + t + '"]').className = 'pf-tab' + (t === name ? ' active' : '');
@@ -168,16 +204,101 @@ function renderTraining(rows) {
     var tb = document.getElementById('trainBody');
     tb.innerHTML = '';
     document.getElementById('trainEmpty').style.display = rows.length ? 'none' : '';
+    closeTrainDetail();
     rows.forEach(function(r) {
+        var reviewBtn = '';
+        if (r.assignment_id) {
+            reviewBtn = '<button class="ll-view-btn" onclick="loadTrainDetail('
+                + r.assignment_id + ',' + (r.training_result_id || 'null') + ',\''
+                + (r.feature || r.task_type + '/r' + r.rule_index).replace(/'/g, "\\'")
+                + '\',' + (r.has_detail ? 'true' : 'false') + ','
+                + r.correct + ',' + r.total + ')">Review</button>';
+        }
         var tr = document.createElement('tr');
         tr.innerHTML = '<td>' + (r.feature || r.task_type + '/r' + r.rule_index) + '</td>'
             + '<td><span class="' + accClass(r.accuracy_pct) + '">' + r.accuracy_pct + '%</span></td>'
             + '<td>' + r.correct + '/' + r.total + '</td>'
             + '<td>' + r.time_min + 'm</td>'
             + '<td>' + r.per_image_sec + 's</td>'
-            + '<td style="font-size:11px;color:#6f7a7a;">' + r.date + '</td>';
+            + '<td style="font-size:11px;color:#6f7a7a;">' + r.date + '</td>'
+            + '<td>' + reviewBtn + '</td>';
         tb.appendChild(tr);
     });
+}
+
+function loadTrainDetail(assignmentId, trainingResultId, title, hasDetail, correct, total) {
+    document.getElementById('trainDetailTitle').textContent = title;
+    document.getElementById('trainDetailGrid').innerHTML = '';
+    document.getElementById('trainDetailStats').innerHTML = '';
+    document.getElementById('trainDetailEmpty').style.display = 'none';
+    var note = document.getElementById('trainDetailNote');
+    note.style.display = 'none';
+    note.textContent = '';
+
+    document.querySelector('#tab-training .pf-tbl').style.display = 'none';
+    document.getElementById('trainEmpty').style.display = 'none';
+    document.getElementById('trainStats').style.display = 'none';
+    document.getElementById('trainDetailWrap').style.display = '';
+
+    var url = '/label_images/admin/labeler_labels/detail/?assignment_id=' + assignmentId;
+    if (trainingResultId) url += '&training_result_id=' + trainingResultId;
+
+    fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        var labels = d.labels || [];
+        var answered = labels.filter(function(l) { return l.answer; });
+
+        if (d.legacy_score) {
+            note.style.display = '';
+            note.textContent = 'Per-image answers were not saved for this session. Overall score: '
+                + d.legacy_score.correct + '/' + d.legacy_score.total + '.';
+        } else if (!hasDetail && answered.length === 0) {
+            note.style.display = '';
+            note.textContent = 'Per-image answers were not saved for this session. Overall score: '
+                + correct + '/' + total + '.';
+        }
+
+        document.getElementById('trainDetailStats').innerHTML =
+            makeCard('Total', labels.length)
+            + makeCard('Answered', answered.length || (d.legacy_score ? d.legacy_score.total : 0))
+            + makeCard('Correct', (answered.filter(function(l) { return l.right === true; }).length)
+                + (answered.length ? '/' + answered.length : (d.legacy_score ? '/' + d.legacy_score.total : '')),
+                d.legacy_score ? Math.round(d.legacy_score.correct / d.legacy_score.total * 100) + '%' : '');
+
+        if (!labels.length) {
+            document.getElementById('trainDetailEmpty').style.display = '';
+            return;
+        }
+
+        var grid = document.getElementById('trainDetailGrid');
+        labels.forEach(function(l) {
+            var answerHtml = l.answer
+                ? '<div class="ll-answer">' + l.answer + '</div>'
+                : '<div class="ll-answer ll-none">—</div>';
+            var extraHtml = '';
+            if (d.is_training) {
+                var rightHtml = '';
+                if (l.right === true) rightHtml = '<span class="ll-right">✓ Correct</span>';
+                else if (l.right === false) rightHtml = '<span class="ll-wrong">✗ Wrong</span>';
+                else rightHtml = '<span class="ll-none">Not recorded</span>';
+                extraHtml = '<div style="font-size:11px;margin-top:2px;"><span class="ll-correct-lbl">Correct: </span>'
+                    + (l.correct || '—') + ' &nbsp;' + rightHtml + '</div>';
+            }
+            var card = document.createElement('div');
+            card.className = 'll-card';
+            card.innerHTML = '<img src="' + (l.image_link || '') + '" loading="lazy" onerror="this.style.display=\'none\'">'
+                + '<div class="ll-card-body"><div class="ll-card-id">' + l.asset_id + '</div>'
+                + answerHtml + extraHtml + '</div>';
+            grid.appendChild(card);
+        });
+    });
+}
+
+function closeTrainDetail() {
+    document.getElementById('trainDetailWrap').style.display = 'none';
+    document.querySelector('#tab-training .pf-tbl').style.display = '';
+    document.getElementById('trainStats').style.display = '';
 }
 
 function renderWork() {

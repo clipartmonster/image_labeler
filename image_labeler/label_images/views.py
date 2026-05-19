@@ -2343,9 +2343,15 @@ def admin_performance_data(request):
         rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
 
     # --- Training results ---
+    training_assignments = {
+        (a.task_type, a.rule_index): a.id
+        for a in BatchAssignment.objects.filter(user=user, is_training=True)
+    }
     training_rows = []
     for tr in TrainingResult.objects.filter(user=user).order_by("-completed_at"):
         mins = round(tr.time_seconds / 60, 1)
+        assignment_id = training_assignments.get((tr.task_type, tr.rule_index))
+        has_detail = tr.label_responses.exists() if assignment_id else False
         training_rows.append({
             "task_type": tr.task_type,
             "rule_index": tr.rule_index,
@@ -2356,6 +2362,9 @@ def admin_performance_data(request):
             "time_min": mins,
             "per_image_sec": round(tr.time_seconds / tr.total, 1) if tr.total > 0 else 0,
             "date": tr.completed_at.strftime("%b %d, %Y %I:%M %p") if tr.completed_at else "",
+            "assignment_id": assignment_id,
+            "training_result_id": tr.id,
+            "has_detail": has_detail,
         })
 
     # Training summary
@@ -2484,11 +2493,11 @@ def admin_labeler_labels_assignments(request):
 @admin_required_ajax
 def admin_labeler_labels_detail(request):
     """AJAX: return every label the labeler chose for one assignment."""
-    from django.contrib.auth.models import User
     from labeling_api.models import prompt_responses, label_data_selected_assets_new
-    from .models import TrainingBatchAsset
+    from .models import TrainingBatchAsset, TrainingLabelResponse, TrainingResult
 
     assignment_id = request.GET.get("assignment_id")
+    training_result_id = request.GET.get("training_result_id")
     if not assignment_id:
         return JsonResponse({"error": "assignment_id required"}, status=400)
     try:
@@ -2497,14 +2506,30 @@ def admin_labeler_labels_detail(request):
         return JsonResponse({"error": "not found"}, status=404)
 
     labeler_id = a.user.username
+    legacy_score = None
 
     if a.is_training:
         assets = {
             ta.asset_id: {"image_link": ta.image_link, "correct_label": ta.correct_label}
             for ta in TrainingBatchAsset.objects.filter(assignment=a)
         }
+        responses = {}
+        if training_result_id:
+            for r in TrainingLabelResponse.objects.filter(
+                assignment=a, training_result_id=training_result_id,
+            ):
+                responses[r.asset_id] = r.user_answer
+            if not responses:
+                tr = TrainingResult.objects.filter(pk=training_result_id).first()
+                if tr:
+                    legacy_score = {"correct": tr.correct, "total": tr.total}
+        else:
+            for r in TrainingLabelResponse.objects.filter(assignment=a).order_by(
+                "-training_result__completed_at", "asset_id",
+            ):
+                if r.asset_id not in responses:
+                    responses[r.asset_id] = r.user_answer
     else:
-        # Try with all four filters first; fall back to batch_id+large_sub_batch only
         assets_qs = label_data_selected_assets_new.objects.filter(
             batch_id=a.batch_id,
             large_sub_batch=a.large_sub_batch,
@@ -2518,24 +2543,21 @@ def admin_labeler_labels_detail(request):
             ).values("asset_id", "image_link")
         assets = {row["asset_id"]: {"image_link": row["image_link"]} for row in assets_qs}
 
-    # Most-recent response per asset from this labeler.
-    # Filter by task_type + labeler_id only (not rule_index) since the unmanaged
-    # prompt_responses table may store rule_index in a type that causes ORM mismatches.
-    # The asset_id set already scopes us to the right batch/rule.
-    responses = {}
-    if assets:
-        for pr in prompt_responses.objects.filter(
-            asset_id__in=list(assets.keys()),
-            task_type=a.task_type,
-        ).order_by("asset_id", "datetime_created"):
-            # Match labeler_id case-insensitively and filter rule_index in Python
-            if pr.labeler_id.strip().lower() == labeler_id.strip().lower():
-                if str(pr.rule_index) == str(a.rule_index):
-                    responses[pr.asset_id] = pr.prompt_response
+        responses = {}
+        if assets:
+            for pr in prompt_responses.objects.filter(
+                asset_id__in=list(assets.keys()),
+                task_type=a.task_type,
+            ).order_by("asset_id", "datetime_created"):
+                if pr.labeler_id.strip().lower() == labeler_id.strip().lower():
+                    if str(pr.rule_index) == str(a.rule_index):
+                        responses[pr.asset_id] = pr.prompt_response
 
     rows = []
     for asset_id, info in assets.items():
         answer = responses.get(asset_id)
+        if answer == "none":
+            answer = None
         row = {
             "asset_id": asset_id,
             "image_link": info["image_link"],
@@ -2554,6 +2576,7 @@ def admin_labeler_labels_detail(request):
         "task_type": a.task_type,
         "rule_index": a.rule_index,
         "labels": rows,
+        "legacy_score": legacy_score,
     })
 
 
@@ -2754,32 +2777,55 @@ def complete_training(request):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
-    from .models import BatchAssignment, TrainingResult
+    from .models import BatchAssignment, TrainingResult, TrainingLabelResponse
     task_type = request.POST.get("task_type")
-    rule_index = request.POST.get("rule_index")
+    rule_index = int(request.POST.get("rule_index"))
     correct = int(request.POST.get("correct", 0))
     total = int(request.POST.get("total", 0))
     time_seconds = int(request.POST.get("time_seconds", 0))
+    answers_raw = request.POST.get("answers", "[]")
+
+    try:
+        answers = json.loads(answers_raw)
+    except (json.JSONDecodeError, TypeError):
+        answers = []
 
     from django.utils import timezone as tz
-    # Mark as completed (first time only)
-    BatchAssignment.objects.filter(
+    assignment = BatchAssignment.objects.filter(
         user=request.user,
         task_type=task_type,
         rule_index=rule_index,
         is_training=True,
-        completed_at__isnull=True,
-    ).update(completed_at=tz.now())
+    ).first()
 
-    # Always record a training result (including redo attempts)
-    TrainingResult.objects.create(
+    # Mark as completed (first time only)
+    if assignment:
+        BatchAssignment.objects.filter(
+            pk=assignment.pk,
+            completed_at__isnull=True,
+        ).update(completed_at=tz.now())
+
+    training_result = TrainingResult.objects.create(
         user=request.user,
         task_type=task_type,
-        rule_index=int(rule_index),
+        rule_index=rule_index,
         total=total,
         correct=correct,
         time_seconds=max(time_seconds, 1),
     )
+
+    if assignment and answers:
+        TrainingLabelResponse.objects.bulk_create([
+            TrainingLabelResponse(
+                assignment=assignment,
+                training_result=training_result,
+                asset_id=int(item["asset_id"]),
+                user_answer=item.get("answer") or "none",
+                is_correct=bool(item.get("is_correct")),
+            )
+            for item in answers
+            if item.get("asset_id") is not None
+        ])
 
     return JsonResponse({"ok": True})
 
