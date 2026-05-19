@@ -3,21 +3,16 @@
 
 {% block content %}
 
-
 <div class = 'listing light container rules'>
     
     <div style = 'display:flex; flex-direction:column; align-items:center'>
 
-        <h1 class = "label_option example">Correct Mismatched Labels</h1>
+        <h1 class = "label_option example">{{ task_type }} — Rule {{ rule_index }}{% for rule in label_rules %} — {{ rule.title }}{% endfor %}</h1>
 
     </div>
 
     <div class = 'design dark container'>
         <h1 class = 'label_option intro'>
-            <!-- <p>In this HITT, you will answer a series of yes no questions for a number of images. </p>
-            <p></p>Please review the information below to understand the criteria needed to determine if an image should receive a yes or no for each question. These sections include numerous examples to make it easier for you to determine the right response for each question. Make sure to click on them to see the reason why they receive a yes or a no.</p> 
-            <p></p>Underneath the information you will see several images with each one accompanied by five questions. For many of the images you will not have to answer all questions the questions. In this HITT you will only to use the ‘1’ and ‘2’ keys on the keyboard. </p>
-             -->
             
             <p>Criteria for classifying these images can be found to the left. Click the button that says rules.</p>
 
@@ -32,21 +27,6 @@
                     {% for rule in label_rules %}
                                                
                             <div class = 'label_option rule_container'>
-                                
-                                <div style = 'display:grid; grid-template-columns: 25px 1fr;' >
-                                    <h1 class = 'label_option example'>{{rule.rule_index}}</h1>
-                                    <div >
-                                        <h1 class = 'label_option example'>{{rule.title}}</h1>
-                                        <h1 class = 'label_option rule'>{{rule.directive}}</h1>
-  
-                                        <ul>
-                                            {% for directive in rule.directives %}
-                                                <li><h1 class = 'label_option rule'>{{directive.directive}}</h1></li>
-                                            {% endfor %}
-                                        </ul>
-    
-                                    </div>
-                                </div>
 
                                 <div style = 'display:flex; gap:10px; flex-wrap:wrap; '>
                                     

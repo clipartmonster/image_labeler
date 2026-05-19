@@ -804,6 +804,7 @@ def reconcile_labels(request):
         "label_content.html",
         {
             "task_type": task_type,
+            "rule_index": rule_index,
             "labeler_id": labeler_id,
             "labeler_source": labeler_source,
             "assets_to_label": assets_to_label,
@@ -1661,6 +1662,8 @@ def correct_mismatch_labels(request):
         "collection_data": collection_data,
         "label_rules": label_rules,
         "prompt": prompt,
+        "task_type": task_type,
+        "rule_index": rule_index,
     }
 
     return render(request, "correct_mismatch_labels.html", data)
