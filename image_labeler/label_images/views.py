@@ -2419,6 +2419,126 @@ def admin_performance_data(request):
 
 
 # ---------------------------------------------------------------------------
+# Admin: labeler label review
+# ---------------------------------------------------------------------------
+
+@admin_required_ajax
+def admin_labeler_labels(request):
+    """Page: pick a labeler, browse their assignments, see every label they chose."""
+    from django.contrib.auth.models import User
+    labelers = list(
+        User.objects.filter(is_staff=True, is_superuser=False)
+        .order_by("username")
+        .values("id", "username")
+    )
+    return render(request, "admin_labeler_labels.html", {
+        "labelers_json": json.dumps(labelers, default=str),
+    })
+
+
+@admin_required_ajax
+def admin_labeler_labels_assignments(request):
+    """AJAX: return all assignments for a user."""
+    from django.contrib.auth.models import User
+    from labeling_api.models import labelling_rules as LR
+
+    user_id = request.GET.get("user_id")
+    if not user_id:
+        return JsonResponse({"error": "user_id required"}, status=400)
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "not found"}, status=404)
+
+    rule_titles = {
+        (r["task_type"], r["rule_index"]): r["title"]
+        for r in LR.objects.values("task_type", "rule_index", "title")
+    }
+
+    rows = []
+    for a in BatchAssignment.objects.filter(user=user).order_by("-assigned_at"):
+        rows.append({
+            "id": a.id,
+            "task_type": a.task_type,
+            "rule_index": a.rule_index,
+            "feature": rule_titles.get((a.task_type, a.rule_index), ""),
+            "batch_id": a.batch_id,
+            "sub_batch": a.large_sub_batch,
+            "is_training": a.is_training,
+            "completed": a.completed_at is not None,
+            "assigned_at": a.assigned_at.strftime("%b %d, %Y") if a.assigned_at else "",
+        })
+    return JsonResponse({"username": user.username, "assignments": rows})
+
+
+@admin_required_ajax
+def admin_labeler_labels_detail(request):
+    """AJAX: return every label the labeler chose for one assignment."""
+    from django.contrib.auth.models import User
+    from labeling_api.models import prompt_responses, label_data_selected_assets_new
+    from .models import TrainingBatchAsset
+
+    assignment_id = request.GET.get("assignment_id")
+    if not assignment_id:
+        return JsonResponse({"error": "assignment_id required"}, status=400)
+    try:
+        a = BatchAssignment.objects.select_related("user").get(pk=assignment_id)
+    except BatchAssignment.DoesNotExist:
+        return JsonResponse({"error": "not found"}, status=404)
+
+    labeler_id = a.user.username
+
+    if a.is_training:
+        assets = {
+            ta.asset_id: {"image_link": ta.image_link, "correct_label": ta.correct_label}
+            for ta in TrainingBatchAsset.objects.filter(assignment=a)
+        }
+    else:
+        assets = {
+            row["asset_id"]: {"image_link": row["image_link"]}
+            for row in label_data_selected_assets_new.objects.filter(
+                batch_id=a.batch_id,
+                large_sub_batch=a.large_sub_batch,
+                task_type=a.task_type,
+                rule_index=a.rule_index,
+            ).values("asset_id", "image_link")
+        }
+
+    # Most-recent response per asset from this labeler
+    responses = {}
+    for pr in prompt_responses.objects.filter(
+        asset_id__in=list(assets.keys()),
+        labeler_id=labeler_id,
+        task_type=a.task_type,
+        rule_index=a.rule_index,
+    ).order_by("asset_id", "datetime_created"):
+        responses[pr.asset_id] = pr.prompt_response
+
+    rows = []
+    for asset_id, info in assets.items():
+        answer = responses.get(asset_id)
+        row = {
+            "asset_id": asset_id,
+            "image_link": info["image_link"],
+            "answer": answer,
+        }
+        if a.is_training:
+            correct_label = info["correct_label"]
+            correct_str = "yes" if correct_label == 1 else "no"
+            row["correct"] = correct_str
+            row["right"] = (answer == correct_str) if answer else None
+        rows.append(row)
+
+    return JsonResponse({
+        "assignment_id": a.id,
+        "is_training": a.is_training,
+        "task_type": a.task_type,
+        "rule_index": a.rule_index,
+        "labels": rows,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Admin: gold-standard import from reconciled labels
 # ---------------------------------------------------------------------------
 
