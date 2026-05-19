@@ -7,7 +7,8 @@
     
     <div style = 'display:flex; flex-direction:column; align-items:center'>
 
-        <h1 class = "label_option example">{{ task_type }} — Rule {{ rule_index }}{% for rule in label_rules %} — {{ rule.title }}{% endfor %}</h1>
+        <h1 class = "label_option example" style='font-size:1.4em;'>{% for rule in label_rules %}{{ rule.title }}{% endfor %}</h1>
+        <span style='font-size:0.9em; color:#888;'>({{ task_type }}, {{ rule_index }})</span>
 
     </div>
 
@@ -31,7 +32,6 @@
                                 <div style = 'display:flex; gap:10px; flex-wrap:wrap; '>
                                     
                                     <div class='label_option thumbnail container correct'>
-                                        <h2 class = "label_option label">yes</h2>
 
                                         <div class = 'label_option thumbnail panel' >
 
@@ -51,7 +51,6 @@
                                 
 
                                     <div class='label_option thumbnail container incorrect'>
-                                        <h2 class = "label_option label">no</h2>
                                         
                                         <div class = 'label_option thumbnail panel' >
                                             {% for example in rule.examples %}
