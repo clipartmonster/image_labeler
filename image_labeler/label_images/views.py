@@ -2457,6 +2457,16 @@ def admin_labeler_labels_assignments(request):
 
     rows = []
     for a in BatchAssignment.objects.filter(user=user).order_by("-assigned_at"):
+        # For training, completed_at is set by complete_training view.
+        # For work batches, completed_at may never be auto-set — use LabelingSession.
+        if a.is_training:
+            completed = a.completed_at is not None
+        else:
+            has_session = LabelingSession.objects.filter(
+                batch_assignment=a, ended_at__isnull=False
+            ).exists()
+            completed = a.completed_at is not None or has_session
+
         rows.append({
             "id": a.id,
             "task_type": a.task_type,
@@ -2465,7 +2475,7 @@ def admin_labeler_labels_assignments(request):
             "batch_id": a.batch_id,
             "sub_batch": a.large_sub_batch,
             "is_training": a.is_training,
-            "completed": a.completed_at is not None,
+            "completed": completed,
             "assigned_at": a.assigned_at.strftime("%b %d, %Y") if a.assigned_at else "",
         })
     return JsonResponse({"username": user.username, "assignments": rows})
@@ -2494,25 +2504,34 @@ def admin_labeler_labels_detail(request):
             for ta in TrainingBatchAsset.objects.filter(assignment=a)
         }
     else:
-        assets = {
-            row["asset_id"]: {"image_link": row["image_link"]}
-            for row in label_data_selected_assets_new.objects.filter(
+        # Try with all four filters first; fall back to batch_id+large_sub_batch only
+        assets_qs = label_data_selected_assets_new.objects.filter(
+            batch_id=a.batch_id,
+            large_sub_batch=a.large_sub_batch,
+            task_type=a.task_type,
+            rule_index=a.rule_index,
+        ).values("asset_id", "image_link")
+        if not assets_qs.exists():
+            assets_qs = label_data_selected_assets_new.objects.filter(
                 batch_id=a.batch_id,
                 large_sub_batch=a.large_sub_batch,
-                task_type=a.task_type,
-                rule_index=a.rule_index,
             ).values("asset_id", "image_link")
-        }
+        assets = {row["asset_id"]: {"image_link": row["image_link"]} for row in assets_qs}
 
-    # Most-recent response per asset from this labeler
+    # Most-recent response per asset from this labeler.
+    # Filter by task_type + labeler_id only (not rule_index) since the unmanaged
+    # prompt_responses table may store rule_index in a type that causes ORM mismatches.
+    # The asset_id set already scopes us to the right batch/rule.
     responses = {}
-    for pr in prompt_responses.objects.filter(
-        asset_id__in=list(assets.keys()),
-        labeler_id=labeler_id,
-        task_type=a.task_type,
-        rule_index=a.rule_index,
-    ).order_by("asset_id", "datetime_created"):
-        responses[pr.asset_id] = pr.prompt_response
+    if assets:
+        for pr in prompt_responses.objects.filter(
+            asset_id__in=list(assets.keys()),
+            task_type=a.task_type,
+        ).order_by("asset_id", "datetime_created"):
+            # Match labeler_id case-insensitively and filter rule_index in Python
+            if pr.labeler_id.strip().lower() == labeler_id.strip().lower():
+                if str(pr.rule_index) == str(a.rule_index):
+                    responses[pr.asset_id] = pr.prompt_response
 
     rows = []
     for asset_id, info in assets.items():
