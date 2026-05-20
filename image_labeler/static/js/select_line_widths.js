@@ -48,7 +48,7 @@ function draw3x3GridOnCanvas(canvas) {
     const squareWidth = canvas.width / cols;
     const squareHeight = canvas.height / rows;
     let circleIndex = 0;
-    let currentRadius = 10;
+    let currentWidth = 10;
 
     const clickedCircles = []; // store all circle positions
     const greenSquares = new Set(); // store row,col strings like "1,2" that were clicked
@@ -78,18 +78,18 @@ function draw3x3GridOnCanvas(canvas) {
         }
 
         if (hoverX !== null && hoverY !== null) {
-            drawCircle(hoverX, hoverY, 'rgba(0, 25, 255, 0.3)', '#FFF', currentRadius); // 👈 updated
+            drawCircle(hoverX, hoverY, 'rgba(0, 25, 255, 0.3)', '#FFF', currentWidth); // 👈 updated
         }
 
-        for (const { x, y, radius } of clickedCircles) {
-            drawCircle(x, y, 'rgba(0, 25, 255, 0.5)', '#FFF', radius); // 👈 updated
+        for (const { x, y, width } of clickedCircles) {
+            drawCircle(x, y, 'rgba(0, 25, 255, 0.5)', '#FFF', width); // 👈 updated
         }
     }
 
     // 🔧 Modified to accept radius
-    function drawCircle(x, y, fillColor, strokeColor, radius) {
+    function drawCircle(x, y, fillColor, strokeColor, width) {
         ctx.beginPath();
-        ctx.arc(x, y, radius, 0, 2 * Math.PI);
+        ctx.arc(x, y, width, 0, 2 * Math.PI);
         ctx.fillStyle = fillColor;
         ctx.fill();
         ctx.strokeStyle = strokeColor;
@@ -112,7 +112,7 @@ function draw3x3GridOnCanvas(canvas) {
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
 
-        clickedCircles.push({ x, y, radius: currentRadius, index: circleIndex++ });
+        clickedCircles.push({ x, y, width: currentWidth, index: circleIndex++ });
 
         const col = Math.floor(x / squareWidth);
         const row = Math.floor(y / squareHeight);
@@ -126,7 +126,7 @@ function draw3x3GridOnCanvas(canvas) {
 
         drawCanvas(x, y);
 
-        collect_line_width_sample(canvas, circleIndex, x, y, currentRadius, canvas.width, canvas.height);
+        collect_line_width_sample(canvas, circleIndex, currentWidth, canvas.width, canvas.height);
     });
 
     canvas.addEventListener('contextmenu', (event) => {
@@ -172,14 +172,12 @@ function draw3x3GridOnCanvas(canvas) {
 
 
 
-function collect_line_width_sample(canvas, sample_index, x_coord, y_coord, radius, image_width, image_height){
+function collect_line_width_sample(canvas, sample_index, width, image_width, image_height){
 
     data = {
         asset_id:canvas.getAttribute('asset_id'), 
         sample_index:sample_index,
-        x_coord:x_coord,
-        y_coord:y_coord,
-        radius:radius,
+        width:width,
         image_width:image_width,
         image_height:image_height,
         labeler_id:document.getElementById('labeler_id').getAttribute('labeler_id')
