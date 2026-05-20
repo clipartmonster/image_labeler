@@ -1233,7 +1233,9 @@ def get_batch_for_viewing(request: Request) -> JsonResponse:
         )
         .groupby(["asset_id"])
         .agg(
-            samples=("prompt_response", "count"), yes_responses=("yes_response", "sum"), date_labeled=("datetime_created", "max")
+            samples=("prompt_response", "count"),
+            yes_responses=("yes_response", "sum"),
+            date_labeled=("datetime_created", "max"),
         )
         .assign(no_responses=lambda x: x.samples - x.yes_responses)
         .assign(percent_agree=lambda x: x.yes_responses / x.samples)
@@ -1339,6 +1341,7 @@ def get_asset_batch(request: Request) -> JsonResponse:
     if hasattr(request, "user") and request.user.is_authenticated:
         if request.user.is_staff and not request.user.is_superuser:
             from label_images.models import BatchAssignment
+
             has_assignment = BatchAssignment.objects.filter(
                 user=request.user,
                 task_type=task_type,
@@ -1676,6 +1679,7 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
     )
     from django.contrib.auth.models import User
     from django.db.models import F
+
     labeler_ids = list(
         User.objects.filter(is_staff=True)
         .annotate(display_name=F("username"))
@@ -1742,11 +1746,17 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
         asset_label_counts["task_type"] = task_type
         if task_type == "line_width_type":
             asset_label_counts["completed"] = asset_label_counts.apply(
-                lambda r: int(r["count"] >= 1) if r["rule_index"] == 2 else int(r["count"] >= 2),
+                lambda r: (
+                    int(r["count"] >= 1)
+                    if r["rule_index"] == 2
+                    else int(r["count"] >= 2)
+                ),
                 axis=1,
             )
         else:
-            asset_label_counts["completed"] = (asset_label_counts["count"] >= 2).astype(int)
+            asset_label_counts["completed"] = (asset_label_counts["count"] >= 2).astype(
+                int
+            )
         asset_label_counts["one_label"] = (asset_label_counts["count"] == 1).astype(int)
     else:
         asset_label_counts = pd.DataFrame(
@@ -2852,13 +2862,10 @@ def collect_line_width_sample(request: Request) -> JsonResponse:
     entry = line_width_sample_table(
         asset_id=request.data.get("asset_id", None),
         sample_index=request.data.get("sample_index", None),
-        x_coord=request.data.get("x_coord", None),
-        y_coord=request.data.get("y_coord", None),
-        radius=request.data.get("radius", None),
+        width=request.data.get("width", None),
         image_width=request.data.get("image_width", None),
         image_height=request.data.get("image_height", None),
         labeler_id=request.data.get("labeler_id", None),
-        status="valid",
     )
 
     from django.db import connection
@@ -2950,13 +2957,10 @@ def label_line_width_as_invalid(request: Request) -> JsonResponse:
         entry = line_width_sample_table(
             asset_id=asset_id,
             sample_index=None,
-            x_coord=None,
-            y_coord=None,
-            radius=None,
+            width=None,
             image_width=None,
             image_height=None,
             labeler_id=labeler_id,
-            status="invalid",
         )
         entry.save()
 
@@ -4103,7 +4107,13 @@ def get_reconcile_count(request):
     rule_index = request.GET.get("rule_index")
 
     if not task_type or rule_index is None:
-        return JsonResponse({"status": "failed", "explanation": "task_type and rule_index are required"}, status=400)
+        return JsonResponse(
+            {
+                "status": "failed",
+                "explanation": "task_type and rule_index are required",
+            },
+            status=400,
+        )
 
     try:
         rule_index = int(rule_index)
@@ -4121,7 +4131,10 @@ def get_reconcile_count(request):
 
         disputed = (
             pr_df.groupby("asset_id")
-            .agg(samples=("prompt_response", "count"), yes=("prompt_response", lambda x: (x == "yes").sum()))
+            .agg(
+                samples=("prompt_response", "count"),
+                yes=("prompt_response", lambda x: (x == "yes").sum()),
+            )
             .reset_index()
             .query("samples > 1")
             .assign(pct=lambda x: x.yes / x.samples)
@@ -4175,11 +4188,13 @@ def record_labeling_session(request):
             labels_completed=labels_completed,
         )
 
-        return JsonResponse({
-            "status": "ok",
-            "session_id": session.id,
-            "labels_per_hour": session.labels_per_hour,
-        })
+        return JsonResponse(
+            {
+                "status": "ok",
+                "session_id": session.id,
+                "labels_per_hour": session.labels_per_hour,
+            }
+        )
 
     except Exception as e:
         logger.exception("record_labeling_session error")
@@ -4203,10 +4218,12 @@ def get_rule_examples(request):
     yes_examples = [e for e in examples if e["label"] == "yes"]
     no_examples = [e for e in examples if e["label"] == "no"]
 
-    return JsonResponse({
-        "yes_examples": yes_examples,
-        "no_examples": no_examples,
-    })
+    return JsonResponse(
+        {
+            "yes_examples": yes_examples,
+            "no_examples": no_examples,
+        }
+    )
 
 
 @csrf_exempt
@@ -4225,10 +4242,13 @@ def get_similar_labeled_examples(request):
 
         config = apps.get_app_config("labeling_api")
         if config.dino_model is None:
-            return JsonResponse({
-                "status": "unavailable",
-                "explanation": "Embedding search unavailable (torch/models not loaded).",
-            }, status=503)
+            return JsonResponse(
+                {
+                    "status": "unavailable",
+                    "explanation": "Embedding search unavailable (torch/models not loaded).",
+                },
+                status=503,
+            )
 
         asset = label_data_selected_assets_new.objects.filter(asset_id=asset_id).first()
         if not asset:
@@ -4252,16 +4272,20 @@ def get_similar_labeled_examples(request):
 
         results = []
         for item in similar_scores:
-            if int(item["asset_id"]) in labeled_assets and str(item["asset_id"]) != str(asset_id):
+            if int(item["asset_id"]) in labeled_assets and str(item["asset_id"]) != str(
+                asset_id
+            ):
                 asset_row = label_data_selected_assets_new.objects.filter(
                     asset_id=item["asset_id"]
                 ).first()
                 if asset_row:
-                    results.append({
-                        "asset_id": item["asset_id"],
-                        "score": item["score"],
-                        "image_link": asset_row.image_link,
-                    })
+                    results.append(
+                        {
+                            "asset_id": item["asset_id"],
+                            "score": item["score"],
+                            "image_link": asset_row.image_link,
+                        }
+                    )
                 if len(results) >= 8:
                     break
 

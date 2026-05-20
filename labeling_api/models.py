@@ -868,7 +868,7 @@ class line_width_label_table(models.Model):
 class line_width_sample_table(models.Model):
     """Sampled points used for line-width measurement/QA.
 
-    **Table:** ``label_data.line_width_samples``
+    **Table:** ``label_data.line_width_responses``
 
     **Inputs (ORM):** ``asset_id``, ``sample_index``, ``labeler_id``.
 
@@ -878,18 +878,15 @@ class line_width_sample_table(models.Model):
     id = models.AutoField(primary_key=True)
     asset_id = models.BigIntegerField()
     sample_index = models.IntegerField()
-    x_coord = models.IntegerField()
-    y_coord = models.IntegerField()
-    radius = models.IntegerField()
+    width = models.IntegerField()
     image_width = models.IntegerField()
     image_height = models.IntegerField()
     labeler_id = models.CharField()
-    status = models.CharField()
     date_created = models.DateField(auto_now_add=True)
 
     class Meta:
         managed = False
-        db_table = "label_data.line_width_samples"
+        db_table = "label_data.line_width_responses"
 
 
 class mismatched_labels_table(models.Model):
