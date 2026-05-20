@@ -2859,10 +2859,14 @@ def collect_line_width_sample(request: Request) -> JsonResponse:
         line-width labeling UI.
     """
 
+    width = request.data.get("width")
+    if width is None:
+        width = request.data.get("radius")
+
     entry = line_width_sample_table(
         asset_id=request.data.get("asset_id", None),
         sample_index=request.data.get("sample_index", None),
-        width=request.data.get("width", None),
+        width=width,
         image_width=request.data.get("image_width", None),
         image_height=request.data.get("image_height", None),
         labeler_id=request.data.get("labeler_id", None),
