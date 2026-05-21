@@ -735,12 +735,67 @@ def collect_prompt_internal_source(request: Request) -> JsonResponse:
 
     new_entry.save()
 
+    _check_batch_complete(labeler_id, task_type, rule_index)
+
     result = {
         "status": "success",
         "explanation": "added prompt for asset " + str(asset_id),
     }
 
     return JsonResponse(result, safe=False)
+
+
+def _check_batch_complete(labeler_id, task_type, rule_index):
+    """Mark the labeler's BatchAssignment as completed when every asset is
+    labeled or flagged.  Called after each prompt response and flag."""
+    from label_images.models import BatchAssignment
+    from django.contrib.auth.models import User
+    from django.utils import timezone as tz
+
+    try:
+        user = User.objects.get(username=labeler_id)
+    except User.DoesNotExist:
+        return
+
+    if user.is_superuser:
+        return
+
+    assignments = BatchAssignment.objects.filter(
+        user=user,
+        task_type=task_type,
+        rule_index=int(rule_index),
+        is_training=False,
+        completed_at__isnull=True,
+    )
+    for a in assignments:
+        batch_asset_ids = set(
+            label_data_selected_assets_new.objects.filter(
+                task_type=a.task_type,
+                rule_index=a.rule_index,
+                batch_id=a.batch_id,
+                large_sub_batch=a.large_sub_batch,
+            ).values_list("asset_id", flat=True)
+        )
+        if not batch_asset_ids:
+            continue
+
+        labeled_ids = set(
+            prompt_responses.objects.filter(
+                task_type=a.task_type,
+                rule_index=a.rule_index,
+                labeler_id=labeler_id,
+                asset_id__in=batch_asset_ids,
+            ).values_list("asset_id", flat=True).distinct()
+        )
+        flagged_ids = set(
+            label_issues_table.objects.filter(
+                asset_id__in=batch_asset_ids,
+            ).values_list("asset_id", flat=True)
+        )
+        covered = labeled_ids | flagged_ids
+        if batch_asset_ids.issubset(covered):
+            a.completed_at = tz.now()
+            a.save(update_fields=["completed_at"])
 
 
 @csrf_exempt
@@ -825,6 +880,9 @@ def collect_prompt(request: Request) -> JsonResponse:
             "status": "success",
             "explanation": "added prompt for asset " + str(asset_id),
         }
+
+    if labeler_id and task_type and rule_index:
+        _check_batch_complete(labeler_id, task_type, rule_index)
 
     return JsonResponse(result, safe=False)
 
@@ -1355,21 +1413,36 @@ def get_asset_batch(request: Request) -> JsonResponse:
                     safe=False,
                 )
 
-    # Assets with 2+ prompt responses for this task/rule are complete — exclude them.
-    completed_ids = set(
-        prompt_responses.objects.filter(task_type=task_type, rule_index=rule_index)
-        .values("asset_id")
-        .annotate(_cnt=Count("id"))
-        .filter(_cnt__gte=2)
-        .values_list("asset_id", flat=True)
+    # Determine the current labeler's username for per-labeler exclusion.
+    # Admins (superusers) are exempt so they can re-label assets.
+    labeler_username = None
+    if hasattr(request, "user") and request.user.is_authenticated and not request.user.is_superuser:
+        labeler_username = request.user.username
+
+    batch_asset_ids = set(
+        label_data_selected_assets_new.objects.filter(
+            task_type=task_type,
+            rule_index=rule_index,
+            batch_id=batch_id,
+            large_sub_batch__in=large_sub_batch,
+        ).values_list("asset_id", flat=True)
     )
 
-    # Optionally exclude assets with known label issues.
-    flagged_ids = (
-        set(label_issues_table.objects.values_list("asset_id", flat=True))
-        if remove_flagged_assets
-        else set()
-    )
+    # Exclude assets this labeler has already labeled (>=1 response).
+    if labeler_username:
+        already_labeled = set(
+            prompt_responses.objects.filter(
+                task_type=task_type,
+                rule_index=rule_index,
+                labeler_id=labeler_username,
+                asset_id__in=batch_asset_ids,
+            ).values_list("asset_id", flat=True).distinct()
+        )
+    else:
+        already_labeled = set()
+
+    # Always exclude assets with known label issues (flagged).
+    flagged_ids = set(label_issues_table.objects.values_list("asset_id", flat=True))
 
     asset_batch = list(
         label_data_selected_assets_new.objects.filter(
@@ -1378,7 +1451,7 @@ def get_asset_batch(request: Request) -> JsonResponse:
             batch_id=batch_id,
             large_sub_batch__in=large_sub_batch,
         )
-        .exclude(asset_id__in=completed_ids)
+        .exclude(asset_id__in=already_labeled)
         .exclude(asset_id__in=flagged_ids)
         .values("asset_id", "image_link")
     )
@@ -2213,6 +2286,8 @@ def collect_label_issue(request: Request) -> JsonResponse:
     )
 
     entry.save()
+
+    _check_batch_complete(labeler_id, task_type, rule_index)
 
     result = {
         "status": "success",

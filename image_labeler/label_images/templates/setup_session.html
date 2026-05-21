@@ -162,6 +162,12 @@
         </div>
     </div>
 
+    {% if messages %}
+    {% for msg in messages %}
+    <div style="background:#e8f5e9; border:1px solid #a5d6a7; border-radius:8px; padding:10px 16px; margin-bottom:14px; color:#2e7d32; font-size:14px;">{{ msg }}</div>
+    {% endfor %}
+    {% endif %}
+
     <div class="lb-tabs">
         <button class="lb-tab active" onclick="lbSwitchTab('work', this)">Work</button>
         <button class="lb-tab" onclick="lbSwitchTab('training', this)">Training</button>

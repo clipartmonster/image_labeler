@@ -393,26 +393,36 @@ def setup_session(request):
                 "training_done": is_done,
             })
 
+        from labeling_api.models import label_issues_table
+
         work_assignments = []
         for a in work_qs:
-            total = label_data_selected_assets_new.objects.filter(
-                task_type=a.task_type,
-                rule_index=a.rule_index,
-                batch_id=a.batch_id,
-                large_sub_batch=a.large_sub_batch,
-            ).count()
-            completed = prompt_responses.objects.filter(
-                task_type=a.task_type,
-                rule_index=a.rule_index,
-                asset_id__in=label_data_selected_assets_new.objects.filter(
+            batch_asset_ids = set(
+                label_data_selected_assets_new.objects.filter(
                     task_type=a.task_type,
                     rule_index=a.rule_index,
                     batch_id=a.batch_id,
                     large_sub_batch=a.large_sub_batch,
-                ).values_list("asset_id", flat=True),
-            ).values("asset_id").annotate(
-                cnt=Count("id")
-            ).filter(cnt__gte=2).count()
+                ).values_list("asset_id", flat=True)
+            )
+            total = len(batch_asset_ids)
+
+            # Count assets this labeler has responded to (>=1 response)
+            labeled_ids = set(
+                prompt_responses.objects.filter(
+                    task_type=a.task_type,
+                    rule_index=a.rule_index,
+                    labeler_id=request.user.username,
+                    asset_id__in=batch_asset_ids,
+                ).values_list("asset_id", flat=True).distinct()
+            )
+            # Count flagged assets as completed too
+            flagged_ids = set(
+                label_issues_table.objects.filter(
+                    asset_id__in=batch_asset_ids,
+                ).values_list("asset_id", flat=True)
+            )
+            completed = len(labeled_ids | flagged_ids)
 
             days_left = (a.deadline - now).days
             if days_left < 0:
@@ -626,6 +636,11 @@ def mturk_redirect(request):
             test_questions = future_test.result()
 
         assets_to_label = assets_content["asset_batch"]
+
+    if not is_training and not assets_to_label and not request.user.is_superuser:
+        from django.contrib import messages
+        messages.info(request, "This batch is already complete — all assets have been labeled or flagged.")
+        return redirect("setup_session")
 
     collection_data = {
         "task_type": task_type,
@@ -2632,15 +2647,20 @@ def admin_subbatch_completion(request):
     if not task_type:
         return JsonResponse({"error": "task_type required"}, status=400)
 
-    # Assets with 2+ responses for this task_type
+    from labeling_api.models import label_issues_table
+
+    # Assets with at least 1 response for this task_type (any labeler)
     done_ids = set(
         prompt_responses.objects
         .filter(task_type=task_type)
-        .values("asset_id", "rule_index")
-        .annotate(cnt=Count("id"))
-        .filter(cnt__gte=2)
         .values_list("asset_id", flat=True)
+        .distinct()
     )
+    # Flagged assets also count as done
+    flagged_ids = set(
+        label_issues_table.objects.values_list("asset_id", flat=True)
+    )
+    done_ids = done_ids | flagged_ids
 
     # Tally per sub-batch
     stats = defaultdict(lambda: [0, 0])  # [total, done]

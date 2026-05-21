@@ -255,6 +255,25 @@ function activate_listing_container(listing_container) {
         img.src = img.dataset.src;
         img.removeAttribute('data-src');
     }
+    if (img) {
+        img.onerror = function() {
+            var cd = listing_container.querySelector('.collection_data');
+            var rv = listing_container.querySelector('.label_option.rule_validator');
+            if (cd && rv) {
+                var flagData = {
+                    asset_id: cd.getAttribute('asset_id'),
+                    task_type: cd.getAttribute('task_type'),
+                    rule_index: rv.getAttribute('rule_index'),
+                    labeler_id: cd.getAttribute('labeler_id') || new URLSearchParams(window.location.search).get('labeler_id') || ''
+                };
+                if (!window._trainingAnswers) {
+                    api_collect_label_issue(flagData);
+                }
+            }
+            var keyEvt = new KeyboardEvent('keydown', { key: '2', code: 'Digit2', keyCode: 50, bubbles: true, cancelable: true });
+            document.dispatchEvent(keyEvt);
+        };
+    }
 
     // 2. Preload image for the NEXT container (to reduce waiting time)
     // Find the next sibling that is a listing container
@@ -704,7 +723,8 @@ function flag_asset_issue(event){
 
     data = {asset_id:collection_data.getAttribute('asset_id'), 
             task_type:collection_data.getAttribute('task_type'),
-            rule_index:rule_validator.getAttribute('rule_index')
+            rule_index:rule_validator.getAttribute('rule_index'),
+            labeler_id:collection_data.getAttribute('labeler_id') || new URLSearchParams(window.location.search).get('labeler_id') || ''
             }
 
 
