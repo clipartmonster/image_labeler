@@ -53,11 +53,26 @@
                     <option value="all">All labelers</option>
                 </select>
             </div>
+            <div>
+                <label style="font-size:11px; color:#6f7a7a;">Disagreement between:</label>
+                <select id="lcPairA" class="wf-select" style="width:auto; font-size:12px; padding:3px 8px;" onchange="renderGrid()">
+                    <option value="">—</option>
+                </select>
+                <span style="font-size:11px; color:#6f7a7a;"> &amp; </span>
+                <select id="lcPairB" class="wf-select" style="width:auto; font-size:12px; padding:3px 8px;" onchange="renderGrid()">
+                    <option value="">—</option>
+                </select>
+            </div>
         </div>
 
         <div id="lcTableWrap" style="overflow-x:auto;"></div>
         <p id="lcEmpty" class="wf-muted" style="display:none;">No assets match the filter.</p>
     </div>
+</div>
+
+<!-- Image lightbox -->
+<div id="lcLightbox" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:9999; cursor:pointer; align-items:center; justify-content:center;" onclick="this.style.display='none';">
+    <img id="lcLightboxImg" style="max-width:90vw; max-height:90vh; object-fit:contain; border-radius:6px; box-shadow:0 4px 24px rgba(0,0,0,0.5);">
 </div>
 
 <style>
@@ -138,10 +153,16 @@ function loadComparison() {
         var labelers = d.labelers || [];
         var lSel = document.getElementById('lcLabelerFilter');
         lSel.innerHTML = '<option value="all">All labelers</option>';
+        var pairA = document.getElementById('lcPairA');
+        var pairB = document.getElementById('lcPairB');
+        pairA.innerHTML = '<option value="">\u2014</option>';
+        pairB.innerHTML = '<option value="">\u2014</option>';
         labelers.forEach(function(l) {
             var o = document.createElement('option');
             o.value = l; o.textContent = l;
             lSel.appendChild(o);
+            pairA.appendChild(o.cloneNode(true));
+            pairB.appendChild(o.cloneNode(true));
         });
 
         var total = d.total || 0;
@@ -166,10 +187,18 @@ function makeStat(label, val, sub) {
         + (sub ? '<div class="lc-stat-sub">' + sub + '</div>' : '') + '</div>';
 }
 
+function openLcLightbox(src) {
+    var lb = document.getElementById('lcLightbox');
+    document.getElementById('lcLightboxImg').src = src;
+    lb.style.display = 'flex';
+}
+
 function renderGrid() {
     if (!_lcData) return;
     var filter = document.getElementById('lcFilter').value;
     var labelerFilter = document.getElementById('lcLabelerFilter').value;
+    var pairA = document.getElementById('lcPairA').value;
+    var pairB = document.getElementById('lcPairB').value;
     var labelers = _lcData.labelers || [];
     var assets = (_lcData.assets || []).filter(function(a) {
         if (filter === 'disagreement') return a.disagreement;
@@ -185,13 +214,22 @@ function renderGrid() {
         });
     }
 
+    // Pair disagreement filter
+    if (pairA && pairB && pairA !== pairB) {
+        assets = assets.filter(function(a) {
+            var va = a.labels[pairA], vb = a.labels[pairB];
+            return va && vb && va !== vb;
+        });
+    }
+
     var wrap = document.getElementById('lcTableWrap');
     document.getElementById('lcEmpty').style.display = assets.length ? 'none' : '';
 
     if (!assets.length) { wrap.innerHTML = ''; return; }
 
     var headerCols = labelers.map(function(l) {
-        var highlight = (labelerFilter !== 'all' && l === labelerFilter) ? ' style="background:#c0dada;"' : '';
+        var highlight = '';
+        if ((labelerFilter !== 'all' && l === labelerFilter) || l === pairA || l === pairB) highlight = ' style="background:#c0dada;"';
         return '<th' + highlight + '>' + l + '</th>';
     }).join('');
 
@@ -201,11 +239,15 @@ function renderGrid() {
     assets.forEach(function(a) {
         var rowClass = a.disagreement ? ' class="lc-disagree"' : '';
         var flagClass = a.flagged ? ' lc-flag' : '';
+        var pairDisagree = pairA && pairB && pairA !== pairB && a.labels[pairA] && a.labels[pairB] && a.labels[pairA] !== a.labels[pairB];
+
         var cells = labelers.map(function(l) {
             var val = a.labels[l];
-            if (!val) return '<td class="lc-none' + flagClass + '">\u2014</td>';
+            var extra = '';
+            if (pairDisagree && (l === pairA || l === pairB)) extra = ' background:#fde8c8;';
+            if (!val) return '<td class="lc-none' + flagClass + '"' + (extra ? ' style="' + extra + '"' : '') + '>\u2014</td>';
             var cls = val === 'yes' ? 'lc-yes' : val === 'no' ? 'lc-no' : '';
-            return '<td class="' + cls + flagClass + '">' + val + '</td>';
+            return '<td class="' + cls + flagClass + '"' + (extra ? ' style="' + extra + '"' : '') + '>' + val + '</td>';
         }).join('');
 
         var statusParts = [];
@@ -215,7 +257,7 @@ function renderGrid() {
         if (!statusParts.length) statusParts.push('<span style="color:#2a6a4a; font-size:11px;">OK</span>');
 
         html += '<tr' + rowClass + '>'
-            + '<td' + (flagClass ? ' class="' + flagClass.trim() + '"' : '') + '><img class="lc-thumb" src="' + (a.image_link || '') + '" loading="lazy" onerror="this.style.display=\'none\'" onclick="window.open(this.src)"></td>'
+            + '<td' + (flagClass ? ' class="' + flagClass.trim() + '"' : '') + '><img class="lc-thumb" src="' + (a.image_link || '') + '" loading="lazy" onerror="this.style.display=\'none\'" onclick="openLcLightbox(this.src)"></td>'
             + '<td' + (flagClass ? ' class="' + flagClass.trim() + '"' : '') + '>' + a.asset_id + '</td>'
             + cells
             + '<td' + (flagClass ? ' class="' + flagClass.trim() + '"' : '') + '>' + statusParts.join(' ') + '</td>'
