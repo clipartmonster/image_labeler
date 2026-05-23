@@ -70,9 +70,18 @@
     </div>
 </div>
 
-<!-- Image lightbox -->
-<div id="lcLightbox" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:9999; cursor:pointer; align-items:center; justify-content:center;" onclick="this.style.display='none';">
-    <img id="lcLightboxImg" style="max-width:90vw; max-height:90vh; object-fit:contain; border-radius:6px; box-shadow:0 4px 24px rgba(0,0,0,0.5);">
+<!-- Image lightbox with info card + zoom -->
+<div id="lcLightbox" onclick="if(event.target===this)closeLcLightbox();">
+    <button id="lcLbPrev" onclick="stepLcLightbox(-1)">&#8249;</button>
+    <div id="lcLbCenter">
+        <div id="lcLbZoomWrap">
+            <img id="lcLightboxImg">
+            <div id="lcLbLens"></div>
+        </div>
+        <div id="lcLbCard"></div>
+        <div id="lcLbCounter"></div>
+    </div>
+    <button id="lcLbNext" onclick="stepLcLightbox(1)">&#8250;</button>
 </div>
 
 <style>
@@ -93,6 +102,26 @@
 .lc-stat-label { font-size:10px; color:#5d6565; text-transform:uppercase; letter-spacing:.5px; margin-bottom:2px; }
 .lc-stat-val { font-size:20px; font-weight:700; color:#2a3a3a; }
 .lc-stat-sub { font-size:11px; color:#6f7a7a; }
+
+/* Lightbox */
+#lcLightbox { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.80); z-index:9999; align-items:center; justify-content:center; }
+#lcLbCenter { display:flex; flex-direction:column; align-items:center; gap:12px; max-width:90vw; }
+#lcLbZoomWrap { position:relative; overflow:hidden; border-radius:6px; cursor:crosshair; background:#111; }
+#lcLightboxImg { max-width:80vw; max-height:60vh; object-fit:contain; display:block; transition:none; }
+#lcLbLens { display:none; position:absolute; pointer-events:none; width:200px; height:200px; border:2px solid rgba(255,255,255,0.6); border-radius:50%; background-repeat:no-repeat; box-shadow:0 0 0 9999px rgba(0,0,0,0.35); }
+#lcLbCard { background:#1e2a2a; border-radius:8px; padding:12px 16px; color:#d6dfdf; min-width:280px; max-width:80vw; box-shadow:0 4px 16px rgba(0,0,0,0.4); }
+#lcLbCard table { width:100%; border-collapse:collapse; }
+#lcLbCard td { padding:3px 8px; font-size:13px; }
+#lcLbCard .lb-labeler { color:#8fb8b8; font-weight:600; }
+#lcLbCard .lb-yes { color:#5be08a; font-weight:700; }
+#lcLbCard .lb-no { color:#f07070; font-weight:700; }
+#lcLbCard .lb-none { color:#666; font-style:italic; }
+#lcLbCard .lb-asset-id { font-size:11px; color:#7a8a8a; margin-bottom:4px; }
+#lcLbCounter { font-size:12px; color:#8a9a9a; }
+#lcLbPrev, #lcLbNext { position:absolute; top:50%; transform:translateY(-50%); background:rgba(255,255,255,0.12); border:none; color:#fff; font-size:40px; width:48px; height:80px; border-radius:6px; cursor:pointer; z-index:10; transition:background 0.15s; }
+#lcLbPrev:hover, #lcLbNext:hover { background:rgba(255,255,255,0.25); }
+#lcLbPrev { left:16px; }
+#lcLbNext { right:16px; }
 </style>
 
 <script>
@@ -187,11 +216,90 @@ function makeStat(label, val, sub) {
         + (sub ? '<div class="lc-stat-sub">' + sub + '</div>' : '') + '</div>';
 }
 
-function openLcLightbox(src) {
+var _lbFiltered = [];   // current filtered asset list (kept in sync by renderGrid)
+var _lbIdx = 0;         // current lightbox index
+
+function openLcLightbox(idx) {
+    _lbIdx = idx;
     var lb = document.getElementById('lcLightbox');
-    document.getElementById('lcLightboxImg').src = src;
     lb.style.display = 'flex';
+    showLbAsset();
 }
+
+function closeLcLightbox() {
+    document.getElementById('lcLightbox').style.display = 'none';
+}
+
+function stepLcLightbox(dir) {
+    if (!_lbFiltered.length) return;
+    _lbIdx = (_lbIdx + dir + _lbFiltered.length) % _lbFiltered.length;
+    showLbAsset();
+}
+
+function showLbAsset() {
+    var a = _lbFiltered[_lbIdx];
+    if (!a) return;
+    var img = document.getElementById('lcLightboxImg');
+    img.src = a.image_link || '';
+
+    // Build label card
+    var labelers = (_lcData && _lcData.labelers) || [];
+    var rows = labelers.map(function(l) {
+        var val = a.labels[l];
+        var cls = !val ? 'lb-none' : val === 'yes' ? 'lb-yes' : 'lb-no';
+        var txt = val || '\u2014';
+        return '<tr><td class="lb-labeler">' + l + '</td><td class="' + cls + '">' + txt + '</td></tr>';
+    }).join('');
+
+    var statusHtml = '';
+    if (a.disagreement) statusHtml += '<span style="color:#e8a040; font-weight:700; margin-right:6px;">Disagree</span>';
+    if (a.flagged) statusHtml += '<span style="color:#f07070;">Flagged</span>';
+    if (!a.disagreement && !a.flagged && a.num_labeled > 0) statusHtml += '<span style="color:#5be08a;">OK</span>';
+
+    document.getElementById('lcLbCard').innerHTML =
+        '<div class="lb-asset-id">Asset: ' + a.asset_id + (statusHtml ? ' &nbsp; ' + statusHtml : '') + '</div>'
+        + '<table>' + rows + '</table>';
+
+    document.getElementById('lcLbCounter').textContent = (_lbIdx + 1) + ' / ' + _lbFiltered.length;
+
+    // Reset zoom lens
+    document.getElementById('lcLbLens').style.display = 'none';
+}
+
+// Zoom lens on hover
+(function() {
+    var wrap = document.getElementById('lcLbZoomWrap');
+    var img = document.getElementById('lcLightboxImg');
+    var lens = document.getElementById('lcLbLens');
+    var ZOOM = 2.5;
+
+    wrap.addEventListener('mousemove', function(e) {
+        if (!img.naturalWidth) return;
+        lens.style.display = 'block';
+        var rect = img.getBoundingClientRect();
+        var x = e.clientX - rect.left;
+        var y = e.clientY - rect.top;
+        var lw = lens.offsetWidth / 2, lh = lens.offsetHeight / 2;
+        lens.style.left = (x - lw) + 'px';
+        lens.style.top = (y - lh) + 'px';
+        var bgW = img.naturalWidth * ZOOM;
+        var bgH = img.naturalHeight * ZOOM;
+        var scaleX = bgW / rect.width;
+        var scaleY = bgH / rect.height;
+        lens.style.backgroundImage = 'url(' + img.src + ')';
+        lens.style.backgroundSize = bgW + 'px ' + bgH + 'px';
+        lens.style.backgroundPosition = (-x * scaleX + lw) + 'px ' + (-y * scaleY + lh) + 'px';
+    });
+    wrap.addEventListener('mouseleave', function() { lens.style.display = 'none'; });
+})();
+
+// Arrow key navigation + Escape
+document.addEventListener('keydown', function(e) {
+    if (document.getElementById('lcLightbox').style.display !== 'flex') return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); stepLcLightbox(1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); stepLcLightbox(-1); }
+    else if (e.key === 'Escape') { closeLcLightbox(); }
+});
 
 function renderGrid() {
     if (!_lcData) return;
@@ -225,6 +333,8 @@ function renderGrid() {
     var wrap = document.getElementById('lcTableWrap');
     document.getElementById('lcEmpty').style.display = assets.length ? 'none' : '';
 
+    _lbFiltered = assets;
+
     if (!assets.length) { wrap.innerHTML = ''; return; }
 
     var headerCols = labelers.map(function(l) {
@@ -236,7 +346,7 @@ function renderGrid() {
     var html = '<table class="lc-tbl"><thead><tr><th>Image</th><th>Asset ID</th>'
         + headerCols + '<th>Status</th></tr></thead><tbody>';
 
-    assets.forEach(function(a) {
+    assets.forEach(function(a, idx) {
         var rowClass = a.disagreement ? ' class="lc-disagree"' : '';
         var flagClass = a.flagged ? ' lc-flag' : '';
         var pairDisagree = pairA && pairB && pairA !== pairB && a.labels[pairA] && a.labels[pairB] && a.labels[pairA] !== a.labels[pairB];
@@ -257,7 +367,7 @@ function renderGrid() {
         if (!statusParts.length) statusParts.push('<span style="color:#2a6a4a; font-size:11px;">OK</span>');
 
         html += '<tr' + rowClass + '>'
-            + '<td' + (flagClass ? ' class="' + flagClass.trim() + '"' : '') + '><img class="lc-thumb" src="' + (a.image_link || '') + '" loading="lazy" onerror="this.style.display=\'none\'" onclick="openLcLightbox(this.src)"></td>'
+            + '<td' + (flagClass ? ' class="' + flagClass.trim() + '"' : '') + '><img class="lc-thumb" src="' + (a.image_link || '') + '" loading="lazy" onerror="this.style.display=\'none\'" onclick="openLcLightbox(' + idx + ')"></td>'
             + '<td' + (flagClass ? ' class="' + flagClass.trim() + '"' : '') + '>' + a.asset_id + '</td>'
             + cells
             + '<td' + (flagClass ? ' class="' + flagClass.trim() + '"' : '') + '>' + statusParts.join(' ') + '</td>'
