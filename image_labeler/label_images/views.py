@@ -2104,6 +2104,73 @@ def labeler_earnings(request):
 
 
 # ---------------------------------------------------------------------------
+# Labeler: view my corrections / errors
+# ---------------------------------------------------------------------------
+
+@login_required
+def labeler_errors(request):
+    from labeling_api.models import (
+        labelling_rules as LR, label_data_selected_assets_new,
+        modified_prompt_table, prompt_responses,
+    )
+
+    username = request.user.username
+
+    # Get all overrides for this labeler
+    overrides = list(modified_prompt_table.objects.filter(
+        labeler_id=username
+    ).order_by("-date_time_created").values(
+        "asset_id", "task_type", "rule_index",
+        "modified_prompt_response", "date_time_created",
+    ))
+
+    if not overrides:
+        return render(request, "labeler_errors.html", {"items": [], "total": 0})
+
+    rule_titles = {}
+    for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
+        rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
+
+    # Get original prompt_responses for these assets
+    asset_ids = [o["asset_id"] for o in overrides]
+    orig_map = {}
+    for r in prompt_responses.objects.filter(
+        asset_id__in=asset_ids, labeler_id=username,
+    ).values("asset_id", "task_type", "rule_index", "prompt_response"):
+        key = (r["asset_id"], r["task_type"], r["rule_index"])
+        orig_map[key] = r["prompt_response"]
+
+    # Get image links
+    image_map = {}
+    for row in label_data_selected_assets_new.objects.filter(
+        asset_id__in=asset_ids
+    ).values("asset_id", "image_link").distinct():
+        if row["asset_id"] not in image_map:
+            image_map[row["asset_id"]] = row["image_link"]
+
+    items = []
+    for o in overrides:
+        key = (o["asset_id"], o["task_type"], o["rule_index"])
+        original = orig_map.get(key, "")
+        correct = o["modified_prompt_response"]
+        if original and original != correct:
+            items.append({
+                "asset_id": o["asset_id"],
+                "feature": rule_titles.get((o["task_type"], o["rule_index"]),
+                                           f"{o['task_type']} / {o['rule_index']}"),
+                "original": original,
+                "correct": correct,
+                "image_link": image_map.get(o["asset_id"], ""),
+                "date": o["date_time_created"],
+            })
+
+    return render(request, "labeler_errors.html", {
+        "items": items,
+        "total": len(items),
+    })
+
+
+# ---------------------------------------------------------------------------
 # Admin: labeler list with search/filter
 # ---------------------------------------------------------------------------
 
@@ -2777,7 +2844,19 @@ def admin_label_comparison_data(request):
             }
         all_labelers.add(lid)
 
+    all_labelers.discard("admin_override")
     labelers_sorted = sorted(all_labelers)
+
+    # Load modified (overridden) responses for these assets
+    from labeling_api.models import modified_prompt_table
+    mod_qs = modified_prompt_table.objects.filter(
+        task_type=task_type, rule_index=rule_index,
+        asset_id__in=list(assets.keys()),
+    ).values("asset_id", "labeler_id", "modified_prompt_response")
+
+    mods_by_asset = {}
+    for m in mod_qs:
+        mods_by_asset.setdefault(m["asset_id"], {})[m["labeler_id"]] = m["modified_prompt_response"]
 
     rows = []
     for asset_id, image_link in sorted(assets.items()):
@@ -2787,6 +2866,19 @@ def admin_label_comparison_data(request):
             for lid in labelers_sorted
         }
         unique_answers = set(v for v in responses_list.values() if v)
+        asset_mods = mods_by_asset.get(asset_id, {})
+
+        # Build corrections dict: labelers whose original differs from override
+        corrections = {}
+        if asset_mods:
+            for lid, mod_val in asset_mods.items():
+                orig = responses_list.get(lid)
+                if orig and orig != mod_val:
+                    corrections[lid] = {"original": orig, "correct": mod_val}
+
+        corrected = bool(asset_mods)
+        correct_answer = next(iter(asset_mods.values()), None) if asset_mods else None
+
         rows.append({
             "asset_id": asset_id,
             "image_link": image_link,
@@ -2794,13 +2886,74 @@ def admin_label_comparison_data(request):
             "flagged": asset_id in flagged_ids,
             "disagreement": len(unique_answers) > 1,
             "num_labeled": sum(1 for v in responses_list.values() if v),
+            "corrected": corrected,
+            "correct_answer": correct_answer,
+            "corrections": corrections,
         })
 
     return JsonResponse({
         "labelers": labelers_sorted,
         "total": len(rows),
         "assets": rows,
+        "task_type": task_type,
+        "rule_index": rule_index,
     })
+
+
+@admin_required_ajax
+def admin_comparison_override(request):
+    """AJAX: set the correct answer for an asset by writing to modified_prompt_responses.
+    Original prompt_responses are left untouched."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    import json as _json
+    from labeling_api.models import prompt_responses, modified_prompt_table
+    from django.utils import timezone as tz
+
+    body = _json.loads(request.body)
+    task_type = body.get("task_type", "")
+    rule_index = body.get("rule_index")
+    asset_id = body.get("asset_id")
+    correct_answer = body.get("answer")  # "yes" or "no"
+
+    if not task_type or rule_index is None or not asset_id or not correct_answer:
+        return JsonResponse({"error": "task_type, rule_index, asset_id, answer required"}, status=400)
+
+    rule_index = int(rule_index)
+
+    # Get all labelers who responded to this asset
+    responses = list(prompt_responses.objects.filter(
+        asset_id=asset_id,
+        task_type=task_type,
+        rule_index=rule_index,
+    ).exclude(labeler_id="admin_override").values("labeler_id", "prompt_response"))
+
+    wrong_labelers = []
+    for r in responses:
+        lid = r["labeler_id"]
+        # Write modified_prompt_response for each labeler on this asset
+        existing = modified_prompt_table.objects.filter(
+            asset_id=asset_id, task_type=task_type,
+            rule_index=rule_index, labeler_id=lid,
+        )
+        if existing.exists():
+            existing.update(modified_prompt_response=correct_answer)
+        else:
+            modified_prompt_table(
+                date_time_created=tz.now(),
+                asset_id=asset_id,
+                labeler_source="admin_comparison",
+                labeler_id=lid,
+                task_type=task_type,
+                rule_index=rule_index,
+                modified_prompt_response=correct_answer,
+            ).save()
+
+        if r["prompt_response"] != correct_answer:
+            wrong_labelers.append(lid)
+
+    return JsonResponse({"status": "ok", "corrected": wrong_labelers})
 
 
 # ---------------------------------------------------------------------------

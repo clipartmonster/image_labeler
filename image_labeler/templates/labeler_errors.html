@@ -1,0 +1,111 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+<style>
+.le-page {
+    background: #bdc7c7;
+    border-radius: 10px;
+    margin: 10px;
+    padding: 24px 28px 32px;
+    font-family: Roboto, 'Segoe UI', sans-serif;
+}
+.le-inner { max-width: 820px; margin: 0 auto; }
+.le-top {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 20px;
+}
+.le-top h1 { font-size: 22px; font-weight: 700; color: #3a4a4a; margin: 0; }
+.le-links { display: flex; gap: 8px; }
+.le-links a {
+    padding: 6px 16px; border-radius: 6px;
+    font-size: 13px; font-weight: 600; text-decoration: none;
+    color: #d2e2e2; background: #799494; border: 1px solid #6a8a8a;
+    transition: background .15s;
+}
+.le-links a:hover { background: #7cbebe; }
+.le-summary {
+    background: #a9baba; border-radius: 8px; padding: 12px 16px;
+    margin-bottom: 16px; font-size: 14px; color: #2a3a3a;
+}
+.le-tbl { width: 100%; border-collapse: separate; border-spacing: 0 3px; }
+.le-tbl th {
+    text-align: left; font-size: 11px; font-weight: 700; color: #5d6565;
+    padding: 6px 8px; background: #a9baba; position: sticky; top: 0;
+}
+.le-tbl td {
+    font-size: 14px; color: #2a3a3a; padding: 8px; background: #fff;
+    vertical-align: middle;
+}
+.le-tbl tr:hover td { background: #f0f6f6; }
+.le-tbl tr td:first-child { border-radius: 6px 0 0 6px; }
+.le-tbl tr td:last-child { border-radius: 0 6px 6px 0; }
+.le-thumb {
+    width: 50px; height: 50px; object-fit: contain;
+    background: #f0f0f0; border-radius: 4px; cursor: pointer;
+}
+.le-wrong { color: #bd4444; font-weight: 700; }
+.le-right { color: #2a6a4a; font-weight: 700; }
+.le-empty { color: #6f7a7a; font-size: 15px; text-align: center; padding: 40px 0; }
+
+/* Lightbox */
+#leLightbox {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.75); z-index: 9999; align-items: center; justify-content: center;
+    cursor: pointer;
+}
+#leLightbox img {
+    max-width: 85vw; max-height: 85vh; object-fit: contain;
+    border-radius: 6px; box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+}
+</style>
+
+<div class="le-page">
+<div class="le-inner">
+    <div class="le-top">
+        <h1>My Corrections</h1>
+        <div class="le-links">
+            <a href="/label_images/setup_session/">My Batches</a>
+            <a href="/label_images/earnings/">Earnings</a>
+            <a href="/label_images/rules/">Rules</a>
+        </div>
+    </div>
+
+    <div class="le-summary">
+        <strong>{{ total }}</strong> label{{ total|pluralize }} corrected by reviewers.
+        Review these to improve your accuracy.
+    </div>
+
+    {% if items %}
+    <table class="le-tbl">
+        <thead><tr>
+            <th>Image</th>
+            <th>Feature</th>
+            <th>Your Answer</th>
+            <th>Correct Answer</th>
+            <th>Date</th>
+        </tr></thead>
+        <tbody>
+        {% for item in items %}
+        <tr>
+            <td><img class="le-thumb" src="{{ item.image_link }}" loading="lazy"
+                     onerror="this.style.display='none'"
+                     onclick="document.getElementById('leLightbox').style.display='flex'; document.getElementById('leLbImg').src=this.src;"></td>
+            <td>{{ item.feature }}</td>
+            <td class="le-wrong">{{ item.original }}</td>
+            <td class="le-right">{{ item.correct }}</td>
+            <td style="font-size:12px; color:#6f7a7a;">{{ item.date|date:"M d, Y" }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="le-empty">No corrections yet — keep up the good work!</p>
+    {% endif %}
+</div>
+</div>
+
+<div id="leLightbox" onclick="this.style.display='none';">
+    <img id="leLbImg">
+</div>
+{% endblock %}

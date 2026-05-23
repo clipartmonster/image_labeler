@@ -249,6 +249,27 @@ class RuleReferenceImage(models.Model):
 # Gold-standard labels (populated from reconciled assets)
 # ---------------------------------------------------------------------------
 
+class LabelCorrection(models.Model):
+    """Tracks when an admin corrects a labeler's answer via the comparison tool."""
+    asset_id = models.BigIntegerField()
+    task_type = models.CharField(max_length=100)
+    rule_index = models.IntegerField()
+    labeler_id = models.CharField(max_length=150)
+    original_answer = models.CharField(max_length=10)
+    correct_answer = models.CharField(max_length=10)
+    corrected_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("asset_id", "task_type", "rule_index", "labeler_id")
+        indexes = [
+            models.Index(fields=["labeler_id"]),
+            models.Index(fields=["task_type", "rule_index"]),
+        ]
+
+    def __str__(self):
+        return f"Correction {self.asset_id} {self.labeler_id}: {self.original_answer}->{self.correct_answer}"
+
+
 class GoldStandardLabel(models.Model):
     asset_id = models.BigIntegerField()
     task_type = models.CharField(max_length=100)

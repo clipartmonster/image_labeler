@@ -43,6 +43,7 @@
                     <option value="all">All</option>
                     <option value="disagreement">Disagreements only</option>
                     <option value="agreement">Agreements only</option>
+                    <option value="corrected">Corrected</option>
                     <option value="flagged">Flagged</option>
                     <option value="unlabeled">Missing labels</option>
                 </select>
@@ -105,19 +106,26 @@
 
 /* Lightbox */
 #lcLightbox { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.80); z-index:9999; align-items:center; justify-content:center; }
-#lcLbCenter { display:flex; flex-direction:column; align-items:center; gap:12px; max-width:90vw; }
+#lcLbCenter { display:flex; flex-direction:column; align-items:center; gap:14px; max-width:90vw; }
 #lcLbZoomWrap { position:relative; overflow:hidden; border-radius:6px; cursor:crosshair; background:#111; }
-#lcLightboxImg { max-width:80vw; max-height:60vh; object-fit:contain; display:block; transition:none; }
+#lcLightboxImg { max-width:80vw; max-height:55vh; object-fit:contain; display:block; transition:none; }
 #lcLbLens { display:none; position:absolute; pointer-events:none; width:200px; height:200px; border:2px solid rgba(255,255,255,0.6); border-radius:50%; background-repeat:no-repeat; box-shadow:0 0 0 9999px rgba(0,0,0,0.35); }
-#lcLbCard { background:#1e2a2a; border-radius:8px; padding:12px 16px; color:#d6dfdf; min-width:280px; max-width:80vw; box-shadow:0 4px 16px rgba(0,0,0,0.4); }
+#lcLbCard { background:#1e2a2a; border-radius:10px; padding:16px 22px; color:#d6dfdf; min-width:340px; max-width:80vw; box-shadow:0 4px 16px rgba(0,0,0,0.4); }
 #lcLbCard table { width:100%; border-collapse:collapse; }
-#lcLbCard td { padding:3px 8px; font-size:13px; }
+#lcLbCard td { padding:5px 10px; font-size:16px; }
 #lcLbCard .lb-labeler { color:#8fb8b8; font-weight:600; }
 #lcLbCard .lb-yes { color:#5be08a; font-weight:700; }
 #lcLbCard .lb-no { color:#f07070; font-weight:700; }
 #lcLbCard .lb-none { color:#666; font-style:italic; }
-#lcLbCard .lb-asset-id { font-size:11px; color:#7a8a8a; margin-bottom:4px; }
-#lcLbCounter { font-size:12px; color:#8a9a9a; }
+#lcLbCard .lb-asset-id { font-size:14px; color:#a0b0b0; margin-bottom:6px; font-weight:600; }
+#lcLbOverride { margin-top:10px; padding-top:10px; border-top:1px solid #2e3e3e; }
+#lcLbOverride .lb-ov-label { font-size:13px; color:#7a8a8a; margin-bottom:6px; text-transform:uppercase; letter-spacing:.5px; }
+#lcLbOverride .lb-ov-current { font-size:16px; font-weight:700; margin-bottom:8px; }
+.lb-ov-btn { border:none; padding:6px 18px; border-radius:5px; font-size:14px; font-weight:700; cursor:pointer; margin-right:6px; transition:opacity .15s; }
+.lb-ov-btn:hover { opacity:.85; }
+.lb-ov-yes { background:#2a6a4a; color:#fff; }
+.lb-ov-no { background:#bd4444; color:#fff; }
+#lcLbCounter { font-size:14px; color:#8a9a9a; }
 #lcLbPrev, #lcLbNext { position:absolute; top:50%; transform:translateY(-50%); background:rgba(255,255,255,0.12); border:none; color:#fff; font-size:40px; width:48px; height:80px; border-radius:6px; cursor:pointer; z-index:10; transition:background 0.15s; }
 #lcLbPrev:hover, #lcLbNext:hover { background:rgba(255,255,255,0.25); }
 #lcLbPrev { left:16px; }
@@ -242,28 +250,74 @@ function showLbAsset() {
     var img = document.getElementById('lcLightboxImg');
     img.src = a.image_link || '';
 
-    // Build label card
     var labelers = (_lcData && _lcData.labelers) || [];
+    var corr = a.corrections || {};
     var rows = labelers.map(function(l) {
         var val = a.labels[l];
         var cls = !val ? 'lb-none' : val === 'yes' ? 'lb-yes' : 'lb-no';
         var txt = val || '\u2014';
-        return '<tr><td class="lb-labeler">' + l + '</td><td class="' + cls + '">' + txt + '</td></tr>';
+        var wrongMark = '';
+        if (corr[l]) {
+            wrongMark = ' <span style="color:#f07070; font-size:14px; font-weight:700;">\u2716 wrong</span>';
+        }
+        return '<tr><td class="lb-labeler">' + l + '</td><td class="' + cls + '">' + txt + wrongMark + '</td></tr>';
     }).join('');
 
     var statusHtml = '';
-    if (a.disagreement) statusHtml += '<span style="color:#e8a040; font-weight:700; margin-right:6px;">Disagree</span>';
+    if (a.corrected) {
+        var caVal = a.correct_answer || '';
+        var caCls = caVal === 'yes' ? 'lb-yes' : 'lb-no';
+        statusHtml += '<span style="color:#6ab4f5; font-weight:700; margin-right:6px;">Corrected \u2192 <span class="' + caCls + '">' + caVal + '</span></span>';
+    } else if (a.disagreement) {
+        statusHtml += '<span style="color:#e8a040; font-weight:700; margin-right:6px;">Disagree</span>';
+    }
     if (a.flagged) statusHtml += '<span style="color:#f07070;">Flagged</span>';
-    if (!a.disagreement && !a.flagged && a.num_labeled > 0) statusHtml += '<span style="color:#5be08a;">OK</span>';
+    if (!a.corrected && !a.disagreement && !a.flagged && a.num_labeled > 0) statusHtml += '<span style="color:#5be08a;">OK</span>';
+
+    var correctHtml = '<div id="lcLbOverride">'
+        + '<div class="lb-ov-label">Set Correct Answer</div>'
+        + '<button class="lb-ov-btn lb-ov-yes" onclick="setComparisonOverride(\'yes\')">Yes</button>'
+        + '<button class="lb-ov-btn lb-ov-no" onclick="setComparisonOverride(\'no\')">No</button>'
+        + '</div>';
 
     document.getElementById('lcLbCard').innerHTML =
         '<div class="lb-asset-id">Asset: ' + a.asset_id + (statusHtml ? ' &nbsp; ' + statusHtml : '') + '</div>'
-        + '<table>' + rows + '</table>';
+        + '<table>' + rows + '</table>'
+        + correctHtml;
 
     document.getElementById('lcLbCounter').textContent = (_lbIdx + 1) + ' / ' + _lbFiltered.length;
 
-    // Reset zoom lens
     document.getElementById('lcLbLens').style.display = 'none';
+}
+
+function setComparisonOverride(answer) {
+    var a = _lbFiltered[_lbIdx];
+    if (!a || !_lcData) return;
+
+    fetch('/label_images/admin/label_comparison/override/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+        body: JSON.stringify({
+            task_type: _lcData.task_type,
+            rule_index: _lcData.rule_index,
+            asset_id: a.asset_id,
+            answer: answer
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.status === 'ok') {
+            var newCorrections = {};
+            (d.corrected || []).forEach(function(lid) {
+                newCorrections[lid] = { original: a.labels[lid], correct: answer };
+            });
+            a.corrections = newCorrections;
+            a.corrected = true;
+            a.correct_answer = answer;
+            showLbAsset();
+            renderGrid();
+        }
+    });
 }
 
 // Zoom lens on hover
@@ -311,6 +365,7 @@ function renderGrid() {
     var assets = (_lcData.assets || []).filter(function(a) {
         if (filter === 'disagreement') return a.disagreement;
         if (filter === 'agreement') return !a.disagreement && a.num_labeled > 0;
+        if (filter === 'corrected') return a.corrected;
         if (filter === 'flagged') return a.flagged;
         if (filter === 'unlabeled') return a.num_labeled < labelers.length;
         return true;
@@ -365,6 +420,12 @@ function renderGrid() {
         if (a.flagged) statusParts.push('<span style="color:#bd4444; font-size:11px;">Flagged</span>');
         if (a.num_labeled === 0) statusParts.push('<span style="color:#999; font-size:11px;">No labels</span>');
         if (!statusParts.length) statusParts.push('<span style="color:#2a6a4a; font-size:11px;">OK</span>');
+
+        if (a.corrected) {
+            var ca = a.correct_answer || '';
+            var caCls = ca === 'yes' ? 'lc-yes' : 'lc-no';
+            statusParts.unshift('<span style="color:#6ab4f5; font-weight:700;">Corrected \u2192 </span><span class="' + caCls + '" style="font-weight:800;">' + ca + '</span>');
+        }
 
         html += '<tr' + rowClass + '>'
             + '<td' + (flagClass ? ' class="' + flagClass.trim() + '"' : '') + '><img class="lc-thumb" src="' + (a.image_link || '') + '" loading="lazy" onerror="this.style.display=\'none\'" onclick="openLcLightbox(' + idx + ')"></td>'

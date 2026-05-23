@@ -35,6 +35,7 @@ urlpatterns = [
 
     # Labeler workforce views
     path('earnings/', views.labeler_earnings, name='labeler_earnings'),
+    path('errors/', views.labeler_errors, name='labeler_errors'),
 
     # Admin workforce views
     path('admin/labelers/', views.admin_labeler_list, name='admin_labeler_list'),
@@ -48,6 +49,7 @@ urlpatterns = [
     path('admin/labeler_labels/detail/', views.admin_labeler_labels_detail, name='admin_labeler_labels_detail'),
     path('admin/label_comparison/', views.admin_label_comparison, name='admin_label_comparison'),
     path('admin/label_comparison/data/', views.admin_label_comparison_data, name='admin_label_comparison_data'),
+    path('admin/label_comparison/override/', views.admin_comparison_override, name='admin_comparison_override'),
     path('admin/update_deadline/', views.admin_update_deadline, name='admin_update_deadline'),
     path('admin/override_label/', views.admin_override_label, name='admin_override_label'),
     path('admin/import_gold/', views.admin_import_gold, name='admin_import_gold'),
