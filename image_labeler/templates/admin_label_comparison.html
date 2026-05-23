@@ -1,0 +1,229 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+<div class="wf-page">
+    <div class="wf-nav">
+        <a href="/label_images/setup_session/">Session Setup</a>
+        <a href="/label_images/admin/labelers/">Labelers</a>
+        <a href="/label_images/admin/bulk_assign/">Bulk Assign</a>
+        <a href="/label_images/admin/training/">Training</a>
+        <a href="/label_images/admin/performance/">Performance</a>
+        <a href="/label_images/admin/label_comparison/" class="active">Label Comparison</a>
+        <a href="/label_images/rules/">Rules</a>
+    </div>
+
+    <h1>Label Comparison</h1>
+
+    <div class="wf-card" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+        <div>
+            <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Feature</label>
+            <select id="featureSelect" class="wf-select" style="width:220px;" onchange="onFeatureChange()">
+                <option value="">— select —</option>
+            </select>
+        </div>
+        <div>
+            <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Batch / Sub-batch</label>
+            <select id="batchSelect" class="wf-select" style="width:180px;">
+                <option value="">— select feature first —</option>
+            </select>
+        </div>
+        <button class="wf-btn wf-btn-primary" onclick="loadComparison()" style="height:36px;">Load</button>
+    </div>
+
+    <p id="lcStatus" class="wf-muted" style="margin-top:8px; min-height:1.4em;"></p>
+
+    <div id="lcContent" style="display:none; margin-top:16px;">
+        <div id="lcStats" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;"></div>
+
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+            <div>
+                <label style="font-size:11px; color:#6f7a7a;">Show:</label>
+                <select id="lcFilter" class="wf-select" style="width:auto; font-size:12px; padding:3px 8px;" onchange="renderGrid()">
+                    <option value="all">All</option>
+                    <option value="disagreement">Disagreements only</option>
+                    <option value="agreement">Agreements only</option>
+                    <option value="flagged">Flagged</option>
+                    <option value="unlabeled">Missing labels</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:11px; color:#6f7a7a;">Labeler:</label>
+                <select id="lcLabelerFilter" class="wf-select" style="width:auto; font-size:12px; padding:3px 8px;" onchange="renderGrid()">
+                    <option value="all">All labelers</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="lcTableWrap" style="overflow-x:auto;"></div>
+        <p id="lcEmpty" class="wf-muted" style="display:none;">No assets match the filter.</p>
+    </div>
+</div>
+
+<style>
+.lc-tbl { width:100%; border-collapse:separate; border-spacing:0 2px; }
+.lc-tbl th { text-align:left; font-size:10px; font-weight:600; color:#5d6565; padding:4px 6px; white-space:nowrap; position:sticky; top:0; background:#bdc7c7; }
+.lc-tbl td { font-size:12px; color:#2a3a3a; padding:4px 6px; background:#dae2e2; vertical-align:middle; }
+.lc-tbl tr:hover td { background:#d0dcdc; }
+.lc-tbl tr td:first-child { border-radius:4px 0 0 4px; }
+.lc-tbl tr td:last-child { border-radius:0 4px 4px 0; }
+.lc-yes { color:#2a6a4a; font-weight:700; }
+.lc-no { color:#bd4444; font-weight:700; }
+.lc-none { color:#999; font-style:italic; }
+.lc-flag { background:#fff3cd !important; }
+.lc-disagree td { border-top:2px solid #e8a040; }
+.lc-thumb { width:40px; height:40px; object-fit:contain; background:#f0f0f0; border-radius:3px; cursor:pointer; }
+.lc-card { display:flex; gap:10px; flex-wrap:wrap; }
+.lc-stat { background:#d6dfdf; border-radius:6px; padding:10px 14px; min-width:100px; }
+.lc-stat-label { font-size:10px; color:#5d6565; text-transform:uppercase; letter-spacing:.5px; margin-bottom:2px; }
+.lc-stat-val { font-size:20px; font-weight:700; color:#2a3a3a; }
+.lc-stat-sub { font-size:11px; color:#6f7a7a; }
+</style>
+
+<script>
+var _features = {{ features_json|safe }};
+var _subBatches = {{ sub_batches_json|safe }};
+var _lcData = null;
+
+(function() {
+    var seen = {};
+    var sel = document.getElementById('featureSelect');
+    _features.forEach(function(f) {
+        var key = f.task_type + '|' + f.rule_index;
+        if (seen[key]) return;
+        seen[key] = true;
+        var o = document.createElement('option');
+        o.value = key;
+        o.textContent = f.title + ' (' + f.task_type + ', ' + f.rule_index + ')';
+        sel.appendChild(o);
+    });
+})();
+
+function onFeatureChange() {
+    var sel = document.getElementById('batchSelect');
+    sel.innerHTML = '<option value="">— select —</option>';
+    var v = document.getElementById('featureSelect').value;
+    if (!v) return;
+    var parts = v.split('|');
+    var tt = parts[0], ri = parseInt(parts[1]);
+    _subBatches.filter(function(sb) {
+        return sb.task_type === tt && sb.rule_index === ri;
+    }).forEach(function(sb) {
+        var o = document.createElement('option');
+        o.value = sb.batch_id + '|' + sb.large_sub_batch;
+        o.textContent = 'Batch ' + sb.batch_id + ' / Sub ' + sb.large_sub_batch;
+        sel.appendChild(o);
+    });
+}
+
+function loadComparison() {
+    var fv = document.getElementById('featureSelect').value;
+    var bv = document.getElementById('batchSelect').value;
+    if (!fv || !bv) { alert('Select a feature and batch.'); return; }
+
+    var fp = fv.split('|'), bp = bv.split('|');
+    var url = '/label_images/admin/label_comparison/data/?task_type=' + fp[0]
+        + '&rule_index=' + fp[1] + '&batch_id=' + bp[0] + '&large_sub_batch=' + bp[1];
+
+    document.getElementById('lcStatus').textContent = 'Loading\u2026';
+    document.getElementById('lcContent').style.display = 'none';
+
+    fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        _lcData = d;
+        document.getElementById('lcStatus').textContent = '';
+        document.getElementById('lcContent').style.display = '';
+
+        var labelers = d.labelers || [];
+        var lSel = document.getElementById('lcLabelerFilter');
+        lSel.innerHTML = '<option value="all">All labelers</option>';
+        labelers.forEach(function(l) {
+            var o = document.createElement('option');
+            o.value = l; o.textContent = l;
+            lSel.appendChild(o);
+        });
+
+        var total = d.total || 0;
+        var disagreements = (d.assets || []).filter(function(a) { return a.disagreement; }).length;
+        var flagged = (d.assets || []).filter(function(a) { return a.flagged; }).length;
+        var fullyLabeled = (d.assets || []).filter(function(a) { return a.num_labeled === labelers.length && labelers.length > 0; }).length;
+
+        document.getElementById('lcStats').innerHTML =
+            makeStat('Total Assets', total)
+            + makeStat('Labelers', labelers.length)
+            + makeStat('Disagreements', disagreements, Math.round(disagreements / total * 100) + '%')
+            + makeStat('Flagged', flagged)
+            + makeStat('Fully Labeled', fullyLabeled, Math.round(fullyLabeled / total * 100) + '%');
+
+        renderGrid();
+    });
+}
+
+function makeStat(label, val, sub) {
+    return '<div class="lc-stat"><div class="lc-stat-label">' + label + '</div>'
+        + '<div class="lc-stat-val">' + val + '</div>'
+        + (sub ? '<div class="lc-stat-sub">' + sub + '</div>' : '') + '</div>';
+}
+
+function renderGrid() {
+    if (!_lcData) return;
+    var filter = document.getElementById('lcFilter').value;
+    var labelerFilter = document.getElementById('lcLabelerFilter').value;
+    var labelers = _lcData.labelers || [];
+    var assets = (_lcData.assets || []).filter(function(a) {
+        if (filter === 'disagreement') return a.disagreement;
+        if (filter === 'agreement') return !a.disagreement && a.num_labeled > 0;
+        if (filter === 'flagged') return a.flagged;
+        if (filter === 'unlabeled') return a.num_labeled < labelers.length;
+        return true;
+    });
+
+    if (labelerFilter !== 'all') {
+        assets = assets.filter(function(a) {
+            return a.labels[labelerFilter] != null;
+        });
+    }
+
+    var wrap = document.getElementById('lcTableWrap');
+    document.getElementById('lcEmpty').style.display = assets.length ? 'none' : '';
+
+    if (!assets.length) { wrap.innerHTML = ''; return; }
+
+    var headerCols = labelers.map(function(l) {
+        var highlight = (labelerFilter !== 'all' && l === labelerFilter) ? ' style="background:#c0dada;"' : '';
+        return '<th' + highlight + '>' + l + '</th>';
+    }).join('');
+
+    var html = '<table class="lc-tbl"><thead><tr><th>Image</th><th>Asset ID</th>'
+        + headerCols + '<th>Status</th></tr></thead><tbody>';
+
+    assets.forEach(function(a) {
+        var rowClass = a.disagreement ? ' class="lc-disagree"' : '';
+        var flagClass = a.flagged ? ' lc-flag' : '';
+        var cells = labelers.map(function(l) {
+            var val = a.labels[l];
+            if (!val) return '<td class="lc-none' + flagClass + '">\u2014</td>';
+            var cls = val === 'yes' ? 'lc-yes' : val === 'no' ? 'lc-no' : '';
+            return '<td class="' + cls + flagClass + '">' + val + '</td>';
+        }).join('');
+
+        var statusParts = [];
+        if (a.disagreement) statusParts.push('<span style="color:#e8a040; font-weight:700;">Disagree</span>');
+        if (a.flagged) statusParts.push('<span style="color:#bd4444; font-size:11px;">Flagged</span>');
+        if (a.num_labeled === 0) statusParts.push('<span style="color:#999; font-size:11px;">No labels</span>');
+        if (!statusParts.length) statusParts.push('<span style="color:#2a6a4a; font-size:11px;">OK</span>');
+
+        html += '<tr' + rowClass + '>'
+            + '<td' + (flagClass ? ' class="' + flagClass.trim() + '"' : '') + '><img class="lc-thumb" src="' + (a.image_link || '') + '" loading="lazy" onerror="this.style.display=\'none\'" onclick="window.open(this.src)"></td>'
+            + '<td' + (flagClass ? ' class="' + flagClass.trim() + '"' : '') + '>' + a.asset_id + '</td>'
+            + cells
+            + '<td' + (flagClass ? ' class="' + flagClass.trim() + '"' : '') + '>' + statusParts.join(' ') + '</td>'
+            + '</tr>';
+    });
+
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+}
+</script>
+{% endblock %}

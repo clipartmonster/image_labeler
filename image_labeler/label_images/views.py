@@ -2694,6 +2694,116 @@ def admin_override_label(request):
 
 
 # ---------------------------------------------------------------------------
+# Admin: label comparison tool
+# ---------------------------------------------------------------------------
+
+@admin_required
+def admin_label_comparison(request):
+    """Render the label comparison page."""
+    from labeling_api.models import label_data_selected_assets_new, labelling_rules as LR
+
+    features = list(
+        LR.objects.exclude(task_type="color_type")
+        .values("task_type", "rule_index", "title")
+        .order_by("task_type", "rule_index")
+    )
+    sub_batches = list(
+        label_data_selected_assets_new.objects
+        .values("task_type", "rule_index", "batch_id", "large_sub_batch")
+        .distinct()
+        .order_by("task_type", "rule_index", "batch_id", "large_sub_batch")
+    )
+    return render(request, "admin_label_comparison.html", {
+        "features_json": json.dumps(features, default=str),
+        "sub_batches_json": json.dumps(sub_batches, default=str),
+    })
+
+
+@admin_required_ajax
+def admin_label_comparison_data(request):
+    """AJAX: return per-asset labels from all labelers for a given sub-batch."""
+    from labeling_api.models import (
+        prompt_responses, label_data_selected_assets_new, label_issues_table,
+    )
+
+    task_type = request.GET.get("task_type", "")
+    rule_index = request.GET.get("rule_index", "")
+    batch_id = request.GET.get("batch_id", "")
+    large_sub_batch = request.GET.get("large_sub_batch", "")
+
+    if not all([task_type, rule_index, batch_id, large_sub_batch]):
+        return JsonResponse({"error": "all params required"}, status=400)
+
+    rule_index = int(rule_index)
+    batch_id = int(batch_id)
+    large_sub_batch = int(large_sub_batch)
+
+    assets = {
+        row["asset_id"]: row["image_link"]
+        for row in label_data_selected_assets_new.objects.filter(
+            task_type=task_type, rule_index=rule_index,
+            batch_id=batch_id, large_sub_batch=large_sub_batch,
+        ).values("asset_id", "image_link")
+    }
+
+    flagged_ids = set(
+        label_issues_table.objects.filter(
+            asset_id__in=list(assets.keys()),
+        ).values_list("asset_id", flat=True)
+    )
+
+    responses = (
+        prompt_responses.objects.filter(
+            task_type=task_type,
+            rule_index=rule_index,
+            asset_id__in=list(assets.keys()),
+        )
+        .order_by("asset_id", "labeler_id", "-datetime_created")
+        .values("asset_id", "labeler_id", "prompt_response", "labeler_source")
+    )
+
+    # Group by asset — deduplicate per labeler (keep latest)
+    per_asset = {}
+    all_labelers = set()
+    for r in responses:
+        aid = r["asset_id"]
+        lid = r["labeler_id"]
+        if aid not in per_asset:
+            per_asset[aid] = {}
+        if lid not in per_asset[aid]:
+            per_asset[aid][lid] = {
+                "response": r["prompt_response"],
+                "source": r["labeler_source"],
+            }
+        all_labelers.add(lid)
+
+    labelers_sorted = sorted(all_labelers)
+
+    rows = []
+    for asset_id, image_link in sorted(assets.items()):
+        labels = per_asset.get(asset_id, {})
+        responses_list = {
+            lid: labels[lid]["response"] if lid in labels else None
+            for lid in labelers_sorted
+        }
+        unique_answers = set(v for v in responses_list.values() if v)
+        rows.append({
+            "asset_id": asset_id,
+            "image_link": image_link,
+            "labels": responses_list,
+            "flagged": asset_id in flagged_ids,
+            "disagreement": len(unique_answers) > 1,
+            "num_labeled": sum(1 for v in responses_list.values() if v),
+        })
+
+    return JsonResponse({
+        "labelers": labelers_sorted,
+        "total": len(rows),
+        "assets": rows,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Admin: update batch assignment deadline
 # ---------------------------------------------------------------------------
 
