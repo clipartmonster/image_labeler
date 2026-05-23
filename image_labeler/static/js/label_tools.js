@@ -774,15 +774,19 @@ document.addEventListener('DOMContentLoaded', function(){
     if (!sessionStorage.getItem('labeling_session_start')) {
         sessionStorage.setItem('labeling_session_start', new Date().toISOString());
         sessionStorage.setItem('labeling_session_count', '0');
+        sessionStorage.setItem('labeling_session_stamps', JSON.stringify([Date.now()]));
     }
 })
 
 
-// Increment label count on each prompt submission
+// Increment label count and record timestamp on each prompt submission
 var _originalCollectPrompt = typeof api_collect_prompt === 'function' ? api_collect_prompt : null;
 function _incrementSessionCount() {
     var count = parseInt(sessionStorage.getItem('labeling_session_count') || '0');
     sessionStorage.setItem('labeling_session_count', String(count + 1));
+    var stamps = JSON.parse(sessionStorage.getItem('labeling_session_stamps') || '[]');
+    stamps.push(Date.now());
+    sessionStorage.setItem('labeling_session_stamps', JSON.stringify(stamps));
 }
 
 // Hook into collect_prompt to track label submissions
@@ -1681,9 +1685,22 @@ window.addEventListener('beforeunload', function() {
     var count = parseInt(sessionStorage.getItem('labeling_session_count') || '0');
     if (!startedAt || count === 0) return;
 
-    var endedAt = new Date().toISOString();
+    // Calculate active time: sum gaps between consecutive timestamps,
+    // but cap each gap at 2 minutes to exclude breaks.
+    var stamps = JSON.parse(sessionStorage.getItem('labeling_session_stamps') || '[]');
+    stamps.push(Date.now());
+    var MAX_GAP_MS = 2 * 60 * 1000;
+    var activeMs = 0;
+    for (var i = 1; i < stamps.length; i++) {
+        var gap = stamps[i] - stamps[i - 1];
+        activeMs += Math.min(gap, MAX_GAP_MS);
+    }
+    var activeSeconds = Math.round(activeMs / 1000);
 
-    // Gather batch context from the page
+    // Compute ended_at from start + active time (not wall clock)
+    var startMs = new Date(startedAt).getTime();
+    var endedAt = new Date(startMs + activeMs).toISOString();
+
     var collectionData = document.querySelector('.collection_data');
     var params = new URLSearchParams(window.location.search);
 
@@ -1695,7 +1712,8 @@ window.addEventListener('beforeunload', function() {
         large_sub_batch: params.get('large_sub_batch') || '0',
         started_at: startedAt,
         ended_at: endedAt,
-        labels_completed: count
+        labels_completed: count,
+        active_seconds: activeSeconds
     };
 
     var blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
@@ -1706,4 +1724,5 @@ window.addEventListener('beforeunload', function() {
 
     sessionStorage.removeItem('labeling_session_start');
     sessionStorage.removeItem('labeling_session_count');
+    sessionStorage.removeItem('labeling_session_stamps');
 });

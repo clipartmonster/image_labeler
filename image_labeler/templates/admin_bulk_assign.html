@@ -70,10 +70,6 @@
             <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Deadline</label>
             <input id="deadlineInput" type="date" class="wf-input" style="width:160px;">
         </div>
-        <div>
-            <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Target Labelers</label>
-            <input id="numLabelersInput" type="number" min="1" max="20" value="{{ default_num_labelers }}" class="wf-input" style="width:80px;">
-        </div>
         <button id="assignBtn" class="wf-btn wf-btn-primary" onclick="submitAssignments()" style="height:36px;">
             Assign Selected
         </button>
@@ -266,7 +262,6 @@ function submitAssignments() {
         payment_amount: document.getElementById('payInput').value,
         bonus_amount: document.getElementById('bonusInput').value || '0',
         deadline: deadline,
-        num_labelers_target: parseInt(document.getElementById('numLabelersInput').value),
     };
 
     document.getElementById('assignBtn').disabled = true;

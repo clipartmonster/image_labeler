@@ -46,6 +46,7 @@ urlpatterns = [
     path('admin/performance/', views.admin_performance, name='admin_performance'),
     path('admin/performance/data/', views.admin_performance_data, name='admin_performance_data'),
     path('admin/labeler_labels/detail/', views.admin_labeler_labels_detail, name='admin_labeler_labels_detail'),
+    path('admin/update_deadline/', views.admin_update_deadline, name='admin_update_deadline'),
     path('admin/import_gold/', views.admin_import_gold, name='admin_import_gold'),
     path('admin/subbatch_completion/', views.admin_subbatch_completion, name='admin_subbatch_completion'),
 

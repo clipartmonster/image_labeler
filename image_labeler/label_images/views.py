@@ -818,8 +818,11 @@ def reconcile_labels(request):
         "labeler_source": labeler_source,
     }
 
-    print(collection_data)
-    print(task_type)
+    from .models import RuleGuide
+    rule_guides = list(
+        RuleGuide.objects.filter(task_type=task_type, rule_index=rule_index)
+        .prefetch_related("directives", "reference_images")
+    )
 
     return render(
         request,
@@ -834,6 +837,7 @@ def reconcile_labels(request):
             "labelling_rules": labelling_rules,
             "collection_data": collection_data,
             "assignment_id": assignment_id,
+            "rule_guides": rule_guides,
         },
     )
 
@@ -2252,7 +2256,6 @@ def admin_bulk_assign(request):
         "rules_json": json.dumps(all_rules, default=str),
         "existing_json": json.dumps(existing, default=str),
         "default_pay": settings.LABELER_PAY_PER_BATCH,
-        "default_num_labelers": getattr(settings, "LABELER_DEFAULT_NUM_LABELERS", 2),
     })
 
 
@@ -2273,7 +2276,6 @@ def admin_bulk_assign_save(request):
     payment = data.get("payment_amount", settings.LABELER_PAY_PER_BATCH)
     bonus = data.get("bonus_amount", "0")
     deadline_str = data.get("deadline")
-    num_labelers = data.get("num_labelers_target", getattr(settings, "LABELER_DEFAULT_NUM_LABELERS", 2))
 
     if not sub_batches or not labeler_ids or not deadline_str:
         return JsonResponse({"error": "sub_batches, labeler_ids, and deadline are required"}, status=400)
@@ -2303,7 +2305,6 @@ def admin_bulk_assign_save(request):
                     "payment_amount": payment,
                     "bonus_amount": bonus,
                     "deadline": deadline_dt,
-                    "num_labelers_target": num_labelers,
                 },
             )
             if was_created:
@@ -2442,6 +2443,8 @@ def admin_performance_data(request):
             "hours": round(hours, 2),
             "throughput": round(labels / hours, 1) if hours > 0 else None,
             "deadline": a.deadline.strftime("%b %d") if a.deadline else "",
+            "deadline_iso": a.deadline.strftime("%Y-%m-%d") if a.deadline else "",
+            "assignment_id": a.id,
             "completed": a.completed_at is not None,
             "on_time": a.completed_at <= a.deadline if a.completed_at and a.deadline else None,
         })
@@ -2626,6 +2629,42 @@ def admin_labeler_labels_detail(request):
         "labels": rows,
         "legacy_score": legacy_score,
     })
+
+
+# ---------------------------------------------------------------------------
+# Admin: update batch assignment deadline
+# ---------------------------------------------------------------------------
+
+@admin_required_ajax
+def admin_update_deadline(request):
+    """AJAX: update the deadline on a BatchAssignment."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    import json as _json
+    body = _json.loads(request.body)
+    assignment_id = body.get("assignment_id")
+    new_deadline = body.get("deadline")
+    if not assignment_id or not new_deadline:
+        return JsonResponse({"error": "assignment_id and deadline required"}, status=400)
+
+    from django.utils.dateparse import parse_date
+    d = parse_date(new_deadline)
+    if not d:
+        return JsonResponse({"error": "invalid date format"}, status=400)
+
+    from datetime import datetime, time
+    from django.utils import timezone as tz
+    deadline_dt = tz.make_aware(datetime.combine(d, time(23, 59, 59)))
+
+    try:
+        a = BatchAssignment.objects.get(pk=assignment_id)
+    except BatchAssignment.DoesNotExist:
+        return JsonResponse({"error": "not found"}, status=404)
+
+    a.deadline = deadline_dt
+    a.save(update_fields=["deadline"])
+    return JsonResponse({"status": "ok", "deadline": a.deadline.strftime("%b %d")})
 
 
 # ---------------------------------------------------------------------------

@@ -51,10 +51,21 @@
                     <th>Speed</th>
                     <th>Deadline</th>
                     <th>Status</th>
+                    <th></th>
                 </tr></thead>
                 <tbody id="workBody"></tbody>
             </table>
             <p id="workEmpty" class="wf-muted" style="display:none;">No work batches.</p>
+
+            <div id="workDetailWrap" style="display:none; margin-top:20px;">
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                    <button onclick="closeWorkDetail()" style="font-size:12px; padding:4px 12px; background:#8a9c9c; border:none; border-radius:4px; color:#fff; cursor:pointer;">&larr; Back</button>
+                    <h2 id="workDetailTitle" style="margin:0; font-size:15px; color:#2a3a3a;"></h2>
+                </div>
+                <div id="workDetailStats" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;"></div>
+                <div id="workDetailGrid" class="ll-grid"></div>
+                <p id="workDetailEmpty" class="wf-muted" style="display:none;">No labels found.</p>
+            </div>
         </div>
 
         <!-- TRAINING TAB -->
@@ -153,6 +164,7 @@ var _perfData = null;
 
 function switchTab(name) {
     if (name !== 'training') closeTrainDetail();
+    if (name !== 'work') closeWorkDetail();
     ['work','training'].forEach(function(t) {
         document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
         document.querySelector('.pf-tab[data-tab="' + t + '"]').className = 'pf-tab' + (t === name ? ' active' : '');
@@ -320,15 +332,97 @@ function renderWork() {
         } else {
             status = '<span class="pf-tag pf-tag-active">Active</span>';
         }
+        var reviewBtn = '<button class="ll-view-btn" onclick="loadWorkDetail('
+            + r.assignment_id + ',\'' + (r.feature || r.task_type + '/r' + r.rule_index).replace(/'/g, "\\'") + '\')">Review</button>';
+        var deadlineCell = '<td style="font-size:11px;">'
+            + '<span class="dl-display" id="dl-show-' + r.assignment_id + '">' + r.deadline + '</span> '
+            + '<button onclick="editDeadline(' + r.assignment_id + ',\'' + (r.deadline_iso || '') + '\')" '
+            + 'style="font-size:10px;padding:1px 5px;background:#8a9c9c;color:#fff;border:none;border-radius:3px;cursor:pointer;">edit</button>'
+            + '<span id="dl-edit-' + r.assignment_id + '" style="display:none;">'
+            + '<input type="date" id="dl-input-' + r.assignment_id + '" value="' + (r.deadline_iso || '') + '" style="font-size:11px;padding:2px 4px;">'
+            + ' <button onclick="saveDeadline(' + r.assignment_id + ')" style="font-size:10px;padding:1px 5px;background:#409393;color:#fff;border:none;border-radius:3px;cursor:pointer;">save</button>'
+            + ' <button onclick="cancelDeadline(' + r.assignment_id + ')" style="font-size:10px;padding:1px 5px;background:#bd4444;color:#fff;border:none;border-radius:3px;cursor:pointer;">cancel</button>'
+            + '</span></td>';
         var tr = document.createElement('tr');
         tr.innerHTML = '<td>' + (r.feature || r.task_type + '/r' + r.rule_index) + '</td>'
             + '<td>' + r.batch_id + '/' + r.sub_batch + '</td>'
             + '<td>' + r.labels + '</td>'
             + '<td>' + r.hours + '</td>'
             + '<td>' + (r.throughput != null ? r.throughput + '/hr' : '\u2014') + '</td>'
-            + '<td style="font-size:11px;">' + r.deadline + '</td>'
-            + '<td>' + status + '</td>';
+            + deadlineCell
+            + '<td>' + status + '</td>'
+            + '<td>' + reviewBtn + '</td>';
         tb.appendChild(tr);
+    });
+}
+
+function loadWorkDetail(assignmentId, title) {
+    document.getElementById('workDetailTitle').textContent = title;
+    document.getElementById('workDetailGrid').innerHTML = '';
+    document.getElementById('workDetailStats').innerHTML = '';
+    document.getElementById('workDetailEmpty').style.display = 'none';
+    document.querySelector('#tab-work .pf-tbl').style.display = 'none';
+    document.getElementById('workEmpty').style.display = 'none';
+    document.getElementById('workDetailWrap').style.display = '';
+
+    fetch('/label_images/admin/labeler_labels/detail/?assignment_id=' + assignmentId)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        var labels = d.labels || [];
+        var answered = labels.filter(function(l) { return l.answer; });
+        document.getElementById('workDetailStats').innerHTML =
+            makeCard('Total Assets', labels.length)
+            + makeCard('Labeled', answered.length);
+        if (!labels.length) {
+            document.getElementById('workDetailEmpty').style.display = '';
+            return;
+        }
+        var grid = document.getElementById('workDetailGrid');
+        labels.forEach(function(l) {
+            var answerHtml = l.answer
+                ? '<div class="ll-answer">' + l.answer + '</div>'
+                : '<div class="ll-answer ll-none">\u2014</div>';
+            var card = document.createElement('div');
+            card.className = 'll-card';
+            card.innerHTML = '<img src="' + (l.image_link || '') + '" loading="lazy" onerror="this.style.display=\'none\'">'
+                + '<div class="ll-card-body"><div class="ll-card-id">' + l.asset_id + '</div>'
+                + answerHtml + '</div>';
+            grid.appendChild(card);
+        });
+    });
+}
+
+function closeWorkDetail() {
+    document.getElementById('workDetailWrap').style.display = 'none';
+    document.querySelector('#tab-work .pf-tbl').style.display = '';
+}
+
+function editDeadline(id, iso) {
+    document.getElementById('dl-show-' + id).parentElement.querySelector('button').style.display = 'none';
+    document.getElementById('dl-show-' + id).style.display = 'none';
+    document.getElementById('dl-edit-' + id).style.display = '';
+}
+function cancelDeadline(id) {
+    document.getElementById('dl-show-' + id).style.display = '';
+    document.getElementById('dl-show-' + id).parentElement.querySelector('button').style.display = '';
+    document.getElementById('dl-edit-' + id).style.display = 'none';
+}
+function saveDeadline(id) {
+    var val = document.getElementById('dl-input-' + id).value;
+    if (!val) return;
+    fetch('/label_images/admin/update_deadline/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+        body: JSON.stringify({assignment_id: id, deadline: val})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.status === 'ok') {
+            document.getElementById('dl-show-' + id).textContent = d.deadline;
+            cancelDeadline(id);
+        } else {
+            alert(d.error || 'Error saving deadline');
+        }
     });
 }
 </script>

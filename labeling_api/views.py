@@ -703,17 +703,22 @@ def collect_prompt_internal_source(request: Request) -> JsonResponse:
     rule_index = request.data.get("rule_index", None)
     prompt_response = request.data.get("prompt_response", None)
 
-    datetime_created = datetime.now(pytz.timezone("America/Chicago")).strftime(
-        "%Y-%m-%d %I:%M %p %Z"
-    )
+    # Prevent duplicate labels: if this labeler already labeled this asset, skip.
+    # Admins and reconcile labels are exempt so they can re-label.
+    is_admin = hasattr(request, "user") and request.user.is_authenticated and request.user.is_superuser
+    is_reconcile = labeler_source == "reconcile_label"
+    if not is_admin and not is_reconcile:
+        already_exists = prompt_responses.objects.filter(
+            asset_id=asset_id, task_type=task_type,
+            rule_index=rule_index, labeler_id=labeler_id,
+        ).exists()
+        if already_exists:
+            return JsonResponse({"status": "skipped", "explanation": "already labeled"}, safe=False)
 
-    # compute label count for asset by labeler id
     labeler_count = (
         prompt_responses.objects.filter(
-            asset_id=asset_id,
-            task_type=task_type,
-            labeler_id=labeler_id,
-            rule_index=rule_index,
+            asset_id=asset_id, task_type=task_type,
+            labeler_id=labeler_id, rule_index=rule_index,
         )
         .order_by("-labeler_count")
         .values_list("labeler_count", flat=True)
@@ -1597,11 +1602,9 @@ def get_disputed_assets(request: Request) -> JsonResponse:
     rule_index = request.data.get("rule_index", 1)
     task_type = request.data.get("task_type", None)
 
-    asset_links = label_data_selected_assets_new.objects.values(
-        "asset_id", "image_link"
-    )
-
-    asset_links = pd.DataFrame(list(asset_links))
+    asset_links = pd.DataFrame(
+        list(label_data_selected_assets_new.objects.values("asset_id", "image_link"))
+    ).drop_duplicates(subset=["asset_id"], keep="first")
 
     data = prompt_responses.objects.filter(
         rule_index=rule_index, task_type=task_type
@@ -4246,6 +4249,9 @@ def record_labeling_session(request):
         started_at = parse_datetime(data.get("started_at", ""))
         ended_at = parse_datetime(data.get("ended_at", ""))
         labels_completed = int(data.get("labels_completed", 0))
+        active_seconds = data.get("active_seconds")
+        if active_seconds is not None:
+            active_seconds = int(active_seconds)
 
         user = User.objects.get(username=username)
         assignment = BatchAssignment.objects.filter(
@@ -4265,6 +4271,7 @@ def record_labeling_session(request):
             started_at=started_at,
             ended_at=ended_at,
             labels_completed=labels_completed,
+            active_seconds=active_seconds,
         )
 
         return JsonResponse(

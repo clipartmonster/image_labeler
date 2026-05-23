@@ -84,9 +84,12 @@ class LabelingSession(models.Model):
     started_at = models.DateTimeField()
     ended_at = models.DateTimeField(null=True, blank=True)
     labels_completed = models.IntegerField(default=0)
+    active_seconds = models.IntegerField(null=True, blank=True)
 
     @property
     def duration_hours(self):
+        if self.active_seconds is not None:
+            return self.active_seconds / 3600
         if self.ended_at and self.started_at:
             return (self.ended_at - self.started_at).total_seconds() / 3600
         return None
