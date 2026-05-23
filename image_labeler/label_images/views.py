@@ -2632,6 +2632,68 @@ def admin_labeler_labels_detail(request):
 
 
 # ---------------------------------------------------------------------------
+# Admin: override a labeler's answer for a single asset
+# ---------------------------------------------------------------------------
+
+@admin_required_ajax
+def admin_override_label(request):
+    """AJAX: set or clear a labeler's prompt_response for a single asset."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    import json as _json
+    from labeling_api.models import prompt_responses
+
+    body = _json.loads(request.body)
+    assignment_id = body.get("assignment_id")
+    asset_id = body.get("asset_id")
+    new_answer = body.get("answer")  # "yes", "no", or None/empty to clear
+
+    if not assignment_id or not asset_id:
+        return JsonResponse({"error": "assignment_id and asset_id required"}, status=400)
+
+    try:
+        a = BatchAssignment.objects.select_related("user").get(pk=assignment_id)
+    except BatchAssignment.DoesNotExist:
+        return JsonResponse({"error": "not found"}, status=404)
+
+    labeler_id = a.user.username
+
+    if new_answer:
+        # Update existing row if present, else insert
+        qs = prompt_responses.objects.filter(
+            asset_id=asset_id,
+            task_type=a.task_type,
+            rule_index=a.rule_index,
+            labeler_id=labeler_id,
+        )
+        if qs.exists():
+            qs.update(prompt_response=new_answer)
+        else:
+            from django.utils import timezone as tz
+            prompt_responses(
+                datetime_created=tz.now(),
+                asset_id=asset_id,
+                labeler_source="admin_override",
+                labeler_id=labeler_id,
+                labeler_count=1,
+                task_type=a.task_type,
+                rule_index=a.rule_index,
+                prompt_response=new_answer,
+            ).save()
+    else:
+        # Clear — delete the row
+        prompt_responses.objects.filter(
+            asset_id=asset_id,
+            task_type=a.task_type,
+            rule_index=a.rule_index,
+            labeler_id=labeler_id,
+        ).delete()
+
+    return JsonResponse({"status": "ok"})
+
+
+# ---------------------------------------------------------------------------
 # Admin: update batch assignment deadline
 # ---------------------------------------------------------------------------
 
