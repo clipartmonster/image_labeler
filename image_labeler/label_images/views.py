@@ -439,7 +439,10 @@ def setup_session(request):
             else:
                 deadline_status = "ok"
 
-            training_required = (a.task_type, a.rule_index) not in completed_training_features
+            training_required = (
+                (a.task_type, a.rule_index) not in completed_training_features
+                and not (a.task_type == "line_width_type" and a.rule_index == 2)
+            )
             work_assignments.append({
                 "id": a.id,
                 "task_type": a.task_type,
