@@ -784,14 +784,22 @@ def _check_batch_complete(labeler_id, task_type, rule_index):
         if not batch_asset_ids:
             continue
 
-        labeled_ids = set(
-            prompt_responses.objects.filter(
-                task_type=a.task_type,
-                rule_index=a.rule_index,
-                labeler_id=labeler_id,
-                asset_id__in=batch_asset_ids,
-            ).values_list("asset_id", flat=True).distinct()
-        )
+        if task_type == "line_width_type":
+            labeled_ids = set(
+                line_width_sample_table.objects.filter(
+                    asset_id__in=batch_asset_ids,
+                    labeler_id=labeler_id,
+                ).values_list("asset_id", flat=True).distinct()
+            )
+        else:
+            labeled_ids = set(
+                prompt_responses.objects.filter(
+                    task_type=a.task_type,
+                    rule_index=a.rule_index,
+                    labeler_id=labeler_id,
+                    asset_id__in=batch_asset_ids,
+                ).values_list("asset_id", flat=True).distinct()
+            )
         flagged_ids = set(
             label_issues_table.objects.filter(
                 asset_id__in=batch_asset_ids,
@@ -1423,6 +1431,9 @@ def get_asset_batch(request: Request) -> JsonResponse:
     labeler_username = None
     if hasattr(request, "user") and request.user.is_authenticated and not request.user.is_superuser:
         labeler_username = request.user.username
+    # Fallback: accept labeler_id from the request data (used by internal API calls)
+    if not labeler_username:
+        labeler_username = request.data.get("labeler_id") or request.GET.get("labeler_id")
 
     batch_asset_ids = set(
         label_data_selected_assets_new.objects.filter(
@@ -1435,14 +1446,22 @@ def get_asset_batch(request: Request) -> JsonResponse:
 
     # Exclude assets this labeler has already labeled (>=1 response).
     if labeler_username:
-        already_labeled = set(
-            prompt_responses.objects.filter(
-                task_type=task_type,
-                rule_index=rule_index,
-                labeler_id=labeler_username,
-                asset_id__in=batch_asset_ids,
-            ).values_list("asset_id", flat=True).distinct()
-        )
+        if task_type == "line_width_type":
+            already_labeled = set(
+                line_width_sample_table.objects.filter(
+                    asset_id__in=batch_asset_ids,
+                    labeler_id=labeler_username,
+                ).values_list("asset_id", flat=True).distinct()
+            )
+        else:
+            already_labeled = set(
+                prompt_responses.objects.filter(
+                    task_type=task_type,
+                    rule_index=rule_index,
+                    labeler_id=labeler_username,
+                    asset_id__in=batch_asset_ids,
+                ).values_list("asset_id", flat=True).distinct()
+            )
     else:
         already_labeled = set()
 
@@ -2961,6 +2980,10 @@ def collect_line_width_sample(request: Request) -> JsonResponse:
         f"host={connection.settings_dict.get('HOST')}",
         flush=True,
     )
+
+    labeler_id = request.data.get("labeler_id", None)
+    if labeler_id:
+        _check_batch_complete(labeler_id, "line_width_type", 2)
 
     result = {
         "status": "success",

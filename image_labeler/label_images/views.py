@@ -188,17 +188,10 @@ def measure_line_widths(request):
         "batch_id": batch_id,
         "task_type": "line_width_type",
         "rule_index": rule_index,
+        "labeler_id": labeler_id,
     }
     response = requests.get(api_url, json=data, headers=header)
     assets_to_label = json.loads(response.content)["asset_batch"]
-
-    # Only one label per asset is needed — exclude assets measured by anyone.
-    from labeling_api.models import line_width_sample_table
-    already_sampled = set(
-        line_width_sample_table.objects
-        .values_list("asset_id", flat=True)
-    )
-    assets_to_label = [a for a in assets_to_label if a["asset_id"] not in already_sampled]
 
     return render(request, "measure_line_widths.html", {
         "assets_to_label": assets_to_label,
@@ -393,7 +386,7 @@ def setup_session(request):
                 "training_done": is_done,
             })
 
-        from labeling_api.models import label_issues_table
+        from labeling_api.models import label_issues_table, line_width_sample_table
 
         work_assignments = []
         for a in work_qs:
@@ -407,15 +400,22 @@ def setup_session(request):
             )
             total = len(batch_asset_ids)
 
-            # Count assets this labeler has responded to (>=1 response)
-            labeled_ids = set(
-                prompt_responses.objects.filter(
-                    task_type=a.task_type,
-                    rule_index=a.rule_index,
-                    labeler_id=request.user.username,
-                    asset_id__in=batch_asset_ids,
-                ).values_list("asset_id", flat=True).distinct()
-            )
+            if a.task_type == "line_width_type":
+                labeled_ids = set(
+                    line_width_sample_table.objects.filter(
+                        asset_id__in=batch_asset_ids,
+                        labeler_id=request.user.username,
+                    ).values_list("asset_id", flat=True).distinct()
+                )
+            else:
+                labeled_ids = set(
+                    prompt_responses.objects.filter(
+                        task_type=a.task_type,
+                        rule_index=a.rule_index,
+                        labeler_id=request.user.username,
+                        asset_id__in=batch_asset_ids,
+                    ).values_list("asset_id", flat=True).distinct()
+                )
             # Count flagged assets as completed too
             flagged_ids = set(
                 label_issues_table.objects.filter(
@@ -594,6 +594,7 @@ def mturk_redirect(request):
             "batch_id": batch_id,
             "task_type": task_type,
             "rule_index": rule_index,
+            "labeler_id": labeler_id,
         }
         response = requests.get(api_url, json=data, headers=header)
         return json.loads(response.content)
