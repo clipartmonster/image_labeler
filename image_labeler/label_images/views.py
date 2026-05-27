@@ -2478,38 +2478,49 @@ def admin_performance_data(request):
     tr_count = tr_qs.count()
 
     # --- Work batch stats ---
-    from labeling_api.models import label_data_selected_assets_new, label_issues_table
+    from labeling_api.models import label_data_selected_assets_new, label_issues_table, line_width_sample_table
     work_assignments = BatchAssignment.objects.filter(user=user, is_training=False)
     work_rows = []
     total_work_labels = 0
     for a in work_assignments.order_by("-assigned_at"):
-        # Backfill: if completed_at is not set, check actual progress
-        if a.completed_at is None:
-            batch_asset_ids = set(
-                label_data_selected_assets_new.objects.filter(
-                    task_type=a.task_type, rule_index=a.rule_index,
-                    batch_id=a.batch_id, large_sub_batch=a.large_sub_batch,
-                ).values_list("asset_id", flat=True)
+        batch_asset_ids = set(
+            label_data_selected_assets_new.objects.filter(
+                task_type=a.task_type, rule_index=a.rule_index,
+                batch_id=a.batch_id, large_sub_batch=a.large_sub_batch,
+            ).values_list("asset_id", flat=True)
+        )
+
+        if a.task_type == "line_width_type":
+            labeled_ids = set(
+                line_width_sample_table.objects.filter(
+                    asset_id__in=batch_asset_ids,
+                    labeler_id=user.username,
+                ).values_list("asset_id", flat=True).distinct()
             )
-            if batch_asset_ids:
-                labeled_ids = set(
-                    prompt_responses.objects.filter(
-                        task_type=a.task_type, rule_index=a.rule_index,
-                        labeler_id=user.username, asset_id__in=batch_asset_ids,
-                    ).values_list("asset_id", flat=True).distinct()
-                )
-                flagged_ids = set(
-                    label_issues_table.objects.filter(
-                        asset_id__in=batch_asset_ids,
-                    ).values_list("asset_id", flat=True)
-                )
-                if batch_asset_ids.issubset(labeled_ids | flagged_ids):
-                    from django.utils import timezone as tz
-                    a.completed_at = tz.now()
-                    a.save(update_fields=["completed_at"])
+        else:
+            labeled_ids = set(
+                prompt_responses.objects.filter(
+                    task_type=a.task_type, rule_index=a.rule_index,
+                    labeler_id=user.username, asset_id__in=batch_asset_ids,
+                ).values_list("asset_id", flat=True).distinct()
+            )
+        flagged_ids = set(
+            label_issues_table.objects.filter(
+                asset_id__in=batch_asset_ids,
+            ).values_list("asset_id", flat=True)
+        )
+
+        # Backfill: if completed_at is not set, check actual progress
+        if a.completed_at is None and batch_asset_ids:
+            if batch_asset_ids.issubset(labeled_ids | flagged_ids):
+                from django.utils import timezone as tz
+                a.completed_at = tz.now()
+                a.save(update_fields=["completed_at"])
 
         sessions = LabelingSession.objects.filter(batch_assignment=a, ended_at__isnull=False)
-        labels = sum(s.labels_completed for s in sessions)
+        labels_from_sessions = sum(s.labels_completed for s in sessions)
+        # For line_width_type, sessions may not exist — use actual sample count
+        labels = len(labeled_ids) if a.task_type == "line_width_type" else labels_from_sessions
         hours = sum((s.duration_hours or 0) for s in sessions)
         total_work_labels += labels
         work_rows.append({
