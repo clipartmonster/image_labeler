@@ -2425,6 +2425,91 @@ def admin_remove_assignments(request):
 
 
 # ---------------------------------------------------------------------------
+# Admin: payments tracking
+# ---------------------------------------------------------------------------
+
+@admin_required
+def admin_payments(request):
+    from django.contrib.auth.models import User
+    from labeling_api.models import LabellingRule as LR
+
+    rule_titles = {}
+    for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
+        rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
+
+    labelers = list(
+        User.objects.filter(is_staff=True, is_superuser=False)
+        .order_by("username").values_list("username", flat=True)
+    )
+    return render(request, "admin_payments.html", {
+        "labelers_json": json.dumps(labelers),
+        "rule_titles_json": json.dumps({f"{k[0]}|{k[1]}": v for k, v in rule_titles.items()}),
+    })
+
+
+@admin_required_ajax
+def admin_payments_data(request):
+    """AJAX: return batch assignments with payment/paid info, optionally filtered."""
+    from django.contrib.auth.models import User
+
+    labeler = request.GET.get("labeler", "")
+    status_filter = request.GET.get("status", "all")  # all, paid, unpaid
+
+    qs = BatchAssignment.objects.filter(is_training=False).select_related("user")
+    if labeler:
+        qs = qs.filter(user__username=labeler)
+
+    if status_filter == "paid":
+        qs = qs.filter(paid=True)
+    elif status_filter == "unpaid":
+        qs = qs.filter(paid=False)
+
+    rows = []
+    total_owed = 0
+    total_paid = 0
+    for a in qs.order_by("-assigned_at"):
+        amount = float(a.payment_amount) + float(a.bonus_amount)
+        if a.paid:
+            total_paid += amount
+        elif a.completed_at:
+            total_owed += amount
+        rows.append({
+            "id": a.id,
+            "labeler": a.user.username,
+            "task_type": a.task_type,
+            "rule_index": a.rule_index,
+            "batch_id": a.batch_id,
+            "sub_batch": a.large_sub_batch,
+            "payment": float(a.payment_amount),
+            "bonus": float(a.bonus_amount),
+            "total": amount,
+            "assigned": a.assigned_at.strftime("%b %d, %Y"),
+            "completed": a.completed_at.strftime("%b %d, %Y") if a.completed_at else None,
+            "paid": a.paid,
+        })
+
+    return JsonResponse({
+        "rows": rows,
+        "total_owed": round(total_owed, 2),
+        "total_paid": round(total_paid, 2),
+    })
+
+
+@admin_required_ajax
+def admin_payments_toggle(request):
+    """AJAX POST: toggle paid status on one or more assignments."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    data = json.loads(request.body)
+    ids = data.get("ids", [])
+    paid = data.get("paid", True)
+    if not ids:
+        return JsonResponse({"error": "no ids"}, status=400)
+    BatchAssignment.objects.filter(pk__in=ids).update(paid=paid)
+    return JsonResponse({"status": "ok", "updated": len(ids)})
+
+
+# ---------------------------------------------------------------------------
 # Admin: performance dashboard
 # ---------------------------------------------------------------------------
 

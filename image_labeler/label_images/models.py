@@ -70,6 +70,7 @@ class BatchAssignment(models.Model):
         default=False,
         help_text="Training batch — shows correct answers after labeler responds.",
     )
+    paid = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ("user", "task_type", "rule_index", "batch_id", "large_sub_batch")

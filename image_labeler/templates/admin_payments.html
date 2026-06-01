@@ -1,0 +1,190 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+<div class="wf-page">
+    <div class="wf-nav">
+        <a href="/label_images/setup_session/">Session Setup</a>
+        <a href="/label_images/admin/labelers/">Labelers</a>
+        <a href="/label_images/admin/bulk_assign/">Bulk Assign</a>
+        <a href="/label_images/admin/training/">Training</a>
+        <a href="/label_images/admin/performance/">Performance</a>
+        <a href="/label_images/admin/payments/" class="active">Payments</a>
+        <a href="/label_images/admin/label_comparison/">Label Comparison</a>
+        <a href="/label_images/rules/">Rules</a>
+    </div>
+
+    <h1>Batch Payments</h1>
+
+    <div class="wf-filters" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+        <div>
+            <label>Labeler</label>
+            <select id="payLabeler" class="wf-select" onchange="loadPayments()">
+                <option value="">All</option>
+            </select>
+        </div>
+        <div>
+            <label>Status</label>
+            <select id="payStatus" class="wf-select" onchange="loadPayments()">
+                <option value="all">All</option>
+                <option value="unpaid" selected>Unpaid</option>
+                <option value="paid">Paid</option>
+            </select>
+        </div>
+        <button id="payMarkBtn" class="wf-btn wf-btn-primary wf-btn-sm" style="margin-top:18px;" onclick="markSelected()" disabled>
+            Mark Selected as Paid
+        </button>
+        <button id="payUnmarkBtn" class="wf-btn wf-btn-sm" style="margin-top:18px; background:#bd4444; color:#fff;" onclick="unmarkSelected()" disabled>
+            Mark Selected as Unpaid
+        </button>
+    </div>
+
+    <!-- Summary cards -->
+    <div id="paySummary" style="display:flex; gap:12px; margin:16px 0; flex-wrap:wrap;"></div>
+
+    <table class="wf-table" style="width:100%; font-size:13px;">
+        <thead>
+            <tr>
+                <th style="width:30px;"><input type="checkbox" id="paySelectAll" onchange="toggleAll(this)"></th>
+                <th>Labeler</th>
+                <th>Feature</th>
+                <th>Batch</th>
+                <th style="text-align:right;">Payment</th>
+                <th style="text-align:right;">Bonus</th>
+                <th style="text-align:right;">Total</th>
+                <th>Assigned</th>
+                <th>Completed</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody id="payBody"></tbody>
+    </table>
+
+    <p id="payEmpty" class="wf-muted" style="display:none; margin-top:12px;">No batches found.</p>
+</div>
+
+<script>
+var _ruleTitles = {{ rule_titles_json|safe }};
+var _payData = [];
+
+(function() {
+    var labelers = {{ labelers_json|safe }};
+    var sel = document.getElementById('payLabeler');
+    labelers.forEach(function(u) {
+        var o = document.createElement('option');
+        o.value = u; o.textContent = u;
+        sel.appendChild(o);
+    });
+    loadPayments();
+})();
+
+function featureName(taskType, ruleIndex) {
+    return _ruleTitles[taskType + '|' + ruleIndex] || (taskType + '/r' + ruleIndex);
+}
+
+function makeStatCard(label, value, extra) {
+    return '<div style="background:#f0f4f4; border-radius:8px; padding:12px 18px; min-width:120px;">'
+        + '<div style="font-size:11px; color:#6a7a7a; font-weight:700; text-transform:uppercase; letter-spacing:.5px;">' + label + '</div>'
+        + '<div style="font-size:22px; font-weight:700; color:#2a4a4a; margin-top:2px;">' + value + '</div>'
+        + (extra ? '<div style="font-size:11px; color:#8a9a9a; margin-top:2px;">' + extra + '</div>' : '')
+        + '</div>';
+}
+
+function loadPayments() {
+    var labeler = document.getElementById('payLabeler').value;
+    var status = document.getElementById('payStatus').value;
+    var url = '/label_images/admin/payments/data/?status=' + status;
+    if (labeler) url += '&labeler=' + encodeURIComponent(labeler);
+
+    fetch(url).then(function(r) { return r.json(); }).then(function(d) {
+        _payData = d.rows;
+        renderPayments(d);
+    });
+}
+
+function renderPayments(d) {
+    var rows = d.rows;
+    var tb = document.getElementById('payBody');
+    tb.innerHTML = '';
+    document.getElementById('payEmpty').style.display = rows.length ? 'none' : '';
+    document.getElementById('paySelectAll').checked = false;
+    updateButtons();
+
+    var summaryHtml = makeStatCard('Owed (Completed & Unpaid)', '$' + d.total_owed.toFixed(2))
+        + makeStatCard('Paid', '$' + d.total_paid.toFixed(2))
+        + makeStatCard('Batches Shown', rows.length);
+    document.getElementById('paySummary').innerHTML = summaryHtml;
+
+    rows.forEach(function(r) {
+        var statusHtml = r.paid
+            ? '<span style="color:#2a7a2a; font-weight:600;">Paid</span>'
+            : (r.completed
+                ? '<span style="color:#b07a00; font-weight:600;">Unpaid</span>'
+                : '<span style="color:#8a9a9a;">In Progress</span>');
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td><input type="checkbox" class="pay-cb" data-id="' + r.id + '"></td>'
+            + '<td>' + r.labeler + '</td>'
+            + '<td>' + featureName(r.task_type, r.rule_index) + '</td>'
+            + '<td>' + r.batch_id + '/' + r.sub_batch + '</td>'
+            + '<td style="text-align:right;">$' + r.payment.toFixed(2) + '</td>'
+            + '<td style="text-align:right;">' + (r.bonus > 0 ? '$' + r.bonus.toFixed(2) : '\u2014') + '</td>'
+            + '<td style="text-align:right; font-weight:600;">$' + r.total.toFixed(2) + '</td>'
+            + '<td>' + r.assigned + '</td>'
+            + '<td>' + (r.completed || '\u2014') + '</td>'
+            + '<td>' + statusHtml + '</td>';
+        tb.appendChild(tr);
+    });
+
+    tb.querySelectorAll('.pay-cb').forEach(function(cb) {
+        cb.addEventListener('change', updateButtons);
+    });
+}
+
+function getSelectedIds() {
+    var ids = [];
+    document.querySelectorAll('.pay-cb:checked').forEach(function(cb) {
+        ids.push(parseInt(cb.getAttribute('data-id')));
+    });
+    return ids;
+}
+
+function updateButtons() {
+    var ids = getSelectedIds();
+    document.getElementById('payMarkBtn').disabled = ids.length === 0;
+    document.getElementById('payUnmarkBtn').disabled = ids.length === 0;
+}
+
+function toggleAll(master) {
+    document.querySelectorAll('.pay-cb').forEach(function(cb) {
+        cb.checked = master.checked;
+    });
+    updateButtons();
+}
+
+function markSelected() {
+    var ids = getSelectedIds();
+    if (!ids.length) return;
+    togglePaid(ids, true);
+}
+
+function unmarkSelected() {
+    var ids = getSelectedIds();
+    if (!ids.length) return;
+    togglePaid(ids, false);
+}
+
+function togglePaid(ids, paid) {
+    fetch('/label_images/admin/payments/toggle/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+        body: JSON.stringify({ids: ids, paid: paid})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.status === 'ok') loadPayments();
+        else alert(d.error || 'Error');
+    });
+}
+</script>
+
+{% endblock %}
