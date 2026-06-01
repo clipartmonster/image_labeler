@@ -123,6 +123,11 @@
     border: 1px solid #a0b4b4; padding: 9px 24px;
 }
 .mlw-btn-skip:hover { background: #eef4f4; }
+.mlw-btn-flag {
+    background: transparent; color: #b03030;
+    border: 1px solid #c06060; padding: 9px 24px;
+}
+.mlw-btn-flag:hover { background: #fdf0f0; }
 .mlw-btn-save { background: #409393; color: #fff; }
 .mlw-btn-save:hover { background: #357e7e; }
 .mlw-btn-save:disabled { background: #a0b4b4; cursor: not-allowed; }
@@ -170,6 +175,7 @@
         <div class="mlw-status"></div>
 
         <div class="mlw-actions">
+            <button class="mlw-btn mlw-btn-flag" onclick="mlwFlag()">Flag Issue</button>
             <button class="mlw-btn mlw-btn-skip" onclick="mlwSkip()">Skip</button>
             <button class="mlw-btn mlw-btn-save" onclick="mlwSave()">Save &amp; Next</button>
         </div>
@@ -234,17 +240,50 @@ function _mlwBoot() {
             samplesPerSection: SAMPLES_PER_SECTION,
             statsTarget: statsTarget
         };
+        function handleImgError() {
+            setStatus(card, 'Image failed to load — auto-flagging…', 'info');
+            flagAsset(card.getAttribute('data-asset-id')).then(function() {
+                teardownMeasureOverlay();
+                activateCard(currentIdx + 1);
+            }).catch(function() {
+                setStatus(card, 'Image failed to load. Use Flag Issue to skip.');
+            });
+        }
         if (img.complete && img.naturalWidth) {
             initOverlayWhenReady(img, overlayOpts, card);
         } else if (img.complete && !img.naturalWidth) {
-            setStatus(card, 'Image failed to load. Try skipping this asset.');
+            handleImgError();
         } else {
             img.onload = function() { initOverlayWhenReady(img, overlayOpts, card); };
-            img.onerror = function() {
-                setStatus(card, 'Image failed to load. Try skipping this asset.');
-            };
+            img.onerror = handleImgError;
         }
     }
+
+    function flagAsset(assetId, reason) {
+        var authKey = (typeof API_ACCESS_KEY !== 'undefined' && API_ACCESS_KEY) ? API_ACCESS_KEY : '';
+        return fetch(window.LABELING_API_BASE_URL + '/collect_label_issue/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': authKey },
+            body: JSON.stringify({
+                asset_id: parseInt(assetId),
+                task_type: 'line_width_type',
+                rule_index: ruleIndex,
+                labeler_id: labelerId
+            })
+        }).then(function(r) { return r.json(); });
+    }
+
+    window.mlwFlag = function() {
+        var card = cards[currentIdx];
+        var assetId = card.getAttribute('data-asset-id');
+        setStatus(card, 'Flagging…', 'info');
+        flagAsset(assetId).then(function() {
+            teardownMeasureOverlay();
+            activateCard(currentIdx + 1);
+        }).catch(function(err) {
+            setStatus(card, 'Flag failed: ' + (err && err.message ? err.message : err));
+        });
+    };
 
     window.mlwSkip = function() {
         teardownMeasureOverlay();

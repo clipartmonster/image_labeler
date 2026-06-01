@@ -2482,6 +2482,7 @@ def admin_performance_data(request):
     work_assignments = BatchAssignment.objects.filter(user=user, is_training=False)
     work_rows = []
     total_work_labels = 0
+    total_work_hours = 0.0
     for a in work_assignments.order_by("-assigned_at"):
         batch_asset_ids = set(
             label_data_selected_assets_new.objects.filter(
@@ -2519,10 +2520,10 @@ def admin_performance_data(request):
 
         sessions = LabelingSession.objects.filter(batch_assignment=a, ended_at__isnull=False)
         labels_from_sessions = sum(s.labels_completed for s in sessions)
-        # For line_width_type, sessions may not exist — use actual sample count
         labels = len(labeled_ids) if a.task_type == "line_width_type" else labels_from_sessions
         hours = sum((s.duration_hours or 0) for s in sessions)
         total_work_labels += labels
+        total_work_hours += hours
         work_rows.append({
             "task_type": a.task_type,
             "rule_index": a.rule_index,
@@ -2539,12 +2540,8 @@ def admin_performance_data(request):
             "on_time": a.completed_at <= a.deadline if a.completed_at and a.deadline else None,
         })
 
-    # Work summary
-    all_sessions = LabelingSession.objects.filter(user=user, ended_at__isnull=False,
-                                                   batch_assignment__is_training=False)
-    w_total_labels = sum(s.labels_completed for s in all_sessions)
-    w_total_hours = sum((s.duration_hours or 0) for s in all_sessions)
-    w_throughput = round(w_total_labels / w_total_hours, 1) if w_total_hours > 0 else None
+    # Work summary — use accumulated totals so line_width batches are included
+    w_throughput = round(total_work_labels / total_work_hours, 1) if total_work_hours > 0 else None
     w_completed = work_assignments.filter(completed_at__isnull=False)
     w_completed_count = w_completed.count()
     w_on_time = w_completed.filter(completed_at__lte=F("deadline")).count()
@@ -2556,8 +2553,8 @@ def admin_performance_data(request):
             "training_accuracy": tr_avg_accuracy,
             "training_sessions": tr_count,
             "training_total_imgs": tr_total_imgs,
-            "work_labels": w_total_labels,
-            "work_hours": round(w_total_hours, 1),
+            "work_labels": total_work_labels,
+            "work_hours": round(total_work_hours, 1),
             "work_throughput": w_throughput,
             "work_on_time_pct": w_on_time_pct,
             "work_completed": w_completed_count,
