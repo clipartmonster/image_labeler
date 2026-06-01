@@ -828,6 +828,22 @@ def reconcile_labels(request):
         .prefetch_related("directives", "reference_images")
     )
 
+    # Fetch per-labeler responses for each disputed asset
+    from labeling_api.models import prompt_responses as PromptResp
+    disputed_asset_ids = [a["asset_id"] for a in assets_to_label]
+    votes_by_asset = {}
+    if disputed_asset_ids:
+        qs = PromptResp.objects.filter(
+            task_type=task_type, rule_index=rule_index,
+            asset_id__in=disputed_asset_ids,
+        ).values("asset_id", "labeler_id", "prompt_response")
+        for row in qs:
+            aid = row["asset_id"]
+            votes_by_asset.setdefault(aid, []).append({
+                "labeler": row["labeler_id"],
+                "response": row["prompt_response"],
+            })
+
     return render(
         request,
         "label_content.html",
@@ -842,6 +858,7 @@ def reconcile_labels(request):
             "collection_data": collection_data,
             "assignment_id": assignment_id,
             "rule_guides": rule_guides,
+            "votes_by_asset_json": json.dumps(votes_by_asset),
         },
     )
 
