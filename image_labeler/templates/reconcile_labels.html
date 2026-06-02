@@ -1,7 +1,5 @@
 {% load static %}
 
-</div>
-
 <div class = 'listing light container rules'>
     
     <div style = 'display:flex; flex-direction:column; align-items:center'>
@@ -102,9 +100,9 @@
             >
         </div>
 
-        <div class = 'design dark container' >
+        <div class = 'design dark container' style="position:relative;">
 
-            <img id = "image_{{asset.asset_id}}" class="design" data-src="{{ asset.image_link }}" src="{% static 'images/empty_icon.png' %}" crossOrigin="anonymous" >
+            <img id = "image_{{asset.asset_id}}" class="design" src="{{ asset.image_link }}" alt="Asset {{ asset.asset_id }}">
         
         </div>
         
@@ -123,14 +121,14 @@
                             <img id = yes_icon class = 'key icon' src="{% static 'images/yes_icon.png'%}">
                             <div class="switch3-container">
                                 <div class="switch3">
-                                <input type="radio" id="switch3-radio1"  prompt_response = 'yes' class = 'radio_button' data-hotkey="1" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
-                                <label for="switch3-radio1"></label>
+                                <input type="radio" id="switch3-radio1-{{ asset.asset_id }}"  prompt_response = 'yes' class = 'radio_button' data-hotkey="1" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
+                                <label for="switch3-radio1-{{ asset.asset_id }}"></label>
                         
-                                <input type="radio" id="switch3-radio2"  prompt_response = 'none' class = 'radio_button' data-hotkey="3" name="radio_{{forloop.counter}}_{{asset.asset_id}}" checked/>
-                                <label for="switch3-radio2"></label>
+                                <input type="radio" id="switch3-radio2-{{ asset.asset_id }}"  prompt_response = 'none' class = 'radio_button' data-hotkey="3" name="radio_{{forloop.counter}}_{{asset.asset_id}}" checked/>
+                                <label for="switch3-radio2-{{ asset.asset_id }}"></label>
                         
-                                <input type="radio" id="switch3-radio3"  prompt_response = 'no' class = 'radio_button' data-hotkey="2" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
-                                <label for="switch3-radio3"></label>          
+                                <input type="radio" id="switch3-radio3-{{ asset.asset_id }}"  prompt_response = 'no' class = 'radio_button' data-hotkey="2" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
+                                <label for="switch3-radio3-{{ asset.asset_id }}"></label>          
                                 </div>
                             </div>
                             <img id = no_icon class = 'key icon' src="{% static 'images/no_icon.png'%}">

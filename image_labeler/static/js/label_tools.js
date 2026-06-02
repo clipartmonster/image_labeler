@@ -653,9 +653,14 @@ function show_listings(){
 
     if (listing_containers.length === 0) return;
 
-    listing_containers.forEach(listing_container =>{
-        listing_container.style.display = 'grid'
-    })
+    listing_containers.forEach(function(listing_container) {
+        listing_container.style.display = 'grid';
+        var img = listing_container.querySelector('img.design');
+        if (img && img.dataset.src) {
+            img.src = img.dataset.src;
+            img.removeAttribute('data-src');
+        }
+    });
 
     first_listing_container = document.querySelector('.listing.light.container.active')
     if (first_listing_container) {
