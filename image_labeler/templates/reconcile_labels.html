@@ -101,7 +101,7 @@
         </div>
 
         <div class = 'design dark container' style="position:relative;">
-
+            <h1 class = 'label_option rule'>{{ asset.asset_id }}</h1>
             <img id = "image_{{asset.asset_id}}" class="design" src="{{ asset.image_link }}" alt="Asset {{ asset.asset_id }}">
         
         </div>
@@ -149,7 +149,10 @@
                     <h1 class = 'listing_info label'>Clear Responses</h1>
                 </div>
 
-          
+                <div class = 'label_option reset button' onclick = 'flag_asset_issue(event)'>
+                    <img src="{% static 'images/lg_flag_icon.png'%}">
+                    <h1 class = 'listing_info label'>Flag Asset Issue</h1>
+                </div>
 
 
         </div>
