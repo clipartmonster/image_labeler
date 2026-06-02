@@ -2431,7 +2431,7 @@ def admin_remove_assignments(request):
 @admin_required
 def admin_payments(request):
     from django.contrib.auth.models import User
-    from labeling_api.models import LabellingRule as LR
+    from labeling_api.models import labelling_rules as LR
 
     rule_titles = {}
     for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):

@@ -125,7 +125,7 @@ function renderPayments(d) {
         tr.innerHTML = '<td><input type="checkbox" class="pay-cb" data-id="' + r.id + '"></td>'
             + '<td>' + r.labeler + '</td>'
             + '<td>' + featureName(r.task_type, r.rule_index) + '</td>'
-            + '<td>' + r.batch_id + '/' + r.sub_batch + '</td>'
+            + '<td>' + r.batch_id + '-' + r.sub_batch + '</td>'
             + '<td style="text-align:right;">$' + r.payment.toFixed(2) + '</td>'
             + '<td style="text-align:right;">' + (r.bonus > 0 ? '$' + r.bonus.toFixed(2) : '\u2014') + '</td>'
             + '<td style="text-align:right; font-weight:600;">$' + r.total.toFixed(2) + '</td>'
