@@ -2455,7 +2455,7 @@ def admin_payments_data(request):
     labeler = request.GET.get("labeler", "")
     status_filter = request.GET.get("status", "all")  # all, paid, unpaid
 
-    qs = BatchAssignment.objects.filter(is_training=False).select_related("user")
+    qs = BatchAssignment.objects.select_related("user")
     if labeler:
         qs = qs.filter(user__username=labeler)
 
@@ -2486,6 +2486,7 @@ def admin_payments_data(request):
             "assigned": a.assigned_at.strftime("%b %d, %Y"),
             "completed": a.completed_at.strftime("%b %d, %Y") if a.completed_at else None,
             "paid": a.paid,
+            "is_training": a.is_training,
         })
 
     return JsonResponse({

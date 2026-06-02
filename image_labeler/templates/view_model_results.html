@@ -251,20 +251,87 @@ function selectFeature(btn, taskType, ruleIndex) {
         prodEl.innerHTML = '<div class="mr-no-prod">No production model set for this feature.</div>';
     }
 
-    // Update table headers based on model type
-    var thead = document.querySelector('.mr-tbl thead tr');
-    if (isReg) {
-        thead.innerHTML = '<th>#</th><th>MAE</th><th>Loss</th><th>Samples</th><th>Model</th><th>Date</th><th></th>';
+    // Store current table state and render (default: by rank ascending)
+    _curModels = models.slice();
+    _curIsReg = isReg;
+    _sortKey = 'rank';
+    _sortDir = 1;
+    renderHistory();
+}
+
+// ── Sortable history table ──
+var HISTORY_COLS = {
+    classifier: [
+        { label: '#', key: 'rank', type: 'num' },
+        { label: 'Recall', key: 'val_recall', type: 'num' },
+        { label: 'Precision', key: 'val_precision', type: 'num' },
+        { label: 'AUC', key: 'val_auc', type: 'num' },
+        { label: 'Score', key: 'score', type: 'num' },
+        { label: 'Samples', key: 'total_samples', type: 'num' },
+        { label: 'Model', key: 'model_type', type: 'str' },
+        { label: 'Date', key: 'date', type: 'date' }
+    ],
+    regressor: [
+        { label: '#', key: 'rank', type: 'num' },
+        { label: 'MAE', key: 'val_mae', type: 'num' },
+        { label: 'Loss', key: 'val_loss', type: 'num' },
+        { label: 'Samples', key: 'total_samples', type: 'num' },
+        { label: 'Model', key: 'model_type', type: 'str' },
+        { label: 'Date', key: 'date', type: 'date' }
+    ]
+};
+
+var _curModels = [];
+var _curIsReg = false;
+var _sortKey = 'rank';
+var _sortDir = 1;
+
+function sortBy(key) {
+    if (_sortKey === key) {
+        _sortDir = -_sortDir;
     } else {
-        thead.innerHTML = '<th>#</th><th>Recall</th><th>Precision</th><th>AUC</th><th>Score</th><th>Samples</th><th>Model</th><th>Date</th><th></th>';
+        _sortKey = key;
+        _sortDir = 1;
     }
+    renderHistory();
+}
+
+function _sortVal(m, col) {
+    var v = m[col.key];
+    if (col.type === 'num') {
+        var n = parseFloat(v);
+        return isNaN(n) ? -Infinity : n;
+    }
+    if (col.type === 'date') {
+        var t = Date.parse(v);
+        return isNaN(t) ? -Infinity : t;
+    }
+    return (v == null ? '' : String(v)).toLowerCase();
+}
+
+function renderHistory() {
+    var cols = _curIsReg ? HISTORY_COLS.regressor : HISTORY_COLS.classifier;
+
+    var thead = document.querySelector('.mr-tbl thead tr');
+    thead.innerHTML = cols.map(function(c) {
+        var arrow = (_sortKey === c.key) ? (_sortDir === 1 ? ' \u25B2' : ' \u25BC') : '';
+        return '<th style="cursor:pointer; user-select:none;" onclick="sortBy(\'' + c.key + '\')">' + c.label + arrow + '</th>';
+    }).join('') + '<th></th>';
+
+    var col = cols.filter(function(c) { return c.key === _sortKey; })[0] || cols[0];
+    var rows = _curModels.slice().sort(function(a, b) {
+        var va = _sortVal(a, col), vb = _sortVal(b, col);
+        if (va < vb) return -1 * _sortDir;
+        if (va > vb) return 1 * _sortDir;
+        return 0;
+    });
 
     var tb = document.getElementById('mrBody');
     tb.innerHTML = '';
-    models.forEach(function(m) {
+    rows.forEach(function(m) {
         var tr = document.createElement('tr');
         if (m.is_prod) tr.className = 'mr-prod-row';
-        if (isReg) {
+        if (_curIsReg) {
             tr.innerHTML = '<td>' + m.rank + '</td>'
                 + '<td class="' + maeCls(m.val_mae) + '"><strong>' + fmt(m.val_mae) + '</strong></td>'
                 + '<td>' + fmt(m.val_loss) + '</td>'
