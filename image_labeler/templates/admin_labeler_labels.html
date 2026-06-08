@@ -55,6 +55,15 @@
         <div id="detailGrid" class="ll-grid"></div>
         <p id="detailEmpty" class="wf-muted" style="display:none;">No labels found for this assignment.</p>
     </div>
+
+    <!-- Samples modal -->
+    <div id="samplesModal" class="ll-modal" onclick="if(event.target === this) closeSamplesModal()">
+        <div class="ll-modal-content">
+            <span class="ll-modal-close" onclick="closeSamplesModal()">&times;</span>
+            <h3 class="ll-modal-title" id="samplesModalTitle">Measurement Samples</h3>
+            <div id="samplesModalBody"></div>
+        </div>
+    </div>
 </div>
 
 <style>
@@ -89,6 +98,41 @@
     border:none; border-radius:3px; cursor:pointer; white-space:nowrap;
 }
 .ll-view-btn:hover { background:#357e7e; }
+
+.ll-samples-row { 
+    font-size:11px; margin-top:4px; display:flex; align-items:center; gap:6px;
+}
+.ll-samples-lbl { color:#6f7a7a; }
+.ll-samples-avg { color:#409393; font-weight:600; }
+.ll-view-samples-btn {
+    font-size:10px; padding:2px 8px; background:#409393; color:#fff;
+    border:none; border-radius:2px; cursor:pointer; margin-left:auto;
+}
+.ll-view-samples-btn:hover { background:#357e7e; }
+
+.ll-modal {
+    display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center;
+}
+.ll-modal.active { display:flex; }
+.ll-modal-content {
+    background:#fff; border-radius:8px; padding:20px; max-width:600px;
+    max-height:80vh; overflow:auto; position:relative;
+}
+.ll-modal-close {
+    position:absolute; top:12px; right:12px; font-size:24px; cursor:pointer;
+    color:#6a7a7a; line-height:1; padding:0 6px;
+}
+.ll-modal-close:hover { color:#2a3a3a; }
+.ll-modal-title {
+    font-size:16px; font-weight:700; color:#2a3a3a; margin:0 0 16px;
+}
+.ll-sample-item {
+    padding:8px 12px; margin-bottom:6px; background:#f0f3f3; border-radius:4px;
+    display:flex; justify-content:space-between; font-size:13px;
+}
+.ll-sample-item span { color:#6a7a7a; }
+.ll-sample-item strong { color:#2a4a4a; font-weight:600; }
 </style>
 
 <script>
@@ -202,6 +246,16 @@ function loadDetail(assignmentId, title) {
                     + correctDisplay + ' &nbsp;' + rightHtml + '</div>';
             }
 
+            // Add samples display for line_width_type rule 2
+            if (l.samples && l.samples.length > 0) {
+                var avgWidth = l.samples.reduce(function(sum, s) { return sum + (s.width || 0); }, 0) / l.samples.length;
+                extraHtml += '<div class="ll-samples-row">'
+                    + '<span class="ll-samples-lbl">Samples: </span>' + l.samples.length
+                    + ' &nbsp;<span class="ll-samples-avg">Avg: ' + avgWidth.toFixed(1) + 'px</span>'
+                    + '<button class="ll-view-samples-btn" onclick="viewSamples(event, ' + l.asset_id + ')">View</button>'
+                    + '</div>';
+            }
+
             var card = document.createElement('div');
             card.className = 'll-card';
             card.innerHTML = '<img src="' + (l.image_link || '') + '" loading="lazy" onerror="this.style.display=\'none\'">'
@@ -212,6 +266,9 @@ function loadDetail(assignmentId, title) {
                 + '</div>';
             grid.appendChild(card);
         });
+
+        // Store labels in window for sample viewing
+        window._currentLabels = labels;
     });
 }
 
@@ -225,6 +282,41 @@ function makeCard(label, val, sub) {
         + '<div class="pf-card-val">' + val + '</div>'
         + (sub ? '<div class="pf-card-sub">' + sub + '</div>' : '')
         + '</div>';
+}
+
+function viewSamples(event, assetId) {
+    event.stopPropagation();
+    var labels = window._currentLabels || [];
+    var label = labels.find(function(l) { return l.asset_id === assetId; });
+    if (!label || !label.samples || label.samples.length === 0) {
+        alert('No samples found for this asset.');
+        return;
+    }
+    
+    document.getElementById('samplesModalTitle').textContent = 'Samples for Asset ' + assetId;
+    var body = document.getElementById('samplesModalBody');
+    body.innerHTML = '';
+    
+    label.samples.forEach(function(s) {
+        var div = document.createElement('div');
+        div.className = 'll-sample-item';
+        div.innerHTML = '<span>Sample #' + s.sample_index + '</span>'
+            + '<strong>' + s.width + 'px</strong>';
+        body.appendChild(div);
+    });
+    
+    // Calculate and show average
+    var avgWidth = label.samples.reduce(function(sum, s) { return sum + (s.width || 0); }, 0) / label.samples.length;
+    var avgDiv = document.createElement('div');
+    avgDiv.style.cssText = 'margin-top:12px; padding:10px 12px; background:#e8f4f4; border-radius:4px; font-weight:600; color:#2a4a4a; text-align:center;';
+    avgDiv.textContent = 'Average: ' + avgWidth.toFixed(1) + 'px (' + label.samples.length + ' samples)';
+    body.appendChild(avgDiv);
+    
+    document.getElementById('samplesModal').classList.add('active');
+}
+
+function closeSamplesModal() {
+    document.getElementById('samplesModal').classList.remove('active');
 }
 </script>
 {% endblock %}

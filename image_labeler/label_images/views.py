@@ -2811,6 +2811,31 @@ def admin_labeler_labels_detail(request):
             row["right"] = (answer == correct_str) if answer else None
         rows.append(row)
 
+    # For line_width_type rule 2, fetch measurement samples
+    samples_by_asset = {}
+    if not a.is_training and a.task_type == "line_width_type" and a.rule_index == 2:
+        from labeling_api.models import line_width_sample_table
+        samples = line_width_sample_table.objects.filter(
+            asset_id__in=list(assets.keys()),
+            labeler_id=labeler_id
+        ).values("asset_id", "sample_index", "width", "image_width", "image_height").order_by("asset_id", "sample_index")
+        
+        for sample in samples:
+            asset_id = sample["asset_id"]
+            if asset_id not in samples_by_asset:
+                samples_by_asset[asset_id] = []
+            samples_by_asset[asset_id].append({
+                "sample_index": sample["sample_index"],
+                "width": sample["width"],
+                "image_width": sample["image_width"],
+                "image_height": sample["image_height"]
+            })
+    
+    # Add samples to each row
+    for row in rows:
+        if row["asset_id"] in samples_by_asset:
+            row["samples"] = samples_by_asset[row["asset_id"]]
+
     return JsonResponse({
         "assignment_id": a.id,
         "is_training": a.is_training,
