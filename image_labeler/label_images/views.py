@@ -3280,6 +3280,16 @@ def admin_subbatch_completion(request):
         .values_list("asset_id", flat=True)
         .distinct()
     )
+    # line_width_type rule 2 stores its measurements in line_width_sample_table
+    # (not prompt_responses) and only needs 1 labeler's samples per asset to be
+    # considered done. Mirror the labeling-flow logic so counts line up.
+    if task_type == "line_width_type":
+        from labeling_api.models import line_width_sample_table
+        done_ids = done_ids | set(
+            line_width_sample_table.objects
+            .values_list("asset_id", flat=True)
+            .distinct()
+        )
     # Flagged assets also count as done
     flagged_ids = set(
         label_issues_table.objects.values_list("asset_id", flat=True)
