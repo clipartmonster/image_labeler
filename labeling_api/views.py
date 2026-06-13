@@ -2964,6 +2964,8 @@ def collect_line_width_sample(request: Request) -> JsonResponse:
         asset_id=request.data.get("asset_id", None),
         sample_index=request.data.get("sample_index", None),
         width=width,
+        x_coord=request.data.get("x_coord", None),
+        y_coord=request.data.get("y_coord", None),
         image_width=request.data.get("image_width", None),
         image_height=request.data.get("image_height", None),
         labeler_id=request.data.get("labeler_id", None),

@@ -2847,6 +2847,87 @@ def admin_labeler_labels_detail(request):
 
 
 # ---------------------------------------------------------------------------
+# Admin: review line_width_type rule 2 measurement samples
+# ---------------------------------------------------------------------------
+
+@admin_required_ajax
+def admin_line_width_samples(request):
+    """AJAX: per-asset line-width samples (coords + widths) for one assignment.
+
+    Used by the performance page "Review Samples" view to show exactly where a
+    labeler measured each line and the measured widths. Only meaningful for
+    line_width_type rule 2 assignments.
+    """
+    from labeling_api.models import label_data_selected_assets_new, line_width_sample_table
+
+    assignment_id = request.GET.get("assignment_id")
+    if not assignment_id:
+        return JsonResponse({"error": "assignment_id required"}, status=400)
+    try:
+        a = BatchAssignment.objects.select_related("user").get(pk=assignment_id)
+    except BatchAssignment.DoesNotExist:
+        return JsonResponse({"error": "not found"}, status=404)
+
+    labeler_id = a.user.username
+
+    # Assets that belong to this batch / sub-batch.
+    assets_qs = label_data_selected_assets_new.objects.filter(
+        batch_id=a.batch_id,
+        large_sub_batch=a.large_sub_batch,
+        task_type=a.task_type,
+        rule_index=a.rule_index,
+    ).values("asset_id", "image_link")
+    assets = {row["asset_id"]: {"image_link": row["image_link"]} for row in assets_qs}
+
+    # Samples this labeler recorded for those assets.
+    samples_by_asset = {}
+    if assets:
+        sample_rows = (
+            line_width_sample_table.objects
+            .filter(asset_id__in=list(assets.keys()), labeler_id=labeler_id)
+            .values(
+                "asset_id", "sample_index", "width",
+                "x_coord", "y_coord", "image_width", "image_height",
+            )
+            .order_by("asset_id", "sample_index")
+        )
+        for s in sample_rows:
+            samples_by_asset.setdefault(s["asset_id"], []).append({
+                "sample_index": s["sample_index"],
+                "width": s["width"],
+                "x_coord": s["x_coord"],
+                "y_coord": s["y_coord"],
+                "image_width": s["image_width"],
+                "image_height": s["image_height"],
+            })
+
+    # Only return assets that actually have samples, ordered by asset_id.
+    rows = []
+    for asset_id in sorted(samples_by_asset.keys()):
+        samples = samples_by_asset[asset_id]
+        widths = [s["width"] for s in samples if s["width"] is not None]
+        rows.append({
+            "asset_id": asset_id,
+            "image_link": assets[asset_id]["image_link"],
+            "image_width": samples[0]["image_width"],
+            "image_height": samples[0]["image_height"],
+            "samples": samples,
+            "sample_count": len(samples),
+            "avg_width": round(sum(widths) / len(widths), 1) if widths else None,
+        })
+
+    return JsonResponse({
+        "assignment_id": a.id,
+        "labeler_id": labeler_id,
+        "task_type": a.task_type,
+        "rule_index": a.rule_index,
+        "batch_id": a.batch_id,
+        "sub_batch": a.large_sub_batch,
+        "assets": rows,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Admin: override a labeler's answer for a single asset
 # ---------------------------------------------------------------------------
 

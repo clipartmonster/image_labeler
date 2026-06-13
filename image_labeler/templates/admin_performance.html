@@ -77,6 +77,18 @@
                 <div id="workDetailGrid" class="ll-grid"></div>
                 <p id="workDetailEmpty" class="wf-muted" style="display:none;">No labels found.</p>
             </div>
+
+            <!-- Line-width sample review -->
+            <div id="lwsWrap" style="display:none; margin-top:20px;">
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                    <button onclick="closeSampleReview()" style="font-size:12px; padding:4px 12px; background:#8a9c9c; border:none; border-radius:4px; color:#fff; cursor:pointer;">&larr; Back</button>
+                    <h2 id="lwsTitle" style="margin:0; font-size:15px; color:#2a3a3a;"></h2>
+                </div>
+                <div id="lwsStats" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;"></div>
+                <p id="lwsNote" class="wf-muted" style="display:none; margin:0 0 10px; font-size:12px;"></p>
+                <div id="lwsGrid"></div>
+                <p id="lwsEmpty" class="wf-muted" style="display:none;">No samples recorded for this batch.</p>
+            </div>
         </div>
 
         <!-- TRAINING TAB -->
@@ -170,6 +182,40 @@
 }
 .ll-view-btn:hover { background:#357e7e; }
 .ll-view-btn:disabled { background:#b0c4c4; cursor:default; }
+
+/* Line-width sample review */
+.lws-grid {
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap:14px;
+}
+.lws-card { background:#dae2e2; border-radius:8px; padding:10px; }
+.lws-imgwrap {
+    position:relative; display:block; line-height:0;
+    background:#fff; border-radius:6px; overflow:hidden;
+}
+.lws-imgwrap img { display:block; width:100%; height:auto; }
+.lws-dot {
+    position:absolute; transform:translate(-50%, -50%);
+    width:14px; height:14px; border-radius:50%;
+    background:rgba(220,68,68,.85); border:2px solid #fff;
+    box-shadow:0 0 2px rgba(0,0,0,.5); cursor:default;
+}
+.lws-dot-lbl {
+    position:absolute; transform:translate(-50%, -50%);
+    font-size:10px; font-weight:700; color:#fff;
+    text-shadow:0 0 3px #000, 0 0 3px #000; pointer-events:none; white-space:nowrap;
+}
+.lws-meta { font-size:11px; color:#2a3a3a; line-height:1.5; margin-top:8px; }
+.lws-meta .lws-id { font-size:10px; color:#6f7a7a; }
+.lws-widths {
+    display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;
+}
+.lws-chip {
+    font-size:10px; font-weight:600; color:#2a4a4a;
+    background:#eef4f4; border:1px solid #c6dada; border-radius:10px; padding:1px 7px;
+}
+.lws-nocoord { color:#b08820; font-style:italic; }
 </style>
 
 <script>
@@ -185,7 +231,7 @@ var _perfData = null;
 
 function switchTab(name) {
     if (name !== 'training') closeTrainDetail();
-    if (name !== 'work') closeWorkDetail();
+    if (name !== 'work') { closeWorkDetail(); closeSampleReview(); }
     ['work','training'].forEach(function(t) {
         document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
         document.querySelector('.pf-tab[data-tab="' + t + '"]').className = 'pf-tab' + (t === name ? ' active' : '');
@@ -356,6 +402,7 @@ function closeTrainDetail() {
 
 function renderWork() {
     if (!_perfData) return;
+    closeSampleReview();
     var filter = document.getElementById('workFilter').value;
     var rows = _perfData.work.filter(function(r) {
         if (filter === 'completed') return r.completed;
@@ -373,8 +420,15 @@ function renderWork() {
         } else {
             status = '<span class="pf-tag pf-tag-active">Active</span>';
         }
-        var reviewBtn = '<button class="ll-view-btn" onclick="loadWorkDetail('
-            + r.assignment_id + ',\'' + (r.feature || r.task_type + '/r' + r.rule_index).replace(/'/g, "\\'") + '\')">Review</button>';
+        var rTitle = (r.feature || r.task_type + '/r' + r.rule_index).replace(/'/g, "\\'");
+        var reviewBtn;
+        if (r.task_type === 'line_width_type' && r.rule_index === 2) {
+            reviewBtn = '<button class="ll-view-btn" onclick="loadSampleReview('
+                + r.assignment_id + ',\'' + rTitle + '\')">Review Samples</button>';
+        } else {
+            reviewBtn = '<button class="ll-view-btn" onclick="loadWorkDetail('
+                + r.assignment_id + ',\'' + rTitle + '\')">Review</button>';
+        }
         var deadlineCell = '<td style="font-size:11px;">'
             + '<span class="dl-display" id="dl-show-' + r.assignment_id + '">' + r.deadline + '</span> '
             + '<button onclick="editDeadline(' + r.assignment_id + ',\'' + (r.deadline_iso || '') + '\')" '
@@ -456,6 +510,106 @@ function renderWorkDetailGrid() {
 
 function closeWorkDetail() {
     document.getElementById('workDetailWrap').style.display = 'none';
+    document.querySelector('#tab-work .pf-tbl').style.display = '';
+}
+
+function loadSampleReview(assignmentId, title) {
+    document.getElementById('lwsTitle').textContent = title + ' — Sample Review';
+    document.getElementById('lwsGrid').innerHTML = '';
+    document.getElementById('lwsStats').innerHTML = '';
+    document.getElementById('lwsEmpty').style.display = 'none';
+    document.getElementById('lwsNote').style.display = 'none';
+    document.querySelector('#tab-work .pf-tbl').style.display = 'none';
+    document.getElementById('workEmpty').style.display = 'none';
+    document.getElementById('workDetailWrap').style.display = 'none';
+    document.getElementById('lwsWrap').style.display = '';
+
+    fetch('/label_images/admin/line_width_samples/?assignment_id=' + assignmentId)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        var assets = d.assets || [];
+        var totalSamples = assets.reduce(function(sum, a) { return sum + a.sample_count; }, 0);
+        document.getElementById('lwsStats').innerHTML =
+            makeCard('Assets Measured', assets.length)
+            + makeCard('Total Samples', totalSamples)
+            + makeCard('Batch', d.batch_id + '/' + d.sub_batch);
+
+        if (!assets.length) {
+            document.getElementById('lwsEmpty').style.display = '';
+            return;
+        }
+
+        var anyCoords = assets.some(function(a) {
+            return a.samples.some(function(s) { return s.x_coord != null && s.y_coord != null; });
+        });
+        if (!anyCoords) {
+            var note = document.getElementById('lwsNote');
+            note.style.display = '';
+            note.textContent = 'These samples were recorded before sample locations were saved, '
+                + 'so only the measured widths are shown (no markers).';
+        }
+
+        renderSampleReview(assets);
+    });
+}
+
+function renderSampleReview(assets) {
+    var grid = document.getElementById('lwsGrid');
+    grid.className = 'lws-grid';
+    grid.innerHTML = '';
+
+    assets.forEach(function(a) {
+        var card = document.createElement('div');
+        card.className = 'lws-card';
+
+        var imgwrap = document.createElement('div');
+        imgwrap.className = 'lws-imgwrap';
+        var img = document.createElement('img');
+        img.src = a.image_link || '';
+        img.loading = 'lazy';
+        img.onerror = function() { this.style.display = 'none'; };
+        imgwrap.appendChild(img);
+
+        // Place a marker for each sample that has coordinates.
+        a.samples.forEach(function(s) {
+            if (s.x_coord == null || s.y_coord == null || !s.image_width || !s.image_height) return;
+            var leftPct = (s.x_coord / s.image_width) * 100;
+            var topPct = (s.y_coord / s.image_height) * 100;
+
+            var dot = document.createElement('div');
+            dot.className = 'lws-dot';
+            dot.style.left = leftPct + '%';
+            dot.style.top = topPct + '%';
+            dot.title = 'Sample #' + s.sample_index + ': ' + s.width + 'px';
+            imgwrap.appendChild(dot);
+
+            var lbl = document.createElement('div');
+            lbl.className = 'lws-dot-lbl';
+            lbl.style.left = leftPct + '%';
+            lbl.style.top = 'calc(' + topPct + '% - 12px)';
+            lbl.textContent = s.width;
+            imgwrap.appendChild(lbl);
+        });
+        card.appendChild(imgwrap);
+
+        var widthChips = a.samples.map(function(s) {
+            return '<span class="lws-chip">#' + s.sample_index + ': ' + s.width + 'px</span>';
+        }).join('');
+
+        var meta = document.createElement('div');
+        meta.className = 'lws-meta';
+        meta.innerHTML = '<div class="lws-id">Asset ' + a.asset_id + '</div>'
+            + '<div><strong>' + a.sample_count + '</strong> samples'
+            + (a.avg_width != null ? ' &middot; avg <strong>' + a.avg_width + 'px</strong>' : '') + '</div>'
+            + '<div class="lws-widths">' + widthChips + '</div>';
+        card.appendChild(meta);
+
+        grid.appendChild(card);
+    });
+}
+
+function closeSampleReview() {
+    document.getElementById('lwsWrap').style.display = 'none';
     document.querySelector('#tab-work .pf-tbl').style.display = '';
 }
 

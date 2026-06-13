@@ -879,6 +879,8 @@ class line_width_sample_table(models.Model):
     asset_id = models.BigIntegerField()
     sample_index = models.IntegerField()
     width = models.IntegerField()
+    x_coord = models.IntegerField(null=True, blank=True)
+    y_coord = models.IntegerField(null=True, blank=True)
     image_width = models.IntegerField()
     image_height = models.IntegerField()
     labeler_id = models.CharField()
