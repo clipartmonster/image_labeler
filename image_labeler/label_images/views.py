@@ -2621,9 +2621,17 @@ def admin_performance_data(request):
                 a.completed_at = tz.now()
                 a.save(update_fields=["completed_at"])
 
-        sessions = LabelingSession.objects.filter(batch_assignment=a, ended_at__isnull=False)
+        sessions = list(LabelingSession.objects.filter(batch_assignment=a, ended_at__isnull=False))
         labels_from_sessions = sum(s.labels_completed for s in sessions)
-        labels = len(labeled_ids) if a.task_type == "line_width_type" else labels_from_sessions
+        if a.task_type == "line_width_type":
+            labels = len(labeled_ids)
+        elif sessions:
+            labels = labels_from_sessions
+        else:
+            # No session telemetry for this assignment (e.g. labeled before session
+            # tracking existed) - fall back to the true count of labeled assets so
+            # the labeler's work still shows up instead of reading as zero.
+            labels = len(labeled_ids)
         hours = sum((s.duration_hours or 0) for s in sessions)
         total_work_labels += labels
         total_work_hours += hours

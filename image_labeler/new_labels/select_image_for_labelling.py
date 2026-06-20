@@ -180,10 +180,14 @@ selected_assets_new = selected_assets_new.loc[successful_downloads]
 # Reset the index if needed
 selected_assets_new = selected_assets_new.reset_index(drop=True)
 
-temp = selected_assets_new.copy()
+temp = selected_assets_new.copy().reset_index(drop=True)
 
-temp["sub_batch"] = ((temp.index // 5) + 1).astype(int)
-temp["large_sub_batch"] = ((temp.index // 500) + 1).astype(int)
+# Use a positional counter (np.arange), NOT temp.index: a non-contiguous index
+# (from a filtered/sampled subset) would scatter assets into sparse, high
+# large_sub_batch numbers.
+_pos = np.arange(len(temp))
+temp["sub_batch"] = ((_pos // 5) + 1).astype(int)
+temp["large_sub_batch"] = ((_pos // 500) + 1).astype(int)
 temp["asset_type"] = "undetermined"
 temp["color_type"] = "undetermined"
 
