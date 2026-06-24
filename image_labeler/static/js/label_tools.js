@@ -1133,11 +1133,9 @@ function initMeasureOverlay(imgEl, options) {
         var centerBright = brightness(cx, cy);
         var centerAlpha = alpha(cx, cy);
 
-        // Decide detection mode: alpha-based for transparent images, brightness for opaque
-        var useAlphaMode = hasTransparency && centerAlpha > 128;
-
         // Estimate background from within the loupe's visible radius
         var bgSamples = [];
+        var bgAlphaSamples = [];
         var bgMinR = Math.max(2, Math.ceil(MAX_SCAN * 0.4));
         var bgMaxR = MAX_SCAN;
         for (var sd = 0; sd < 16; sd++) {
@@ -1147,10 +1145,23 @@ function initMeasureOverlay(imgEl, options) {
                 var spy = Math.round(cy + Math.sin(sa) * sr);
                 if (spx >= 0 && spy >= 0 && spx < natW && spy < natH) {
                     bgSamples.push(brightness(spx, spy));
+                    bgAlphaSamples.push(alpha(spx, spy));
                 }
             }
         }
         bgSamples.sort(function(a, b) { return b - a; });
+
+        // Decide detection mode. Only use alpha-edge detection when the LOCAL
+        // background is actually transparent (opaque line on transparent bg).
+        // A global "any transparent pixel" flag wrongly flips opaque-white-bg
+        // line art into alpha mode, where no alpha edge exists and every ray
+        // fails to find the line.
+        var bgAlphaMedian = 255;
+        if (bgAlphaSamples.length) {
+            var bgAlphaSorted = bgAlphaSamples.slice().sort(function(a, b) { return a - b; });
+            bgAlphaMedian = bgAlphaSorted[Math.floor(bgAlphaSorted.length / 2)];
+        }
+        var useAlphaMode = hasTransparency && centerAlpha > 128 && bgAlphaMedian < 128;
 
         var bgBrightHigh = bgSamples.length > 8 ? bgSamples[Math.floor(bgSamples.length * 0.15)] : 255;
         var bgBrightLow = bgSamples.length > 8 ? bgSamples[Math.floor(bgSamples.length * 0.85)] : 0;
