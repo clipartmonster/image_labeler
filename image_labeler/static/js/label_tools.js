@@ -143,9 +143,14 @@ function direct_hotkey_action(hotkey) {
 
         priority_element = select_element(Array.from(active_elements))
 
-        response = hotkey === '1' ? 'yes' : 'no'
-
         if (priority_element.type === 'prompt') {
+
+            // Resolve the response from the radio bound to this hotkey. This
+            // supports both the binary yes/no control (hotkeys 1/2) and the
+            // ordinal 0-3 control for color_fill_type rule 5 (hotkeys 1-4).
+            var radio = priority_element.element.querySelector('input.radio_button[data-hotkey="' + hotkey + '"]')
+            var response = radio ? radio.getAttribute('prompt_response') : null
+            if (!response || response === 'none') return  // key not valid for this control
 
             if (priority_element.element.getAttribute('prompt_type') == 'mismatch') {
                 collect_mismatch_prompt(priority_element.element, response)
@@ -157,10 +162,14 @@ function direct_hotkey_action(hotkey) {
 
         } else if (priority_element.type === 'button_container'){
 
+            if (hotkey !== '1' && hotkey !== '2') return
+            var response = hotkey === '1' ? 'yes' : 'no'
             update_button(hotkey, priority_element.element)
             collect_label(priority_element.element, response)
 
         } else {
+
+            if (hotkey !== '1' && hotkey !== '2') return
 
             collection_data = document
             .getElementsByClassName('collection_data')
@@ -210,7 +219,9 @@ function direct_hotkey_action(hotkey) {
 document.addEventListener('keydown', function(event) {
     const hotkey = event.key;
     if (document.querySelector('.training-paused')) return;
-    if (hotkey === '1' || hotkey === '2') {
+    // 1-2 drive the binary yes/no control; 3-4 additionally drive the ordinal
+    // 0-3 control (color_fill_type rule 5). Invalid keys are ignored downstream.
+    if (hotkey === '1' || hotkey === '2' || hotkey === '3' || hotkey === '4') {
         direct_hotkey_action(hotkey)
     }
 })

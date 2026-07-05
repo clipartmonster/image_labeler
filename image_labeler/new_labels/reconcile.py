@@ -23,9 +23,18 @@ current_data = pd.read_sql(
 )
 print(f"current_data: {len(current_data)} rows in {time.time()-t:.1f}s")
 
-print("loading label set")
-label_set = (
-    prompt_data.assign(
+_COLS = ["asset_id", "task_type", "rule_index", "label", "percent_agree",
+         "label_strength", "label_source"]
+
+# color_fill_type rule 5 is an ordinal 0-3 scale (graded Color Depth), not yes/no.
+# It reuses the same tables but is reconciled by median instead of yes-rate.
+ordinal_mask = (prompt_data.task_type == "color_fill_type") & (prompt_data.rule_index == 5)
+binary_data = prompt_data[~ordinal_mask]
+ordinal_data = prompt_data[ordinal_mask]
+
+print("loading binary label set")
+binary_label_set = (
+    binary_data.assign(
         yes_response=lambda x: np.where(x.prompt_response == "yes", 1, 0)
     )
     .groupby(["asset_id", "task_type", "rule_index"])
@@ -43,7 +52,36 @@ label_set = (
     )
     .assign(label_source="Internal")
     .reset_index()
-)
+)[_COLS]
+
+print("loading ordinal label set (color_fill_type rule 5)")
+if len(ordinal_data):
+    _o = ordinal_data.assign(
+        val=lambda x: pd.to_numeric(x.prompt_response, errors="coerce")
+    ).dropna(subset=["val"])
+    _grp = _o.groupby(["asset_id", "task_type", "rule_index"])["val"]
+    _med = _grp.median().round().astype(int).rename("label")
+    _samples = _grp.size().rename("samples")
+    _tmp = _o.merge(_med.reset_index(), on=["asset_id", "task_type", "rule_index"])
+    _tmp["match"] = _tmp.val.round().astype(int) == _tmp.label
+    _agree = (
+        _tmp.groupby(["asset_id", "task_type", "rule_index"])["match"]
+        .mean()
+        .rename("percent_agree")
+    )
+    ordinal_label_set = (
+        pd.concat([_med, _samples, _agree], axis=1)
+        .reset_index()
+        .query("samples > 1")
+        .assign(
+            label_strength=lambda x: np.where(x.percent_agree == 1, "strong", "weak"),
+            label_source="Internal",
+        )
+    )[_COLS]
+else:
+    ordinal_label_set = pd.DataFrame(columns=_COLS)
+
+label_set = pd.concat([binary_label_set, ordinal_label_set], ignore_index=True)
 
 print("loading current count")
 current_count = (
