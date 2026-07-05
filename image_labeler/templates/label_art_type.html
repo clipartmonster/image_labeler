@@ -1,5 +1,19 @@
 {% load static %}
 
+<style>
+/* Ordinal 0-3 control for color_fill_type rule 5 (graded Color Depth). */
+.ordinal-scale { display:flex; gap:8px; align-items:stretch; flex-wrap:wrap; }
+.ordinal-scale input.ordinal { display:none; }
+.ordinal-label { display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:8px 12px; border:2px solid #a0b4b4; border-radius:8px; cursor:pointer;
+    background:#fff; min-width:74px; text-align:center; transition:all .12s; }
+.ordinal-label .ord-key { font-size:16px; font-weight:800; color:#5a7878; }
+.ordinal-label .ord-name { font-size:13px; font-weight:700; color:#2a4a4a; }
+.ordinal-label .ord-sub { font-size:10px; color:#7a8a8a; }
+.ordinal-scale input.ordinal:checked + .ordinal-label { border-color:#409393; background:#e6f2f2; }
+.ordinal-scale input.ordinal:checked + .ordinal-label .ord-key { color:#409393; }
+</style>
+
 <div class = 'listing light container rules'>
     
     <div style = 'display:flex; flex-direction:column; align-items:center'>
@@ -128,6 +142,21 @@
 
                         <div id = 'rule_valdiator_{{asset.asset_id}}_{{rule.rule_index}}' class = 'label_option rule_validator open' rule_index = {{rule.rule_index}}>
 
+                            {% if task_type == 'color_fill_type' and rule.rule_index == 5 %}
+                            <div class="ordinal-scale">
+                                <input type="radio" id="ord0_{{forloop.counter}}_{{asset.asset_id}}" prompt_response = '0' class = 'radio_button ordinal' data-hotkey="1" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
+                                <label class="ordinal-label" for="ord0_{{forloop.counter}}_{{asset.asset_id}}"><span class="ord-key">1</span><span class="ord-name">Flat</span><span class="ord-sub">no shading</span></label>
+
+                                <input type="radio" id="ord1_{{forloop.counter}}_{{asset.asset_id}}" prompt_response = '1' class = 'radio_button ordinal' data-hotkey="2" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
+                                <label class="ordinal-label" for="ord1_{{forloop.counter}}_{{asset.asset_id}}"><span class="ord-key">2</span><span class="ord-name">Simple</span><span class="ord-sub">1 shade</span></label>
+
+                                <input type="radio" id="ord2_{{forloop.counter}}_{{asset.asset_id}}" prompt_response = '2' class = 'radio_button ordinal' data-hotkey="3" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
+                                <label class="ordinal-label" for="ord2_{{forloop.counter}}_{{asset.asset_id}}"><span class="ord-key">3</span><span class="ord-name">Moderate</span><span class="ord-sub">3+ shades</span></label>
+
+                                <input type="radio" id="ord3_{{forloop.counter}}_{{asset.asset_id}}" prompt_response = '3' class = 'radio_button ordinal' data-hotkey="4" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
+                                <label class="ordinal-label" for="ord3_{{forloop.counter}}_{{asset.asset_id}}"><span class="ord-key">4</span><span class="ord-name">Rich</span><span class="ord-sub">gradient</span></label>
+                            </div>
+                            {% else %}
                             <img id = yes_icon class = 'key icon' src="{% static 'images/yes_icon.png'%}">
                             <div class="switch3-container">
                                 <div class="switch3">
@@ -142,6 +171,7 @@
                                 </div>
                             </div>
                             <img id = no_icon class = 'key icon' src="{% static 'images/no_icon.png'%}">
+                            {% endif %}
                             <div class = 'separator'>||</div>
                             <h1 class = 'label_option rule'>
                                 {{rule.prompt}}
