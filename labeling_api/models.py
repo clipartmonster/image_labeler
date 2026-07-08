@@ -872,7 +872,9 @@ class line_width_sample_table(models.Model):
 
     **Inputs (ORM):** ``asset_id``, ``sample_index``, ``labeler_id``.
 
-    **Outputs:** Rows with coordinates, ``radius``, image dimensions, ``status``.
+    **Outputs:** Rows with coordinates, ``radius``, image dimensions, ``status``,
+    ``collection_version`` (1 = width-only, 2 = display-space coords,
+    3 = native-pixel coords).
     """
 
     id = models.AutoField(primary_key=True)
@@ -881,6 +883,9 @@ class line_width_sample_table(models.Model):
     width = models.IntegerField()
     x_coord = models.IntegerField(null=True, blank=True)
     y_coord = models.IntegerField(null=True, blank=True)
+    collection_version = models.IntegerField(null=True, blank=True)
+    scaled_width = models.IntegerField(null=True, blank=True)
+    scaled_height = models.IntegerField(null=True, blank=True)
     image_width = models.IntegerField()
     image_height = models.IntegerField()
     labeler_id = models.CharField()

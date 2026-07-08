@@ -2946,7 +2946,9 @@ def collect_line_width_sample(request: Request) -> JsonResponse:
 
     Args:
         request (Request): POST body. ``asset_id``, ``sample_index``, ``x_coord``, ``y_coord``,
-        ``radius``, ``image_width``, ``image_height``, ``labeler_id``.
+        ``radius``, ``image_width``, ``image_height``, ``scaled_width``,
+        ``scaled_height``, ``labeler_id``, ``collection_version``
+        (1 = width-only, 2 = display-space coords, 3 = native-pixel coords).
 
     Returns:
         JsonResponse: ``status`` and ``explanation``.
@@ -2960,12 +2962,26 @@ def collect_line_width_sample(request: Request) -> JsonResponse:
     if width is None:
         width = request.data.get("radius")
 
+    x_coord = request.data.get("x_coord", None)
+    y_coord = request.data.get("y_coord", None)
+
+    raw_version = request.data.get("collection_version", None)
+    if raw_version is not None:
+        collection_version = int(raw_version)
+    elif x_coord is not None and y_coord is not None:
+        collection_version = 2
+    else:
+        collection_version = 1
+
     entry = line_width_sample_table(
         asset_id=request.data.get("asset_id", None),
         sample_index=request.data.get("sample_index", None),
         width=width,
-        x_coord=request.data.get("x_coord", None),
-        y_coord=request.data.get("y_coord", None),
+        x_coord=x_coord,
+        y_coord=y_coord,
+        collection_version=collection_version,
+        scaled_width=request.data.get("scaled_width", None),
+        scaled_height=request.data.get("scaled_height", None),
         image_width=request.data.get("image_width", None),
         image_height=request.data.get("image_height", None),
         labeler_id=request.data.get("labeler_id", None),
@@ -3065,6 +3081,11 @@ def label_line_width_as_invalid(request: Request) -> JsonResponse:
             asset_id=asset_id,
             sample_index=None,
             width=None,
+            x_coord=None,
+            y_coord=None,
+            collection_version=1,
+            scaled_width=None,
+            scaled_height=None,
             image_width=None,
             image_height=None,
             labeler_id=labeler_id,

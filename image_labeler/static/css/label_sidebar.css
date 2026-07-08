@@ -4,10 +4,10 @@
     min-height: 100vh;
 }
 
-/* Toggle button — fixed position, always visible */
+/* Toggle button — fixed position, below site header Front Page button */
 .rules-toggle-btn {
     position: fixed;
-    top: 12px;
+    top: 76px;
     left: 0;
     z-index: 1000;
     display: flex;
