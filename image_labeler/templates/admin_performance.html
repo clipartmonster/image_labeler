@@ -553,6 +553,38 @@ function loadSampleReview(assignmentId, title) {
     });
 }
 
+// Measure page caps display height at 560px. Version-2 rows stored display-space
+// coords; version-3 rows are already native pixels.
+var MLW_MAX_DISPLAY_H = 560;
+
+function lineWidthSampleNativeCoords(s) {
+    var x = s.x_coord, y = s.y_coord;
+    var iw = s.image_width, ih = s.image_height;
+    if (x == null || y == null || !iw || !ih) return null;
+
+    if (s.collection_version === 3) {
+        return { x: x, y: y };
+    }
+
+    if (s.scaled_width && s.scaled_height) {
+        return {
+            x: Math.round(x * iw / s.scaled_width),
+            y: Math.round(y * ih / s.scaled_height)
+        };
+    }
+
+    var displayH = Math.min(ih, MLW_MAX_DISPLAY_H);
+    var displayW = Math.min(iw, displayH * iw / ih);
+    var scaleX = iw / displayW;
+    var scaleY = ih / displayH;
+    var scale = Math.max(scaleX, scaleY);
+
+    if (scale <= 1.01 || x > displayW * 1.05 || y > displayH * 1.05) {
+        return { x: x, y: y };
+    }
+    return { x: Math.round(x * scale), y: Math.round(y * scale) };
+}
+
 function renderSampleReview(assets) {
     var grid = document.getElementById('lwsGrid');
     grid.className = 'lws-grid';
@@ -570,26 +602,34 @@ function renderSampleReview(assets) {
         img.onerror = function() { this.style.display = 'none'; };
         imgwrap.appendChild(img);
 
-        // Place a marker for each sample that has coordinates.
-        a.samples.forEach(function(s) {
-            if (s.x_coord == null || s.y_coord == null || !s.image_width || !s.image_height) return;
-            var leftPct = (s.x_coord / s.image_width) * 100;
-            var topPct = (s.y_coord / s.image_height) * 100;
+        function placeSampleMarkers() {
+            a.samples.forEach(function(s) {
+                var coords = lineWidthSampleNativeCoords(s);
+                if (!coords) return;
+                var leftPct = (coords.x / s.image_width) * 100;
+                var topPct = (coords.y / s.image_height) * 100;
 
-            var dot = document.createElement('div');
-            dot.className = 'lws-dot';
-            dot.style.left = leftPct + '%';
-            dot.style.top = topPct + '%';
-            dot.title = 'Sample #' + s.sample_index + ': ' + s.width + 'px';
-            imgwrap.appendChild(dot);
+                var dot = document.createElement('div');
+                dot.className = 'lws-dot';
+                dot.style.left = leftPct + '%';
+                dot.style.top = topPct + '%';
+                dot.title = 'Sample #' + s.sample_index + ': ' + s.width + 'px';
+                imgwrap.appendChild(dot);
 
-            var lbl = document.createElement('div');
-            lbl.className = 'lws-dot-lbl';
-            lbl.style.left = leftPct + '%';
-            lbl.style.top = 'calc(' + topPct + '% - 12px)';
-            lbl.textContent = s.width;
-            imgwrap.appendChild(lbl);
-        });
+                var lbl = document.createElement('div');
+                lbl.className = 'lws-dot-lbl';
+                lbl.style.left = leftPct + '%';
+                lbl.style.top = 'calc(' + topPct + '% - 12px)';
+                lbl.textContent = s.width;
+                imgwrap.appendChild(lbl);
+            });
+        }
+
+        if (img.complete && img.naturalWidth) {
+            placeSampleMarkers();
+        } else {
+            img.onload = placeSampleMarkers;
+        }
         card.appendChild(imgwrap);
 
         var widthChips = a.samples.map(function(s) {

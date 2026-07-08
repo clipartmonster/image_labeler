@@ -180,6 +180,9 @@ function collect_line_width_sample(canvas, sample_index, width, image_width, ima
         width:width,
         image_width:image_width,
         image_height:image_height,
+        scaled_width: canvas.width,
+        scaled_height: canvas.height,
+        collection_version: 1,
         labeler_id:document.getElementById('labeler_id').getAttribute('labeler_id')
         }
 

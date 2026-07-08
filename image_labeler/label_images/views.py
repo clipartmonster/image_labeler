@@ -193,6 +193,19 @@ def measure_line_widths(request):
     response = requests.get(api_url, json=data, headers=header)
     assets_to_label = json.loads(response.content)["asset_batch"]
 
+    task_type = "line_width_type"
+    rules_api_url = f"{settings.LABELING_API_BASE_URL}/get_labelling_rules/"
+    rules_data = {"task_type": task_type, "rule_indexes": [rule_index]}
+    rules_response = requests.get(rules_api_url, json=rules_data, headers=header)
+    labelling_rules = dict(json.loads(rules_response.content))["labelling_rules"]
+    labelling_rules = sorted(labelling_rules, key=lambda x: x["rule_index"])
+
+    from .models import RuleGuide
+    rule_guides = list(
+        RuleGuide.objects.filter(task_type=task_type, rule_index=rule_index)
+        .prefetch_related("directives", "reference_images", "directives__reference_images")
+    )
+
     return render(request, "measure_line_widths.html", {
         "assets_to_label": assets_to_label,
         "labeler_id": labeler_id,
@@ -200,6 +213,9 @@ def measure_line_widths(request):
         "batch_id": batch_id,
         "large_sub_batch": large_sub_batch,
         "total_count": len(assets_to_label),
+        "task_type": task_type,
+        "labelling_rules": labelling_rules,
+        "rule_guides": rule_guides,
     })
 
 
@@ -2895,7 +2911,9 @@ def admin_line_width_samples(request):
             .filter(asset_id__in=list(assets.keys()), labeler_id=labeler_id)
             .values(
                 "asset_id", "sample_index", "width",
-                "x_coord", "y_coord", "image_width", "image_height",
+                "x_coord", "y_coord", "collection_version",
+                "scaled_width", "scaled_height",
+                "image_width", "image_height",
             )
             .order_by("asset_id", "sample_index")
         )
@@ -2905,6 +2923,9 @@ def admin_line_width_samples(request):
                 "width": s["width"],
                 "x_coord": s["x_coord"],
                 "y_coord": s["y_coord"],
+                "collection_version": s["collection_version"],
+                "scaled_width": s["scaled_width"],
+                "scaled_height": s["scaled_height"],
                 "image_width": s["image_width"],
                 "image_height": s["image_height"],
             })

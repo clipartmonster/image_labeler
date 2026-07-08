@@ -30,25 +30,160 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) 260px;
     gap: 18px;
-    align-items: start;
+    align-items: stretch;
+}
+
+.mlw-left-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    min-height: 0;
 }
 
 .mlw-img-wrap {
-    position: relative; max-width: 100%;
-    background: #fff; border-radius: 6px; padding: 0;
-    display: flex; align-items: center; justify-content: center;
-    min-height: 200px;
+    flex: 1 1 auto;
+    position: relative;
+    max-width: 100%;
+    background: #fff;
+    border-radius: 6px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    overflow: hidden;
+}
+.mlw-img-wrap--loupe {
+    background: #fff;
 }
 .mlw-img-wrap img {
-    max-width: 100%; max-height: 560px; border-radius: 6px;
-    display: block; margin: 0;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    border-radius: 6px;
+    display: block;
+    margin: 0;
+    position: relative;
+    z-index: 1;
+}
+
+.mlw-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+.mlw-tools {
+    display: flex;
+    gap: 6px;
+    background: #fff;
+    border-radius: 8px;
+    padding: 8px;
+}
+.mlw-tool-btn {
+    flex: 1;
+    border: 1.5px solid #c8d4d4;
+    background: #f4f7f7;
+    border-radius: 6px;
+    padding: 8px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #5a6a6a;
+    cursor: pointer;
+    font-family: Roboto, sans-serif;
+    line-height: 1.25;
+    text-align: center;
+    transition: background .12s, border-color .12s, color .12s;
+}
+.mlw-tool-btn:hover { background: #eef4f4; }
+.mlw-tool-btn.active {
+    background: #409393;
+    border-color: #357e7e;
+    color: #fff;
+}
+
+.mlw-loupe-panel {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 14px;
+    text-align: center;
+}
+.mlw-loupe-panel canvas {
+    display: block;
+    margin: 0 auto;
+    border-radius: 6px;
+    border: 1px solid #d8e0e0;
+    background: #f8fafa;
 }
 
 .mlw-stats {
-    background: #fff; border-radius: 8px; padding: 16px 18px;
-    font-size: 13px; color: #3a4a4a; line-height: 1.5;
-    align-self: stretch;
+    background: #fff;
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-size: 13px;
+    color: #3a4a4a;
+    line-height: 1.5;
+    flex: 1;
 }
+.mlw-measure-panel {
+    flex: 0 0 auto;
+    margin-top: 0;
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 14px;
+    min-width: 0;
+}
+.mlw-measures-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e2e8e8;
+}
+.mlw-measures-header .mlw-panel-title {
+    margin-bottom: 0;
+}
+.mlw-measures-stats-host {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+.mlw-measures-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 13px;
+}
+.mlw-measures-stat span {
+    color: #6a7a7a;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.mlw-measures-stat strong {
+    color: #2a4a4a;
+    font-weight: 700;
+}
+.mlw-measures-stat-empty {
+    font-size: 12px;
+    color: #98a8a8;
+    font-style: italic;
+}
+.mlw-measures-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 16px;
+    align-items: start;
+}
+
 .mlw-panel-section + .mlw-panel-section {
     margin-top: 18px; padding-top: 16px; border-top: 1px solid #e2e8e8;
 }
@@ -98,10 +233,8 @@
 }
 
 .mlw-instructions {
-    background: #fff; border-radius: 8px; padding: 12px 16px;
-    margin-top: 16px; font-size: 12.5px; color: #3a4a4a; line-height: 1.55;
+    display: none;
 }
-.mlw-instructions strong { color: #2a4a4a; }
 
 .mlw-status {
     text-align: center; min-height: 18px;
@@ -112,6 +245,23 @@
 .mlw-actions {
     display: flex; gap: 10px; align-items: center;
     margin-top: 8px; justify-content: center;
+}
+.mlw-sidebar .mlw-actions {
+    flex-direction: column;
+    margin-top: 0;
+    gap: 6px;
+}
+.mlw-sidebar .mlw-actions .mlw-btn {
+    width: 100%;
+    padding: 9px 12px;
+    font-size: 12px;
+}
+.mlw-sidebar .mlw-status {
+    margin-top: 0;
+    margin-bottom: 0;
+    font-size: 11px;
+    line-height: 1.35;
+    min-height: 0;
 }
 .mlw-btn {
     padding: 10px 28px; border-radius: 6px; border: none;
@@ -143,10 +293,192 @@
     border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600;
 }
 
+.mlw-measure-table-col,
+.mlw-measure-histogram-col {
+    min-width: 0;
+}
+.mlw-measure-histogram-host {
+    min-height: 120px;
+}
+.mlw-histogram {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+.mlw-histogram-point {
+    cursor: pointer;
+    stroke: rgba(0, 0, 0, 0.35);
+    stroke-width: 1;
+    transition: r 0.08s, fill 0.08s;
+}
+.mlw-histogram-point.parallel { fill: #00e676; }
+.mlw-histogram-point.perpendicular { fill: #ff9100; }
+.mlw-histogram-point.unclear { fill: #ffd54f; }
+.mlw-histogram-point.unknown { fill: #409393; }
+.mlw-histogram-point.mlw-hist-hover {
+    stroke: #ffffff;
+    stroke-width: 2;
+}
+.mlw-histogram-point.mlw-hist-hover.parallel { fill: #00c853; }
+.mlw-histogram-point.mlw-hist-hover.perpendicular { fill: #e65100; }
+.mlw-histogram-point.mlw-hist-hover.unclear { fill: #f9a825; }
+.mlw-histogram-point.mlw-hist-hover.unknown { fill: #2a7a7a; }
+.mlw-hist-axis {
+    font-size: 9px;
+    fill: #8a9a9a;
+    font-family: Roboto, sans-serif;
+}
+.mlw-hist-tick {
+    stroke: #e2e8e8;
+    stroke-width: 1;
+}
+.mlw-hist-bar {
+    fill: rgba(64, 147, 147, 0.22);
+    stroke: rgba(64, 147, 147, 0.35);
+    stroke-width: 0.5;
+}
+.mlw-hist-bar.mlw-hist-bar-hover {
+    fill: rgba(64, 147, 147, 0.38);
+}
+
+.mlw-measure-table-wrap {
+    margin-top: 16px;
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 14px;
+    overflow-x: auto;
+}
+.mlw-measure-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    color: #3a4a4a;
+}
+.mlw-measure-table th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6a7a7a;
+    padding: 6px 8px;
+    border-bottom: 1px solid #e2e8e8;
+    white-space: nowrap;
+}
+.mlw-measure-table td {
+    padding: 7px 8px;
+    border-bottom: 1px solid #f0f3f3;
+    white-space: nowrap;
+}
+.mlw-measure-table tr:last-child td { border-bottom: none; }
+.mlw-measure-table tbody tr {
+    transition: background .1s;
+}
+.mlw-measure-table tbody tr.mlw-row-hover {
+    background: #eef6f6;
+}
+.mlw-measure-detail-caption {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #6a7a7a;
+    margin-bottom: 6px;
+}
+.mlw-align-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.25);
+    vertical-align: middle;
+    margin-right: 5px;
+}
+.mlw-align-dot.parallel { background: #00e676; }
+.mlw-align-dot.perpendicular { background: #ff9100; }
+.mlw-align-dot.unclear { background: #ffd54f; }
+.mlw-align-dot.unknown { background: #b0bec5; }
+.mlw-table-empty {
+    font-size: 12px;
+    color: #98a8a8;
+    font-style: italic;
+    padding: 8px 4px;
+}
+.mlw-measure-table th.mlw-th-actions,
+.mlw-measure-table td.mlw-td-actions {
+    width: 36px;
+    text-align: center;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+.mlw-row-remove {
+    border: none;
+    background: transparent;
+    color: #b03030;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 2px 7px;
+    line-height: 1;
+    border-radius: 4px;
+    font-family: Roboto, sans-serif;
+}
+.mlw-row-remove:hover {
+    background: #fdf0f0;
+    color: #901010;
+}
+
+.mlw-threshold-panel {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 14px;
+}
+.mlw-threshold-modes {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.mlw-threshold-modes .mlw-tool-btn { font-size: 10px; padding: 6px 4px; }
+.mlw-threshold-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.mlw-threshold-slider {
+    flex: 1;
+    accent-color: #409393;
+    cursor: pointer;
+}
+.mlw-threshold-slider:disabled { opacity: 0.4; cursor: not-allowed; }
+.mlw-threshold-value {
+    font-size: 12px;
+    font-weight: 700;
+    color: #2a4a4a;
+    min-width: 28px;
+    text-align: right;
+}
+.mlw-threshold-auto-readout {
+    font-size: 11px;
+    color: #6a7a7a;
+    margin-bottom: 4px;
+}
+.mlw-threshold-hint {
+    font-size: 10px;
+    color: #8a9a9a;
+    margin: 0;
+    line-height: 1.35;
+}
+
 @media (max-width: 820px) {
     .mlw-layout { grid-template-columns: 1fr; }
+    .mlw-measures-body { grid-template-columns: 1fr; }
 }
 </style>
+
+<div class="labeling-layout">
+{% include 'includes/rules_sidebar.html' %}
+<div class="labeling-main">
 
 <div class="mlw-page">
     <div class="mlw-header">
@@ -160,24 +492,41 @@
         <p class="mlw-asset-id">Asset {{ asset.asset_id }}</p>
 
         <div class="mlw-layout">
-            <div class="mlw-img-wrap">
-                <img class="mlw-img" src="{{ asset.image_link }}" alt="Asset {{ asset.asset_id }}">
+            <div class="mlw-left-col">
+                <div class="mlw-img-wrap">
+                    <img class="mlw-img" src="{{ asset.image_link }}" alt="Asset {{ asset.asset_id }}">
+                </div>
+                <div class="mlw-measure-panel">
+                    <div class="mlw-measures-header">
+                        <div class="mlw-panel-title">Measures</div>
+                        <div class="mlw-measures-stats-host"></div>
+                    </div>
+                    <div class="mlw-measures-body">
+                        <div class="mlw-measure-table-col">
+                            <div class="mlw-panel-title">Sample</div>
+                            <div class="mlw-measure-table-host"></div>
+                        </div>
+                        <div class="mlw-measure-histogram-col">
+                            <div class="mlw-panel-title">Width histogram</div>
+                            <div class="mlw-measure-histogram-host"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <aside class="mlw-stats"></aside>
-        </div>
-
-        <div class="mlw-instructions">
-            <strong>How to use:</strong> Click on any line to auto-measure its width.
-            Take at least <strong>3 measurements in each of the 9 grid sections</strong>.
-            Right-click to undo. If a section has no lines, <strong>click it in the panel on the right</strong> to skip.
-        </div>
-
-        <div class="mlw-status"></div>
-
-        <div class="mlw-actions">
-            <button class="mlw-btn mlw-btn-flag" onclick="mlwFlag()">Flag Issue</button>
-            <button class="mlw-btn mlw-btn-skip" onclick="mlwSkip()">Skip</button>
-            <button class="mlw-btn mlw-btn-save" onclick="mlwSave()">Save &amp; Next</button>
+            <aside class="mlw-sidebar">
+                <div class="mlw-actions">
+                    <button class="mlw-btn mlw-btn-flag" onclick="mlwFlag()">Flag Issue</button>
+                    <button class="mlw-btn mlw-btn-skip" onclick="mlwSkip()">Skip</button>
+                    <button class="mlw-btn mlw-btn-save" onclick="mlwSave()">Save &amp; Next</button>
+                </div>
+                <div class="mlw-status"></div>
+                <div class="mlw-loupe-panel">
+                    <div class="mlw-panel-title">Magnifier · 6×</div>
+                    <canvas class="mlw-loupe" width="160" height="160"></canvas>
+                </div>
+                <div class="mlw-threshold-panel"></div>
+                <div class="mlw-stats"></div>
+            </aside>
         </div>
     </div>
     {% endfor %}
@@ -188,6 +537,9 @@
         <a href="/label_images/setup_session/">Back to Dashboard</a>
     </div>
 </div>
+
+</div><!-- .labeling-main -->
+</div><!-- .labeling-layout -->
 
 <script>
 function _mlwBoot() {
@@ -238,7 +590,14 @@ function _mlwBoot() {
             showAddButton: false,
             gridSections: GRID_SECTIONS,
             samplesPerSection: SAMPLES_PER_SECTION,
-            statsTarget: statsTarget
+            statsTarget: statsTarget,
+            measureTableTarget: card.querySelector('.mlw-measure-table-host'),
+            measureHistogramTarget: card.querySelector('.mlw-measure-histogram-host'),
+            measureStatsTarget: card.querySelector('.mlw-measures-stats-host'),
+            inlineLoupe: true,
+            defaultTool: 'fit',
+            loupeCanvas: card.querySelector('.mlw-loupe'),
+            thresholdContainer: card.querySelector('.mlw-threshold-panel')
         };
         function handleImgError() {
             setStatus(card, 'Image failed to load — auto-flagging…', 'info');
@@ -340,8 +699,10 @@ function _mlwBoot() {
                 var m = groups[gi][mi];
                 allMeasurements.push({
                     width: m.width,
-                    x_coord: Math.round(m.cx),
-                    y_coord: Math.round(m.cy)
+                    x_coord: Math.round(m.nx),
+                    y_coord: Math.round(m.ny),
+                    scaled_width: Math.round(m.scaledWidth),
+                    scaled_height: Math.round(m.scaledHeight)
                 });
             }
         }
@@ -357,14 +718,18 @@ function _mlwBoot() {
         setStatus(card, 'Saving ' + allMeasurements.length + ' measurements…', 'info');
 
         var promises = allMeasurements.map(function(meas, i) {
+            var img = card.querySelector('.mlw-img');
             var data = {
                 asset_id: parseInt(assetId),
                 sample_index: i + 1,
                 x_coord: meas.x_coord,
                 y_coord: meas.y_coord,
                 width: meas.width,
-                image_width: card.querySelector('.mlw-img').naturalWidth,
-                image_height: card.querySelector('.mlw-img').naturalHeight,
+                image_width: img.naturalWidth,
+                image_height: img.naturalHeight,
+                scaled_width: meas.scaled_width,
+                scaled_height: meas.scaled_height,
+                collection_version: 3,
                 labeler_id: labelerId
             };
             return fetch(window.LABELING_API_BASE_URL + '/collect_line_width_sample/', {
