@@ -2,19 +2,29 @@
 // set global parameters
 let API_ACCESS_KEY = '';
 
+/** Build absolute URL to labeling API (same origin or remote). */
+function labelApi(path) {
+    const base = (typeof window !== 'undefined' && window.LABELING_API_BASE_URL)
+        ? String(window.LABELING_API_BASE_URL).replace(/\/$/, '')
+        : 'https://backend-python-nupj.onrender.com';
+    return base + '/' + String(path).replace(/^\//, '');
+}
+
 fetch('/get_config/')
     .then(response => response.json())
     .then(config => {
         API_ACCESS_KEY = config.API_ACCESS_KEY;
         AWS_ACCESS_KEY_ID = config.AWS_ACCESS_KEY_ID;
-        AWS_SECRET_ACCESS_KEY = config.AWS_SECRET_ACCESS_KEY
-       
-})
+        AWS_SECRET_ACCESS_KEY = config.AWS_SECRET_ACCESS_KEY;
+        if (config.LABELING_API_BASE_URL) {
+            window.LABELING_API_BASE_URL = config.LABELING_API_BASE_URL;
+        }
+    })
 
 
 function api_get_labelling_rules(art_type, label){
 
-    api_url = 'https://backend-python-nupj.onrender.com/get_labelling_rules/'
+    api_url = labelApi('get_labelling_rules/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -39,7 +49,7 @@ function api_get_labelling_rules(art_type, label){
 
 function api_remove_color_label(asset_id, layer_index){
 
-    api_url = 'https://backend-python-nupj.onrender.com/remove_color_label/'
+    api_url = labelApi('remove_color_label/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -64,7 +74,7 @@ function api_remove_color_label(asset_id, layer_index){
 
 function api_update_color_labels(labels) {
 
-    api_url = 'https://backend-python-nupj.onrender.com/update_color_labels/'
+    api_url = labelApi('update_color_labels/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -233,7 +243,7 @@ function download_image_from_s3(file_name) {
 
 function api_collect_label(data) {
 
-    api_url = 'https://backend-python-nupj.onrender.com/collect_label/'
+    api_url = labelApi('collect_label/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -256,7 +266,7 @@ function api_get_available_search_batches(data) {
     console.log('Sending data:', data)
 
 
-    api_url = `https://backend-python-nupj.onrender.com/get_available_search_batches/`
+    api_url = labelApi('get_available_search_batches/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -290,7 +300,7 @@ function api_get_search_term(data) {
 
     console.log('Sending data:', data)
     
-    api_url = 'https://backend-python-nupj.onrender.com/get_search_term/';
+    api_url = labelApi('get_search_term/');
    
     headers = {
         'Content-Type': 'application/json',
@@ -324,7 +334,7 @@ function api_update_search_term(term_table_id, status) {
    
     console.log('Updating search term:', term_table_id, 'status:', status)
     
-    api_url = 'https://backend-python-nupj.onrender.com/update_search_term/';
+    api_url = labelApi('update_search_term/');
    
     headers = {
         'Content-Type': 'application/json',
@@ -374,9 +384,9 @@ function api_collect_prompt(data) {
     console.log('hello')
 
     if (data.labeler_source == 'Internal' || data.labeler_source == 'reconcile_label') {
-        api_url = 'https://backend-python-nupj.onrender.com/collect_prompt_internal_source/' 
+        api_url = labelApi('collect_prompt_internal_source/') 
     } else {
-        api_url = 'https://backend-python-nupj.onrender.com/collect_prompt/'
+        api_url = labelApi('collect_prompt/')
     }
 
     headers = {
@@ -397,7 +407,7 @@ function api_collect_prompt(data) {
 
 function api_remove_prompt_responses(asset_id, labeler_id, labeler_source, task_type, rule_index) {
 
-    api_url = 'https://backend-python-nupj.onrender.com/remove_prompt_responses/'
+    api_url = labelApi('remove_prompt_responses/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -428,7 +438,7 @@ function api_collect_validation_response(assignment_id, response, feedback) {
 
     console.log(feedback)
 
-    api_url = 'https://backend-python-nupj.onrender.com/collect_validation_response/'
+    api_url = labelApi('collect_validation_response/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -458,7 +468,7 @@ function api_update_submission_status(assignment_id) {
 
     console.log(assignment_id)
 
-    api_url = 'https://backend-python-nupj.onrender.com/update_submission_status/'
+    api_url = labelApi('update_submission_status/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -481,7 +491,7 @@ function api_update_submission_status(assignment_id) {
 
 function api_collect_label_issue(data){
 
-    api_url = 'https://backend-python-nupj.onrender.com/collect_label_issue/'
+    api_url = labelApi('collect_label_issue/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -503,7 +513,7 @@ function api_collect_mismatch_prompt(data){
 
     console.log(data)
 
-    api_url = 'https://backend-python-nupj.onrender.com/collect_mismatch_prompt/'
+    api_url = labelApi('collect_mismatch_prompt/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -523,7 +533,7 @@ function api_collect_mismatch_prompt(data){
 
 function api_collect_modified_prompt(data){
 
-    api_url = 'https://backend-python-nupj.onrender.com/collect_modified_prompt/'
+    api_url = labelApi('collect_modified_prompt/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -545,7 +555,7 @@ function api_collect_line_width_sample(data){
 
     console.log(data)
 
-    api_url = 'https://backend-python-nupj.onrender.com/collect_line_width_sample/'
+    api_url = labelApi('collect_line_width_sample/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -567,7 +577,7 @@ function api_remove_line_width_sample(data){
 
     console.log(data)
 
-    api_url = 'https://backend-python-nupj.onrender.com/remove_line_width_sample/'
+    api_url = labelApi('remove_line_width_sample/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -588,7 +598,7 @@ function api_remove_modified_prompt(data){
 
     console.log(data)
 
-    api_url = 'https://backend-python-nupj.onrender.com/remove_modified_prompt/'
+    api_url = labelApi('remove_modified_prompt/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -609,7 +619,7 @@ function api_reset_mismatch_prompt(data){
 
     console.log(data)
 
-    api_url = 'https://backend-python-nupj.onrender.com/reset_mismatch_prompt/'
+    api_url = labelApi('reset_mismatch_prompt/')
 
     headers = {
         'Content-Type': 'application/json',
@@ -631,7 +641,7 @@ function api_reset_mismatch_prompt(data){
 
         console.log(data)
     
-        api_url = 'https://backend-python-nupj.onrender.com/label_line_width_as_invalid/'
+        api_url = labelApi('label_line_width_as_invalid/')
     
         headers = {
             'Content-Type': 'application/json',

@@ -1,0 +1,778 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+<style>
+.mlw-page {
+    max-width: 1180px; margin: 20px auto; padding: 0 16px;
+    font-family: Roboto, 'Segoe UI', sans-serif;
+}
+.mlw-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px; padding: 14px 20px;
+    background: #bdc7c7; border-radius: 10px;
+}
+.mlw-header h1 { margin: 0; font-size: 18px; color: #3a4a4a; font-weight: 700; }
+.mlw-header .mlw-counter { font-size: 14px; color: #5a6a6a; font-weight: 600; }
+
+.mlw-card {
+    background: #bdc7c7; border-radius: 10px; padding: 20px;
+    margin-bottom: 16px; display: none;
+}
+.mlw-card.active { display: block; }
+
+.mlw-asset-id {
+    font-size: 12px; color: #6a7a7a; text-align: center;
+    margin: 0 0 12px; font-weight: 600;
+}
+
+.mlw-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 18px;
+    align-items: stretch;
+}
+
+.mlw-left-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    min-height: 0;
+}
+
+.mlw-img-wrap {
+    flex: 1 1 auto;
+    position: relative;
+    max-width: 100%;
+    background: #fff;
+    border-radius: 6px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    overflow: hidden;
+}
+.mlw-img-wrap--loupe {
+    background: #fff;
+}
+.mlw-img-wrap img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    border-radius: 6px;
+    display: block;
+    margin: 0;
+    position: relative;
+    z-index: 1;
+}
+
+.mlw-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+.mlw-tools {
+    display: flex;
+    gap: 6px;
+    background: #fff;
+    border-radius: 8px;
+    padding: 8px;
+}
+.mlw-tool-btn {
+    flex: 1;
+    border: 1.5px solid #c8d4d4;
+    background: #f4f7f7;
+    border-radius: 6px;
+    padding: 8px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #5a6a6a;
+    cursor: pointer;
+    font-family: Roboto, sans-serif;
+    line-height: 1.25;
+    text-align: center;
+    transition: background .12s, border-color .12s, color .12s;
+}
+.mlw-tool-btn:hover { background: #eef4f4; }
+.mlw-tool-btn.active {
+    background: #409393;
+    border-color: #357e7e;
+    color: #fff;
+}
+
+.mlw-loupe-panel {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 14px;
+    text-align: center;
+}
+.mlw-loupe-panel canvas {
+    display: block;
+    margin: 0 auto;
+    border-radius: 6px;
+    border: 1px solid #d8e0e0;
+    background: #f8fafa;
+}
+
+.mlw-stats {
+    background: #fff;
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-size: 13px;
+    color: #3a4a4a;
+    line-height: 1.5;
+    flex: 1;
+}
+.mlw-measure-panel {
+    flex: 0 0 auto;
+    margin-top: 0;
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 14px;
+    min-width: 0;
+}
+.mlw-measures-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e2e8e8;
+}
+.mlw-measures-header .mlw-panel-title {
+    margin-bottom: 0;
+}
+.mlw-measures-stats-host {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+.mlw-measures-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 13px;
+}
+.mlw-measures-stat span {
+    color: #6a7a7a;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.mlw-measures-stat strong {
+    color: #2a4a4a;
+    font-weight: 700;
+}
+.mlw-measures-stat-empty {
+    font-size: 12px;
+    color: #98a8a8;
+    font-style: italic;
+}
+.mlw-measures-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 16px;
+    align-items: start;
+}
+
+.mlw-panel-section + .mlw-panel-section {
+    margin-top: 18px; padding-top: 16px; border-top: 1px solid #e2e8e8;
+}
+.mlw-panel-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.6px; color: #6a7a7a; margin-bottom: 10px;
+}
+.mlw-panel-meter {
+    height: 6px; background: #e2e8e8; border-radius: 3px;
+    overflow: hidden; margin-bottom: 6px;
+}
+.mlw-panel-meter-fill {
+    height: 100%; background: linear-gradient(90deg, #f0b400, #3a9a3a);
+    border-radius: 3px; transition: width .15s ease;
+}
+.mlw-panel-meter-label {
+    font-size: 12px; color: #3a4a4a; font-weight: 600; margin-bottom: 12px;
+}
+.mlw-panel-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+    margin-bottom: 4px;
+}
+.mlw-cell {
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+    border-radius: 4px; font-size: 13px; font-weight: 700;
+    border: 1.5px solid transparent;
+}
+.mlw-cell { cursor: pointer; user-select: none; transition: transform .08s; }
+.mlw-cell:hover { transform: scale(1.05); }
+.mlw-cell-empty   { background: #f0f3f3; color: #98a8a8; border-color: #d8e0e0; }
+.mlw-cell-partial { background: rgba(240, 180, 0, 0.18); color: #8a6a00; border-color: rgba(240, 180, 0, 0.5); }
+.mlw-cell-done    { background: rgba(58, 154, 58, 0.18); color: #2a6a2a; border-color: rgba(58, 154, 58, 0.55); }
+.mlw-cell-skip    { background: #e0e4e4; color: #6a7878; border-color: #c0c8c8; border-style: dashed; }
+
+.mlw-panel-hint {
+    font-size: 11px; color: #7a8a8a; margin-top: 8px; line-height: 1.4;
+}
+
+.mlw-panel-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 3px 0; font-size: 13px;
+}
+.mlw-panel-row span  { color: #6a7a7a; }
+.mlw-panel-row strong { color: #2a4a4a; font-weight: 700; }
+.mlw-panel-empty {
+    font-size: 12px; color: #98a8a8; font-style: italic;
+}
+
+.mlw-instructions {
+    display: none;
+}
+
+.mlw-status {
+    text-align: center; min-height: 18px;
+    margin-top: 12px; font-size: 13px; font-weight: 600;
+    color: #b03030;
+}
+
+.mlw-actions {
+    display: flex; gap: 10px; align-items: center;
+    margin-top: 8px; justify-content: center;
+}
+.mlw-sidebar .mlw-actions {
+    flex-direction: column;
+    margin-top: 0;
+    gap: 6px;
+}
+.mlw-sidebar .mlw-actions .mlw-btn {
+    width: 100%;
+    padding: 9px 12px;
+    font-size: 12px;
+}
+.mlw-sidebar .mlw-status {
+    margin-top: 0;
+    margin-bottom: 0;
+    font-size: 11px;
+    line-height: 1.35;
+    min-height: 0;
+}
+.mlw-btn {
+    padding: 10px 28px; border-radius: 6px; border: none;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    font-family: Roboto, sans-serif; transition: background .15s;
+}
+.mlw-btn-skip {
+    background: transparent; color: #5a7878;
+    border: 1px solid #a0b4b4; padding: 9px 24px;
+}
+.mlw-btn-skip:hover { background: #eef4f4; }
+.mlw-btn-flag {
+    background: transparent; color: #b03030;
+    border: 1px solid #c06060; padding: 9px 24px;
+}
+.mlw-btn-flag:hover { background: #fdf0f0; }
+.mlw-btn-save { background: #409393; color: #fff; }
+.mlw-btn-save:hover { background: #357e7e; }
+.mlw-btn-save:disabled { background: #a0b4b4; cursor: not-allowed; }
+
+.mlw-done-msg {
+    text-align: center; padding: 60px 20px;
+    font-size: 18px; color: #3a4a4a; font-weight: 600;
+    background: #bdc7c7; border-radius: 10px;
+}
+.mlw-done-msg a {
+    display: inline-block; margin-top: 16px;
+    padding: 10px 28px; background: #409393; color: #fff;
+    border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600;
+}
+
+.mlw-measure-table-col,
+.mlw-measure-histogram-col {
+    min-width: 0;
+}
+.mlw-measure-histogram-host {
+    min-height: 120px;
+}
+.mlw-histogram {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+.mlw-histogram-point {
+    cursor: pointer;
+    stroke: rgba(0, 0, 0, 0.35);
+    stroke-width: 1;
+    transition: r 0.08s, fill 0.08s;
+}
+.mlw-histogram-point.parallel { fill: #00e676; }
+.mlw-histogram-point.perpendicular { fill: #ff9100; }
+.mlw-histogram-point.unclear { fill: #ffd54f; }
+.mlw-histogram-point.unknown { fill: #409393; }
+.mlw-histogram-point.mlw-hist-hover {
+    stroke: #ffffff;
+    stroke-width: 2;
+}
+.mlw-histogram-point.mlw-hist-hover.parallel { fill: #00c853; }
+.mlw-histogram-point.mlw-hist-hover.perpendicular { fill: #e65100; }
+.mlw-histogram-point.mlw-hist-hover.unclear { fill: #f9a825; }
+.mlw-histogram-point.mlw-hist-hover.unknown { fill: #2a7a7a; }
+.mlw-hist-axis {
+    font-size: 9px;
+    fill: #8a9a9a;
+    font-family: Roboto, sans-serif;
+}
+.mlw-hist-tick {
+    stroke: #e2e8e8;
+    stroke-width: 1;
+}
+.mlw-hist-bar {
+    fill: rgba(64, 147, 147, 0.22);
+    stroke: rgba(64, 147, 147, 0.35);
+    stroke-width: 0.5;
+}
+.mlw-hist-bar.mlw-hist-bar-hover {
+    fill: rgba(64, 147, 147, 0.38);
+}
+
+.mlw-measure-table-wrap {
+    margin-top: 16px;
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 14px;
+    overflow-x: auto;
+}
+.mlw-measure-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    color: #3a4a4a;
+}
+.mlw-measure-table th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6a7a7a;
+    padding: 6px 8px;
+    border-bottom: 1px solid #e2e8e8;
+    white-space: nowrap;
+}
+.mlw-measure-table td {
+    padding: 7px 8px;
+    border-bottom: 1px solid #f0f3f3;
+    white-space: nowrap;
+}
+.mlw-measure-table tr:last-child td { border-bottom: none; }
+.mlw-measure-table tbody tr {
+    transition: background .1s;
+}
+.mlw-measure-table tbody tr.mlw-row-hover {
+    background: #eef6f6;
+}
+.mlw-measure-detail-caption {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #6a7a7a;
+    margin-bottom: 6px;
+}
+.mlw-align-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.25);
+    vertical-align: middle;
+    margin-right: 5px;
+}
+.mlw-align-dot.parallel { background: #00e676; }
+.mlw-align-dot.perpendicular { background: #ff9100; }
+.mlw-align-dot.unclear { background: #ffd54f; }
+.mlw-align-dot.unknown { background: #b0bec5; }
+.mlw-table-empty {
+    font-size: 12px;
+    color: #98a8a8;
+    font-style: italic;
+    padding: 8px 4px;
+}
+.mlw-measure-table th.mlw-th-actions,
+.mlw-measure-table td.mlw-td-actions {
+    width: 36px;
+    text-align: center;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+.mlw-row-remove {
+    border: none;
+    background: transparent;
+    color: #b03030;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 2px 7px;
+    line-height: 1;
+    border-radius: 4px;
+    font-family: Roboto, sans-serif;
+}
+.mlw-row-remove:hover {
+    background: #fdf0f0;
+    color: #901010;
+}
+
+.mlw-threshold-panel {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 14px;
+}
+.mlw-threshold-modes {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.mlw-threshold-modes .mlw-tool-btn { font-size: 10px; padding: 6px 4px; }
+.mlw-threshold-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.mlw-threshold-slider {
+    flex: 1;
+    accent-color: #409393;
+    cursor: pointer;
+}
+.mlw-threshold-slider:disabled { opacity: 0.4; cursor: not-allowed; }
+.mlw-threshold-value {
+    font-size: 12px;
+    font-weight: 700;
+    color: #2a4a4a;
+    min-width: 28px;
+    text-align: right;
+}
+.mlw-threshold-auto-readout {
+    font-size: 11px;
+    color: #6a7a7a;
+    margin-bottom: 4px;
+}
+.mlw-threshold-hint {
+    font-size: 10px;
+    color: #8a9a9a;
+    margin: 0;
+    line-height: 1.35;
+}
+
+@media (max-width: 820px) {
+    .mlw-layout { grid-template-columns: 1fr; }
+    .mlw-measures-body { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="labeling-layout">
+{% include 'includes/rules_sidebar.html' %}
+<div class="labeling-main">
+
+<div class="mlw-page">
+    <div class="mlw-header">
+        <h1>Line Width Measurement</h1>
+        <span class="mlw-counter" id="mlwCounter">1 / {{ total_count }}</span>
+    </div>
+
+    {% for asset in assets_to_label %}
+    <div class="mlw-card {% if forloop.first %}active{% endif %}"
+         data-idx="{{ forloop.counter0 }}" data-asset-id="{{ asset.asset_id }}">
+        <p class="mlw-asset-id">Asset {{ asset.asset_id }}</p>
+
+        <div class="mlw-layout">
+            <div class="mlw-left-col">
+                <div class="mlw-img-wrap">
+                    <img class="mlw-img" src="{{ asset.image_link }}" alt="Asset {{ asset.asset_id }}">
+                </div>
+                <div class="mlw-measure-panel">
+                    <div class="mlw-measures-header">
+                        <div class="mlw-panel-title">Measures</div>
+                        <div class="mlw-measures-stats-host"></div>
+                    </div>
+                    <div class="mlw-measures-body">
+                        <div class="mlw-measure-table-col">
+                            <div class="mlw-panel-title">Sample</div>
+                            <div class="mlw-measure-table-host"></div>
+                        </div>
+                        <div class="mlw-measure-histogram-col">
+                            <div class="mlw-panel-title">Width histogram</div>
+                            <div class="mlw-measure-histogram-host"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <aside class="mlw-sidebar">
+                <div class="mlw-actions">
+                    <button class="mlw-btn mlw-btn-flag" onclick="mlwFlag()">Flag Issue</button>
+                    <button class="mlw-btn mlw-btn-skip" onclick="mlwSkip()">Skip</button>
+                    <button class="mlw-btn mlw-btn-save" onclick="mlwSave()">Save &amp; Next</button>
+                </div>
+                <div class="mlw-status"></div>
+                <div class="mlw-loupe-panel">
+                    <div class="mlw-panel-title">Magnifier · 6×</div>
+                    <canvas class="mlw-loupe" width="160" height="160"></canvas>
+                </div>
+                <div class="mlw-threshold-panel"></div>
+                <div class="mlw-stats"></div>
+            </aside>
+        </div>
+    </div>
+    {% endfor %}
+
+    <div class="mlw-done-msg" id="mlwDone" style="display:none;">
+        All images measured!
+        <br>
+        <a href="/label_images/setup_session/">Back to Dashboard</a>
+    </div>
+</div>
+
+</div><!-- .labeling-main -->
+</div><!-- .labeling-layout -->
+
+<script>
+function _mlwBoot() {
+    var cards = document.querySelectorAll('.mlw-card');
+    var currentIdx = 0;
+    var total = cards.length;
+    var labelerId = '{{ labeler_id }}';
+    var ruleIndex = {{ rule_index }};
+    var batchId = '{{ batch_id }}';
+    var largeSub = '{{ large_sub_batch }}';
+    var SAMPLES_PER_SECTION = 3;
+    var GRID_SECTIONS = 3;
+
+    function setStatus(card, msg, kind) {
+        var el = card.querySelector('.mlw-status');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.style.color = kind === 'info' ? '#3a6a6a' : '#b03030';
+    }
+
+    function initOverlayWhenReady(img, overlayOpts, card) {
+        requestAnimationFrame(function() {
+            if (img.offsetWidth > 0 && img.offsetHeight > 0) {
+                initMeasureOverlay(img, overlayOpts);
+            } else {
+                requestAnimationFrame(function() { initMeasureOverlay(img, overlayOpts); });
+            }
+        });
+    }
+
+    function activateCard(idx) {
+        teardownMeasureOverlay();
+        cards.forEach(function(c) { c.classList.remove('active'); });
+        if (idx >= total) {
+            document.getElementById('mlwDone').style.display = 'block';
+            document.getElementById('mlwCounter').textContent = 'Done';
+            return;
+        }
+        currentIdx = idx;
+        var card = cards[idx];
+        card.classList.add('active');
+        document.getElementById('mlwCounter').textContent = (idx + 1) + ' / ' + total;
+        setStatus(card, '');
+
+        var img = card.querySelector('.mlw-img');
+        var statsTarget = card.querySelector('.mlw-stats');
+        var overlayOpts = {
+            showAddButton: false,
+            gridSections: GRID_SECTIONS,
+            samplesPerSection: SAMPLES_PER_SECTION,
+            statsTarget: statsTarget,
+            measureTableTarget: card.querySelector('.mlw-measure-table-host'),
+            measureHistogramTarget: card.querySelector('.mlw-measure-histogram-host'),
+            measureStatsTarget: card.querySelector('.mlw-measures-stats-host'),
+            inlineLoupe: true,
+            defaultTool: 'fit',
+            loupeCanvas: card.querySelector('.mlw-loupe'),
+            thresholdContainer: card.querySelector('.mlw-threshold-panel')
+        };
+        function handleImgError() {
+            setStatus(card, 'Image failed to load — auto-flagging…', 'info');
+            flagAsset(card.getAttribute('data-asset-id')).then(function() {
+                teardownMeasureOverlay();
+                activateCard(currentIdx + 1);
+            }).catch(function() {
+                setStatus(card, 'Image failed to load. Use Flag Issue to skip.');
+            });
+        }
+        if (img.complete && img.naturalWidth) {
+            initOverlayWhenReady(img, overlayOpts, card);
+        } else if (img.complete && !img.naturalWidth) {
+            handleImgError();
+        } else {
+            img.onload = function() { initOverlayWhenReady(img, overlayOpts, card); };
+            img.onerror = handleImgError;
+        }
+    }
+
+    function flagAsset(assetId, reason) {
+        var authKey = (typeof API_ACCESS_KEY !== 'undefined' && API_ACCESS_KEY) ? API_ACCESS_KEY : '';
+        return fetch(window.LABELING_API_BASE_URL + '/collect_label_issue/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': authKey },
+            body: JSON.stringify({
+                asset_id: parseInt(assetId),
+                task_type: 'line_width_type',
+                rule_index: ruleIndex,
+                labeler_id: labelerId
+            })
+        }).then(function(r) { return r.json(); });
+    }
+
+    window.mlwFlag = function() {
+        var card = cards[currentIdx];
+        var assetId = card.getAttribute('data-asset-id');
+        setStatus(card, 'Flagging…', 'info');
+        flagAsset(assetId).then(function() {
+            teardownMeasureOverlay();
+            activateCard(currentIdx + 1);
+        }).catch(function(err) {
+            setStatus(card, 'Flag failed: ' + (err && err.message ? err.message : err));
+        });
+    };
+
+    window.mlwSkip = function() {
+        teardownMeasureOverlay();
+        activateCard(currentIdx + 1);
+    };
+
+    window.mlwSave = function() {
+        var card = cards[currentIdx];
+        var assetId = card.getAttribute('data-asset-id');
+        var groups = window._mlwMeasureGroups;
+
+        console.log('[mlwSave] start', {
+            assetId: assetId,
+            measureStateExists: !!_measureState,
+            hasGetSectionCounts: !!(_measureState && _measureState.getSectionCounts),
+            mlwMeasureGroups: groups,
+            groupsLength: groups ? groups.length : 0
+        });
+
+        // Hard fail if the overlay isn't initialised — otherwise the validation
+        // gate below would silently pass when there is nothing to save.
+        if (!_measureState || !_measureState.getSectionCounts || !groups) {
+            setStatus(card, 'Measurement overlay not ready. Please click on the image to measure, then try again.');
+            console.warn('[mlwSave] aborting: overlay not initialised');
+            return;
+        }
+
+        var counts = _measureState.getSectionCounts();
+        var ignored = _measureState.ignoredSections || {};
+        var sectionsExpected = GRID_SECTIONS * GRID_SECTIONS;
+        var missing = 0;
+        var countedSections = 0;
+        for (var k in counts) {
+            countedSections += 1;
+            if (ignored[k]) continue;
+            if (counts[k] < SAMPLES_PER_SECTION) missing += 1;
+        }
+        if (countedSections < sectionsExpected) {
+            setStatus(card, 'Could not read section counts. Please refresh the page.');
+            console.warn('[mlwSave] aborting: section counts incomplete', counts);
+            return;
+        }
+        if (missing > 0) {
+            setStatus(card,
+                missing + ' section' + (missing === 1 ? '' : 's') + ' still need at least '
+                + SAMPLES_PER_SECTION + ' measurement' + (SAMPLES_PER_SECTION === 1 ? '' : 's') + ' each. '
+                + 'Click a section in the panel to skip if it has no lines.');
+            return;
+        }
+
+        var allMeasurements = [];
+        for (var gi = 0; gi < groups.length; gi++) {
+            for (var mi = 0; mi < groups[gi].length; mi++) {
+                var m = groups[gi][mi];
+                allMeasurements.push({
+                    width: m.width,
+                    x_coord: Math.round(m.nx),
+                    y_coord: Math.round(m.ny),
+                    scaled_width: Math.round(m.scaledWidth),
+                    scaled_height: Math.round(m.scaledHeight)
+                });
+            }
+        }
+
+        if (allMeasurements.length === 0) {
+            setStatus(card, 'No measurements to save. Click on lines in the image first.');
+            console.warn('[mlwSave] aborting: zero measurements collected');
+            return;
+        }
+
+        var authKey = (typeof API_ACCESS_KEY !== 'undefined' && API_ACCESS_KEY) ? API_ACCESS_KEY : '';
+        console.log('[mlwSave] sending', allMeasurements.length, 'measurements, authKey set:', !!authKey);
+        setStatus(card, 'Saving ' + allMeasurements.length + ' measurements…', 'info');
+
+        var promises = allMeasurements.map(function(meas, i) {
+            var img = card.querySelector('.mlw-img');
+            var data = {
+                asset_id: parseInt(assetId),
+                sample_index: i + 1,
+                x_coord: meas.x_coord,
+                y_coord: meas.y_coord,
+                width: meas.width,
+                image_width: img.naturalWidth,
+                image_height: img.naturalHeight,
+                scaled_width: meas.scaled_width,
+                scaled_height: meas.scaled_height,
+                collection_version: 3,
+                labeler_id: labelerId
+            };
+            return fetch(window.LABELING_API_BASE_URL + '/collect_line_width_sample/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': authKey
+                },
+                body: JSON.stringify(data)
+            }).then(function(r) {
+                console.log('[mlwSave] response', i + 1, 'status:', r.status);
+                if (!r.ok) {
+                    return r.text().then(function(t) {
+                        throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 200));
+                    });
+                }
+                return r;
+            });
+        });
+
+        Promise.all(promises).then(function() {
+            console.log('[mlwSave] all saved, advancing');
+            teardownMeasureOverlay();
+            activateCard(currentIdx + 1);
+        }).catch(function(err) {
+            console.error('[mlwSave] failed', err);
+            setStatus(card, 'Save failed: ' + (err && err.message ? err.message : err));
+        });
+    };
+
+    if (total > 0) {
+        activateCard(0);
+    } else {
+        document.getElementById('mlwDone').style.display = 'block';
+        document.getElementById('mlwCounter').textContent = 'Done';
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _mlwBoot);
+} else {
+    _mlwBoot();
+}
+</script>
+
+{% endblock %}

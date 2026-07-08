@@ -1,0 +1,729 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+<div class="wf-page">
+    <div class="wf-nav">
+        <a href="/label_images/setup_session/">Session Setup</a>
+        <a href="/label_images/admin/labelers/">Labelers</a>
+        <a href="/label_images/admin/bulk_assign/">Bulk Assign</a>
+        <a href="/label_images/admin/training/">Training</a>
+        <a href="/label_images/admin/performance/" class="active">Performance</a>
+        <a href="/label_images/admin/payments/">Payments</a>
+        <a href="/label_images/admin/label_comparison/">Label Comparison</a>
+        <a href="/label_images/rules/">Rules</a>
+    </div>
+
+    <h1>Labeler Performance</h1>
+
+    <div class="wf-filters">
+        <label>Labeler</label>
+        <select id="labelerSelect" class="wf-select" onchange="loadPerf()">
+            <option value="">— select —</option>
+        </select>
+    </div>
+
+    <p id="perfStatus" class="wf-muted" style="margin-top:8px;"></p>
+
+    <div id="perfContent" style="display:none;">
+
+        <!-- Tab bar -->
+        <div style="display:flex; gap:2px; margin:16px 0 12px;">
+            <button class="pf-tab active" data-tab="work" onclick="switchTab('work')">Work Batches</button>
+            <button class="pf-tab" data-tab="training" onclick="switchTab('training')">Training</button>
+        </div>
+
+        <!-- WORK TAB (default) -->
+        <div id="tab-work" class="pf-panel">
+            <div id="workStats" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px;"></div>
+            <div style="margin-bottom:8px;">
+                <label style="font-size:11px; color:#6f7a7a;">Filter:</label>
+                <select id="workFilter" class="wf-select" style="width:auto; font-size:12px; padding:3px 8px;" onchange="renderWork()">
+                    <option value="all">All</option>
+                    <option value="completed">Completed</option>
+                    <option value="active">Active</option>
+                </select>
+            </div>
+            <table class="pf-tbl">
+                <thead><tr>
+                    <th>Feature</th>
+                    <th>Batch</th>
+                    <th>Labels</th>
+                    <th>Hours</th>
+                    <th>Speed</th>
+                    <th>Deadline</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr></thead>
+                <tbody id="workBody"></tbody>
+            </table>
+            <p id="workEmpty" class="wf-muted" style="display:none;">No work batches.</p>
+
+            <div id="workDetailWrap" style="display:none; margin-top:20px;">
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                    <button onclick="closeWorkDetail()" style="font-size:12px; padding:4px 12px; background:#8a9c9c; border:none; border-radius:4px; color:#fff; cursor:pointer;">&larr; Back</button>
+                    <h2 id="workDetailTitle" style="margin:0; font-size:15px; color:#2a3a3a;"></h2>
+                </div>
+                <div id="workDetailStats" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;"></div>
+                <div style="margin-bottom:10px;">
+                    <label style="font-size:11px;color:#6f7a7a;">Show:</label>
+                    <select id="workDetailFilter" class="wf-select" style="width:auto;font-size:12px;padding:3px 8px;" onchange="renderWorkDetailGrid()">
+                        <option value="all">All</option>
+                        <option value="yes">Yes only</option>
+                        <option value="no">No only</option>
+                        <option value="unlabeled">Unlabeled</option>
+                    </select>
+                </div>
+                <div id="workDetailGrid" class="ll-grid"></div>
+                <p id="workDetailEmpty" class="wf-muted" style="display:none;">No labels found.</p>
+            </div>
+
+            <!-- Line-width sample review -->
+            <div id="lwsWrap" style="display:none; margin-top:20px;">
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                    <button onclick="closeSampleReview()" style="font-size:12px; padding:4px 12px; background:#8a9c9c; border:none; border-radius:4px; color:#fff; cursor:pointer;">&larr; Back</button>
+                    <h2 id="lwsTitle" style="margin:0; font-size:15px; color:#2a3a3a;"></h2>
+                </div>
+                <div id="lwsStats" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;"></div>
+                <p id="lwsNote" class="wf-muted" style="display:none; margin:0 0 10px; font-size:12px;"></p>
+                <div id="lwsGrid"></div>
+                <p id="lwsEmpty" class="wf-muted" style="display:none;">No samples recorded for this batch.</p>
+            </div>
+        </div>
+
+        <!-- TRAINING TAB -->
+        <div id="tab-training" class="pf-panel" style="display:none;">
+            <div id="trainStats" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px;"></div>
+            <table class="pf-tbl">
+                <thead><tr>
+                    <th>Feature</th>
+                    <th>Accuracy</th>
+                    <th>Score</th>
+                    <th>Time</th>
+                    <th>Per Img</th>
+                    <th>Date</th>
+                    <th></th>
+                </tr></thead>
+                <tbody id="trainBody"></tbody>
+            </table>
+            <p id="trainEmpty" class="wf-muted" style="display:none;">No training results yet.</p>
+
+            <div id="trainDetailWrap" style="display:none; margin-top:20px;">
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                    <button onclick="closeTrainDetail()" style="font-size:12px; padding:4px 12px; background:#8a9c9c; border:none; border-radius:4px; color:#fff; cursor:pointer;">← Back</button>
+                    <h2 id="trainDetailTitle" style="margin:0; font-size:15px; color:#2a3a3a;"></h2>
+                </div>
+                <p id="trainDetailNote" class="wf-muted" style="display:none; margin:0 0 10px; font-size:12px;"></p>
+                <div id="trainDetailStats" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;"></div>
+                <div style="margin-bottom:10px;">
+                    <label style="font-size:11px;color:#6f7a7a;">Show:</label>
+                    <select id="trainDetailFilter" class="wf-select" style="width:auto;font-size:12px;padding:3px 8px;" onchange="renderTrainDetailGrid()">
+                        <option value="all">All</option>
+                        <option value="yes">Yes only</option>
+                        <option value="no">No only</option>
+                        <option value="unlabeled">Unlabeled</option>
+                        <option value="wrong">Wrong only</option>
+                    </select>
+                </div>
+                <div id="trainDetailGrid" class="ll-grid"></div>
+                <p id="trainDetailEmpty" class="wf-muted" style="display:none;">No labels found.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.pf-tab {
+    padding:5px 14px; font-size:12px; font-weight:600; border:1px solid #8a9c9c;
+    border-radius:4px 4px 0 0; background:#c2d0d0; color:#3a4a4a; cursor:pointer;
+}
+.pf-tab.active { background:#a9b9b9; border-bottom-color:#a9b9b9; }
+.pf-panel { background:#c8d4d4; border-radius:0 6px 6px 6px; padding:12px; }
+.pf-card {
+    background:#d6dfdf; border-radius:6px; padding:10px 14px; min-width:110px; flex:1;
+}
+.pf-card-label { font-size:10px; color:#5d6565; text-transform:uppercase; letter-spacing:.5px; margin-bottom:2px; }
+.pf-card-val { font-size:20px; font-weight:700; color:#2a3a3a; }
+.pf-card-sub { font-size:11px; color:#6f7a7a; }
+.pf-tbl { width:100%; border-collapse:separate; border-spacing:0 2px; }
+.pf-tbl th { text-align:left; font-size:10px; font-weight:600; color:#5d6565; padding:2px 8px; white-space:nowrap; }
+.pf-tbl td { font-size:12px; color:#2a3a3a; padding:5px 8px; background:#dae2e2; }
+.pf-tbl tr td:first-child { border-radius:4px 0 0 4px; font-weight:600; }
+.pf-tbl tr td:last-child { border-radius:0 4px 4px 0; }
+.pf-tbl tr:hover td { background:#d0dcdc; }
+.pf-good { color:#2a6a4a; font-weight:700; }
+.pf-warn { color:#b08820; font-weight:700; }
+.pf-bad  { color:#bd4444; font-weight:700; }
+.pf-tag { font-size:9px; font-weight:700; padding:1px 6px; border-radius:3px; }
+.pf-tag-done { background:#7aaa72; color:#fff; }
+.pf-tag-active { background:#409393; color:#fff; }
+.pf-tag-late { background:#bd4444; color:#fff; }
+.ll-grid {
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap:8px;
+}
+.ll-card {
+    background:#dae2e2; border-radius:6px; overflow:hidden; font-size:11px; color:#2a3a3a;
+}
+.ll-card img {
+    width:100%; aspect-ratio:1/1; object-fit:contain; background:#f0f0f0; display:block;
+}
+.ll-card-body { padding:6px 8px; }
+.ll-card-id { font-size:10px; color:#6f7a7a; }
+.ll-answer { font-weight:700; font-size:13px; margin:2px 0; }
+.ll-right  { color:#2a7a4a; }
+.ll-wrong  { color:#bd4444; }
+.ll-none   { color:#999; font-style:italic; }
+.ll-correct-lbl { color:#6f7a7a; }
+.ll-view-btn {
+    font-size:11px; padding:3px 10px; background:#409393; color:#fff;
+    border:none; border-radius:3px; cursor:pointer; white-space:nowrap;
+}
+.ll-view-btn:hover { background:#357e7e; }
+.ll-view-btn:disabled { background:#b0c4c4; cursor:default; }
+
+/* Line-width sample review */
+.lws-grid {
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap:14px;
+}
+.lws-card { background:#dae2e2; border-radius:8px; padding:10px; }
+.lws-imgwrap {
+    position:relative; display:block; line-height:0;
+    background:#fff; border-radius:6px; overflow:hidden;
+}
+.lws-imgwrap img { display:block; width:100%; height:auto; }
+.lws-dot {
+    position:absolute; transform:translate(-50%, -50%);
+    width:14px; height:14px; border-radius:50%;
+    background:rgba(220,68,68,.85); border:2px solid #fff;
+    box-shadow:0 0 2px rgba(0,0,0,.5); cursor:default;
+}
+.lws-dot-lbl {
+    position:absolute; transform:translate(-50%, -50%);
+    font-size:10px; font-weight:700; color:#fff;
+    text-shadow:0 0 3px #000, 0 0 3px #000; pointer-events:none; white-space:nowrap;
+}
+.lws-meta { font-size:11px; color:#2a3a3a; line-height:1.5; margin-top:8px; }
+.lws-meta .lws-id { font-size:10px; color:#6f7a7a; }
+.lws-widths {
+    display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;
+}
+.lws-chip {
+    font-size:10px; font-weight:600; color:#2a4a4a;
+    background:#eef4f4; border:1px solid #c6dada; border-radius:10px; padding:1px 7px;
+}
+.lws-nocoord { color:#b08820; font-style:italic; }
+</style>
+
+<script>
+var _labelers = {{ labelers_json|safe }};
+var _perfData = null;
+
+(function() {
+    var sel = document.getElementById('labelerSelect');
+    _labelers.forEach(function(l) {
+        var o = document.createElement('option'); o.value = l.id; o.textContent = l.username; sel.appendChild(o);
+    });
+})();
+
+function switchTab(name) {
+    if (name !== 'training') closeTrainDetail();
+    if (name !== 'work') { closeWorkDetail(); closeSampleReview(); }
+    ['work','training'].forEach(function(t) {
+        document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
+        document.querySelector('.pf-tab[data-tab="' + t + '"]').className = 'pf-tab' + (t === name ? ' active' : '');
+    });
+}
+
+function accClass(pct) { return pct >= 85 ? 'pf-good' : pct >= 70 ? 'pf-warn' : 'pf-bad'; }
+
+function makeCard(label, val, sub) {
+    return '<div class="pf-card"><div class="pf-card-label">' + label + '</div>'
+        + '<div class="pf-card-val">' + val + '</div>'
+        + (sub ? '<div class="pf-card-sub">' + sub + '</div>' : '')
+        + '</div>';
+}
+
+function loadPerf() {
+    var uid = document.getElementById('labelerSelect').value;
+    if (!uid) return;
+    document.getElementById('perfStatus').textContent = 'Loading\u2026';
+    document.getElementById('perfContent').style.display = 'none';
+
+    fetch('/label_images/admin/performance/data/?user_id=' + uid)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        _perfData = d;
+        document.getElementById('perfStatus').textContent = '';
+        document.getElementById('perfContent').style.display = '';
+
+        var s = d.summary;
+
+        var workHtml = makeCard('Total Labels', s.work_labels)
+            + makeCard('Throughput', s.work_throughput != null ? s.work_throughput + '/hr' : '\u2014', s.work_hours + ' hrs total')
+            + makeCard('On-time Rate', s.work_on_time_pct != null ? s.work_on_time_pct + '%' : '\u2014', s.work_completed + ' completed')
+            + makeCard('Assignments', s.work_assignments);
+        document.getElementById('workStats').innerHTML = workHtml;
+
+        var trainAccVal = s.training_accuracy != null
+            ? '<span class="' + accClass(s.training_accuracy) + '">' + s.training_accuracy + '%</span>' : '\u2014';
+        var trainHtml = makeCard('Avg Accuracy', trainAccVal, s.training_total_imgs + ' total images')
+            + makeCard('Sessions', s.training_sessions);
+        document.getElementById('trainStats').innerHTML = trainHtml;
+
+        renderTraining(d.training);
+        renderWork();
+    });
+}
+
+function renderTraining(rows) {
+    var tb = document.getElementById('trainBody');
+    tb.innerHTML = '';
+    document.getElementById('trainEmpty').style.display = rows.length ? 'none' : '';
+    closeTrainDetail();
+    rows.forEach(function(r) {
+        var reviewBtn = '';
+        if (r.assignment_id) {
+            reviewBtn = '<button class="ll-view-btn" onclick="loadTrainDetail('
+                + r.assignment_id + ',' + (r.training_result_id || 'null') + ',\''
+                + (r.feature || r.task_type + '/r' + r.rule_index).replace(/'/g, "\\'")
+                + '\',' + (r.has_detail ? 'true' : 'false') + ','
+                + r.correct + ',' + r.total + ')">Review</button>';
+        }
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + (r.feature || r.task_type + '/r' + r.rule_index) + '</td>'
+            + '<td><span class="' + accClass(r.accuracy_pct) + '">' + r.accuracy_pct + '%</span></td>'
+            + '<td>' + r.correct + '/' + r.total + '</td>'
+            + '<td>' + r.time_min + 'm</td>'
+            + '<td>' + r.per_image_sec + 's</td>'
+            + '<td style="font-size:11px;color:#6f7a7a;">' + r.date + '</td>'
+            + '<td>' + reviewBtn + '</td>';
+        tb.appendChild(tr);
+    });
+}
+
+var _trainDetailData = null;
+var _trainDetailAssignmentId = null;
+
+function loadTrainDetail(assignmentId, trainingResultId, title, hasDetail, correct, total) {
+    _trainDetailAssignmentId = assignmentId;
+    _trainDetailData = null;
+    document.getElementById('trainDetailTitle').textContent = title;
+    document.getElementById('trainDetailGrid').innerHTML = '';
+    document.getElementById('trainDetailStats').innerHTML = '';
+    document.getElementById('trainDetailEmpty').style.display = 'none';
+    document.getElementById('trainDetailFilter').value = 'all';
+    var note = document.getElementById('trainDetailNote');
+    note.style.display = 'none';
+    note.textContent = '';
+
+    document.querySelector('#tab-training .pf-tbl').style.display = 'none';
+    document.getElementById('trainEmpty').style.display = 'none';
+    document.getElementById('trainStats').style.display = 'none';
+    document.getElementById('trainDetailWrap').style.display = '';
+
+    var url = '/label_images/admin/labeler_labels/detail/?assignment_id=' + assignmentId;
+    if (trainingResultId) url += '&training_result_id=' + trainingResultId;
+
+    fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        _trainDetailData = d;
+        var labels = d.labels || [];
+        var answered = labels.filter(function(l) { return l.answer; });
+
+        if (d.legacy_score) {
+            note.style.display = '';
+            note.textContent = 'Per-image answers were not saved for this session. Overall score: '
+                + d.legacy_score.correct + '/' + d.legacy_score.total + '.';
+        } else if (!hasDetail && answered.length === 0) {
+            note.style.display = '';
+            note.textContent = 'Per-image answers were not saved for this session. Overall score: '
+                + correct + '/' + total + '.';
+        }
+
+        document.getElementById('trainDetailStats').innerHTML =
+            makeCard('Total', labels.length)
+            + makeCard('Answered', answered.length || (d.legacy_score ? d.legacy_score.total : 0))
+            + makeCard('Correct', (answered.filter(function(l) { return l.right === true; }).length)
+                + (answered.length ? '/' + answered.length : (d.legacy_score ? '/' + d.legacy_score.total : '')),
+                d.legacy_score ? Math.round(d.legacy_score.correct / d.legacy_score.total * 100) + '%' : '');
+
+        renderTrainDetailGrid();
+    });
+}
+
+function renderTrainDetailGrid() {
+    if (!_trainDetailData) return;
+    var d = _trainDetailData;
+    var filter = document.getElementById('trainDetailFilter').value;
+    var labels = (d.labels || []).filter(function(l) {
+        if (filter === 'yes') return l.answer === 'yes';
+        if (filter === 'no') return l.answer === 'no';
+        if (filter === 'unlabeled') return !l.answer;
+        if (filter === 'wrong') return l.right === false;
+        return true;
+    });
+    var grid = document.getElementById('trainDetailGrid');
+    grid.innerHTML = '';
+    document.getElementById('trainDetailEmpty').style.display = labels.length ? 'none' : '';
+    labels.forEach(function(l) {
+        var answerHtml = l.answer
+            ? '<div class="ll-answer">' + l.answer + '</div>'
+            : '<div class="ll-answer ll-none">\u2014</div>';
+        var extraHtml = '';
+        if (d.is_training) {
+            var rightHtml = '';
+            if (l.right === true) rightHtml = '<span class="ll-right">\u2713 Correct</span>';
+            else if (l.right === false) rightHtml = '<span class="ll-wrong">\u2717 Wrong</span>';
+            else rightHtml = '<span class="ll-none">Not recorded</span>';
+            extraHtml = '<div style="font-size:11px;margin-top:2px;"><span class="ll-correct-lbl">Correct: </span>'
+                + (l.correct || '\u2014') + ' &nbsp;' + rightHtml + '</div>';
+        }
+        var overrideHtml = makeOverrideHtml(_trainDetailAssignmentId, l.asset_id, l.answer, 'train');
+        var card = document.createElement('div');
+        card.className = 'll-card';
+        card.id = 'll-card-train-' + l.asset_id;
+        card.innerHTML = '<img src="' + (l.image_link || '') + '" loading="lazy" onerror="this.style.display=\'none\'">'
+            + '<div class="ll-card-body"><div class="ll-card-id">' + l.asset_id + '</div>'
+            + answerHtml + extraHtml + overrideHtml + '</div>';
+        grid.appendChild(card);
+    });
+}
+
+function closeTrainDetail() {
+    document.getElementById('trainDetailWrap').style.display = 'none';
+    document.querySelector('#tab-training .pf-tbl').style.display = '';
+    document.getElementById('trainStats').style.display = '';
+}
+
+function renderWork() {
+    if (!_perfData) return;
+    closeSampleReview();
+    var filter = document.getElementById('workFilter').value;
+    var rows = _perfData.work.filter(function(r) {
+        if (filter === 'completed') return r.completed;
+        if (filter === 'active') return !r.completed;
+        return true;
+    });
+    var tb = document.getElementById('workBody');
+    tb.innerHTML = '';
+    document.getElementById('workEmpty').style.display = rows.length ? 'none' : '';
+    rows.forEach(function(r) {
+        var status = '';
+        if (r.completed) {
+            status = r.on_time ? '<span class="pf-tag pf-tag-done">On time</span>'
+                               : '<span class="pf-tag pf-tag-late">Late</span>';
+        } else {
+            status = '<span class="pf-tag pf-tag-active">Active</span>';
+        }
+        var rTitle = (r.feature || r.task_type + '/r' + r.rule_index).replace(/'/g, "\\'");
+        var reviewBtn;
+        if (r.task_type === 'line_width_type' && r.rule_index === 2) {
+            reviewBtn = '<button class="ll-view-btn" onclick="loadSampleReview('
+                + r.assignment_id + ',\'' + rTitle + '\')">Review Samples</button>';
+        } else {
+            reviewBtn = '<button class="ll-view-btn" onclick="loadWorkDetail('
+                + r.assignment_id + ',\'' + rTitle + '\')">Review</button>';
+        }
+        var deadlineCell = '<td style="font-size:11px;">'
+            + '<span class="dl-display" id="dl-show-' + r.assignment_id + '">' + r.deadline + '</span> '
+            + '<button onclick="editDeadline(' + r.assignment_id + ',\'' + (r.deadline_iso || '') + '\')" '
+            + 'style="font-size:10px;padding:1px 5px;background:#8a9c9c;color:#fff;border:none;border-radius:3px;cursor:pointer;">edit</button>'
+            + '<span id="dl-edit-' + r.assignment_id + '" style="display:none;">'
+            + '<input type="date" id="dl-input-' + r.assignment_id + '" value="' + (r.deadline_iso || '') + '" style="font-size:11px;padding:2px 4px;">'
+            + ' <button onclick="saveDeadline(' + r.assignment_id + ')" style="font-size:10px;padding:1px 5px;background:#409393;color:#fff;border:none;border-radius:3px;cursor:pointer;">save</button>'
+            + ' <button onclick="cancelDeadline(' + r.assignment_id + ')" style="font-size:10px;padding:1px 5px;background:#bd4444;color:#fff;border:none;border-radius:3px;cursor:pointer;">cancel</button>'
+            + '</span></td>';
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + (r.feature || r.task_type + '/r' + r.rule_index) + '</td>'
+            + '<td>' + r.batch_id + '/' + r.sub_batch + '</td>'
+            + '<td>' + r.labels + '</td>'
+            + '<td>' + r.hours + '</td>'
+            + '<td>' + (r.throughput != null ? r.throughput + '/hr' : '\u2014') + '</td>'
+            + deadlineCell
+            + '<td>' + status + '</td>'
+            + '<td>' + reviewBtn + '</td>';
+        tb.appendChild(tr);
+    });
+}
+
+var _workDetailData = null;
+var _workDetailAssignmentId = null;
+
+function loadWorkDetail(assignmentId, title) {
+    _workDetailAssignmentId = assignmentId;
+    _workDetailData = null;
+    document.getElementById('workDetailTitle').textContent = title;
+    document.getElementById('workDetailGrid').innerHTML = '';
+    document.getElementById('workDetailStats').innerHTML = '';
+    document.getElementById('workDetailEmpty').style.display = 'none';
+    document.getElementById('workDetailFilter').value = 'all';
+    document.querySelector('#tab-work .pf-tbl').style.display = 'none';
+    document.getElementById('workEmpty').style.display = 'none';
+    document.getElementById('workDetailWrap').style.display = '';
+
+    fetch('/label_images/admin/labeler_labels/detail/?assignment_id=' + assignmentId)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        _workDetailData = d;
+        var labels = d.labels || [];
+        var answered = labels.filter(function(l) { return l.answer; });
+        document.getElementById('workDetailStats').innerHTML =
+            makeCard('Total Assets', labels.length)
+            + makeCard('Labeled', answered.length)
+            + makeCard('Yes', labels.filter(function(l) { return l.answer === 'yes'; }).length)
+            + makeCard('No', labels.filter(function(l) { return l.answer === 'no'; }).length);
+        renderWorkDetailGrid();
+    });
+}
+
+function renderWorkDetailGrid() {
+    if (!_workDetailData) return;
+    var filter = document.getElementById('workDetailFilter').value;
+    var labels = (_workDetailData.labels || []).filter(function(l) {
+        if (filter === 'yes') return l.answer === 'yes';
+        if (filter === 'no') return l.answer === 'no';
+        if (filter === 'unlabeled') return !l.answer;
+        return true;
+    });
+    var grid = document.getElementById('workDetailGrid');
+    grid.innerHTML = '';
+    document.getElementById('workDetailEmpty').style.display = labels.length ? 'none' : '';
+    labels.forEach(function(l) {
+        var answerHtml = l.answer
+            ? '<div class="ll-answer">' + l.answer + '</div>'
+            : '<div class="ll-answer ll-none">\u2014</div>';
+        var overrideHtml = makeOverrideHtml(_workDetailAssignmentId, l.asset_id, l.answer, 'work');
+        var card = document.createElement('div');
+        card.className = 'll-card';
+        card.id = 'll-card-work-' + l.asset_id;
+        card.innerHTML = '<img src="' + (l.image_link || '') + '" loading="lazy" onerror="this.style.display=\'none\'">'
+            + '<div class="ll-card-body"><div class="ll-card-id">' + l.asset_id + '</div>'
+            + answerHtml + overrideHtml + '</div>';
+        grid.appendChild(card);
+    });
+}
+
+function closeWorkDetail() {
+    document.getElementById('workDetailWrap').style.display = 'none';
+    document.querySelector('#tab-work .pf-tbl').style.display = '';
+}
+
+function loadSampleReview(assignmentId, title) {
+    document.getElementById('lwsTitle').textContent = title + ' — Sample Review';
+    document.getElementById('lwsGrid').innerHTML = '';
+    document.getElementById('lwsStats').innerHTML = '';
+    document.getElementById('lwsEmpty').style.display = 'none';
+    document.getElementById('lwsNote').style.display = 'none';
+    document.querySelector('#tab-work .pf-tbl').style.display = 'none';
+    document.getElementById('workEmpty').style.display = 'none';
+    document.getElementById('workDetailWrap').style.display = 'none';
+    document.getElementById('lwsWrap').style.display = '';
+
+    fetch('/label_images/admin/line_width_samples/?assignment_id=' + assignmentId)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        var assets = d.assets || [];
+        var totalSamples = assets.reduce(function(sum, a) { return sum + a.sample_count; }, 0);
+        document.getElementById('lwsStats').innerHTML =
+            makeCard('Assets Measured', assets.length)
+            + makeCard('Total Samples', totalSamples)
+            + makeCard('Batch', d.batch_id + '/' + d.sub_batch);
+
+        if (!assets.length) {
+            document.getElementById('lwsEmpty').style.display = '';
+            return;
+        }
+
+        var anyCoords = assets.some(function(a) {
+            return a.samples.some(function(s) { return s.x_coord != null && s.y_coord != null; });
+        });
+        if (!anyCoords) {
+            var note = document.getElementById('lwsNote');
+            note.style.display = '';
+            note.textContent = 'These samples were recorded before sample locations were saved, '
+                + 'so only the measured widths are shown (no markers).';
+        }
+
+        renderSampleReview(assets);
+    });
+}
+
+// Measure page caps display height at 560px. Version-2 rows stored display-space
+// coords; version-3 rows are already native pixels.
+var MLW_MAX_DISPLAY_H = 560;
+
+function lineWidthSampleNativeCoords(s) {
+    var x = s.x_coord, y = s.y_coord;
+    var iw = s.image_width, ih = s.image_height;
+    if (x == null || y == null || !iw || !ih) return null;
+
+    if (s.collection_version === 3) {
+        return { x: x, y: y };
+    }
+
+    if (s.scaled_width && s.scaled_height) {
+        return {
+            x: Math.round(x * iw / s.scaled_width),
+            y: Math.round(y * ih / s.scaled_height)
+        };
+    }
+
+    var displayH = Math.min(ih, MLW_MAX_DISPLAY_H);
+    var displayW = Math.min(iw, displayH * iw / ih);
+    var scaleX = iw / displayW;
+    var scaleY = ih / displayH;
+    var scale = Math.max(scaleX, scaleY);
+
+    if (scale <= 1.01 || x > displayW * 1.05 || y > displayH * 1.05) {
+        return { x: x, y: y };
+    }
+    return { x: Math.round(x * scale), y: Math.round(y * scale) };
+}
+
+function renderSampleReview(assets) {
+    var grid = document.getElementById('lwsGrid');
+    grid.className = 'lws-grid';
+    grid.innerHTML = '';
+
+    assets.forEach(function(a) {
+        var card = document.createElement('div');
+        card.className = 'lws-card';
+
+        var imgwrap = document.createElement('div');
+        imgwrap.className = 'lws-imgwrap';
+        var img = document.createElement('img');
+        img.src = a.image_link || '';
+        img.loading = 'lazy';
+        img.onerror = function() { this.style.display = 'none'; };
+        imgwrap.appendChild(img);
+
+        function placeSampleMarkers() {
+            a.samples.forEach(function(s) {
+                var coords = lineWidthSampleNativeCoords(s);
+                if (!coords) return;
+                var leftPct = (coords.x / s.image_width) * 100;
+                var topPct = (coords.y / s.image_height) * 100;
+
+                var dot = document.createElement('div');
+                dot.className = 'lws-dot';
+                dot.style.left = leftPct + '%';
+                dot.style.top = topPct + '%';
+                dot.title = 'Sample #' + s.sample_index + ': ' + s.width + 'px';
+                imgwrap.appendChild(dot);
+
+                var lbl = document.createElement('div');
+                lbl.className = 'lws-dot-lbl';
+                lbl.style.left = leftPct + '%';
+                lbl.style.top = 'calc(' + topPct + '% - 12px)';
+                lbl.textContent = s.width;
+                imgwrap.appendChild(lbl);
+            });
+        }
+
+        if (img.complete && img.naturalWidth) {
+            placeSampleMarkers();
+        } else {
+            img.onload = placeSampleMarkers;
+        }
+        card.appendChild(imgwrap);
+
+        var widthChips = a.samples.map(function(s) {
+            return '<span class="lws-chip">#' + s.sample_index + ': ' + s.width + 'px</span>';
+        }).join('');
+
+        var meta = document.createElement('div');
+        meta.className = 'lws-meta';
+        meta.innerHTML = '<div class="lws-id">Asset ' + a.asset_id + '</div>'
+            + '<div><strong>' + a.sample_count + '</strong> samples'
+            + (a.avg_width != null ? ' &middot; avg <strong>' + a.avg_width + 'px</strong>' : '') + '</div>'
+            + '<div class="lws-widths">' + widthChips + '</div>';
+        card.appendChild(meta);
+
+        grid.appendChild(card);
+    });
+}
+
+function closeSampleReview() {
+    document.getElementById('lwsWrap').style.display = 'none';
+    document.querySelector('#tab-work .pf-tbl').style.display = '';
+}
+
+function editDeadline(id, iso) {
+    document.getElementById('dl-show-' + id).parentElement.querySelector('button').style.display = 'none';
+    document.getElementById('dl-show-' + id).style.display = 'none';
+    document.getElementById('dl-edit-' + id).style.display = '';
+}
+function cancelDeadline(id) {
+    document.getElementById('dl-show-' + id).style.display = '';
+    document.getElementById('dl-show-' + id).parentElement.querySelector('button').style.display = '';
+    document.getElementById('dl-edit-' + id).style.display = 'none';
+}
+function saveDeadline(id) {
+    var val = document.getElementById('dl-input-' + id).value;
+    if (!val) return;
+    fetch('/label_images/admin/update_deadline/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+        body: JSON.stringify({assignment_id: id, deadline: val})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.status === 'ok') {
+            document.getElementById('dl-show-' + id).textContent = d.deadline;
+            cancelDeadline(id);
+        } else {
+            alert(d.error || 'Error saving deadline');
+        }
+    });
+}
+
+function makeOverrideHtml(assignmentId, assetId, currentAnswer, prefix) {
+    var opts = ['yes','no',''].map(function(v) {
+        var label = v === '' ? 'clear' : v;
+        var sel = (v === (currentAnswer || '')) ? ' selected' : '';
+        return '<option value="' + v + '"' + sel + '>' + label + '</option>';
+    }).join('');
+    return '<div style="margin-top:4px;">'
+        + '<select onchange="overrideLabel(this,' + assignmentId + ',' + assetId + ',\'' + prefix + '\')" '
+        + 'style="font-size:10px;padding:1px 3px;border-radius:3px;border:1px solid #aaa;background:#f4f8f8;width:100%;">'
+        + opts + '</select></div>';
+}
+
+function overrideLabel(sel, assignmentId, assetId, prefix) {
+    var answer = sel.value;
+    fetch('/label_images/admin/override_label/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+        body: JSON.stringify({assignment_id: assignmentId, asset_id: assetId, answer: answer || null})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.status === 'ok') {
+            // Update in-memory data and re-render
+            var data = prefix === 'work' ? _workDetailData : _trainDetailData;
+            if (data) {
+                var lbl = (data.labels || []).find(function(l) { return l.asset_id == assetId; });
+                if (lbl) lbl.answer = answer || null;
+            }
+            var card = document.getElementById('ll-card-' + prefix + '-' + assetId);
+            if (card) {
+                var ansDiv = card.querySelector('.ll-answer');
+                if (ansDiv) {
+                    ansDiv.className = 'll-answer' + (answer ? '' : ' ll-none');
+                    ansDiv.textContent = answer || '\u2014';
+                }
+            }
+        } else {
+            alert(d.error || 'Override failed');
+            sel.value = sel.dataset.prev || '';
+        }
+    });
+    sel.dataset.prev = sel.value;
+}
+</script>
+{% endblock %}

@@ -28,6 +28,26 @@ if (window.location.pathname === '/label_images/view_batch_labels/') {
             }
         })
 
+        const task_type_select = document.getElementById('task_type_select');
+        if (task_type_select) {
+            task_type_select.addEventListener('change', function () {
+                const selected = this.options[this.selectedIndex];
+                const url = new URL(window.location.href);
+                url.searchParams.set('task_type', selected.value);
+                url.searchParams.set('rule_index', selected.getAttribute('data-rule-index'));
+                window.location.href = url.toString();
+            });
+        }
+
+        const sort_by_select = document.getElementById('sort_by_select');
+        if (sort_by_select) {
+            sort_by_select.addEventListener('change', function () {
+                const url = new URL(window.location.href);
+                url.searchParams.set('sort_by', this.value);
+                window.location.href = url.toString();
+            });
+        }
+
     });
 
 }
@@ -60,4 +80,47 @@ function toggle_slider_control(slider_control){
     api_collect_modified_prompt(data)
     
 
+}
+
+// --- Similar labeled examples (embedding search) ---
+function showSimilarExamples(assetId, taskType, ruleIndex, targetLabel) {
+    var modal = document.getElementById('similar_examples_modal');
+    var content = document.getElementById('similar_examples_content');
+    var title = document.getElementById('similar_examples_title');
+
+    title.textContent = 'Similar images labeled "' + targetLabel + '"';
+    content.innerHTML = '<p style="color:#a0b8b8;">Loading...</p>';
+    modal.style.display = 'flex';
+
+    var url = window.LABELING_API_BASE_URL + '/get_similar_labeled_examples/?asset_id=' + assetId +
+              '&task_type=' + taskType + '&rule_index=' + ruleIndex + '&target_label=' + targetLabel;
+
+    fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'unavailable') {
+                content.innerHTML = '<p style="color:#e0a0a0;">Embedding search unavailable (models not loaded).</p>';
+                return;
+            }
+            if (data.status !== 'ok' || !data.results || data.results.length === 0) {
+                content.innerHTML = '<p style="color:#a0b8b8;">No similar examples found.</p>';
+                return;
+            }
+            var html = '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px;">';
+            data.results.forEach(function(item) {
+                html += '<div style="text-align:center;">';
+                html += '<img src="' + item.image_link + '" style="width:100%; border-radius:6px; border:1px solid #4a5a5a;">';
+                html += '<p style="font-size:11px; color:#8a9a9a; margin:4px 0 0;">Score: ' + item.score.toFixed(3) + '</p>';
+                html += '</div>';
+            });
+            html += '</div>';
+            content.innerHTML = html;
+        })
+        .catch(function() {
+            content.innerHTML = '<p style="color:#e0a0a0;">Error loading similar examples.</p>';
+        });
+}
+
+function closeSimilarModal() {
+    document.getElementById('similar_examples_modal').style.display = 'none';
 }

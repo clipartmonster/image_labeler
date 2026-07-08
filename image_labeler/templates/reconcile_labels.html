@@ -1,27 +1,18 @@
 {% load static %}
 
-</div>
-
 <div class = 'listing light container rules'>
     
     <div style = 'display:flex; flex-direction:column; align-items:center'>
 
-        <h1 class = "label_option example">Reconcile Labels</h1>
+        <h1 class = "label_option example" style='font-size:1.4em;'>{% for rule in labelling_rules %}{% if rule.rule_index != 0 %}{{ rule.title }}{% endif %}{% endfor %}</h1>
+        <span style='font-size:0.9em; color:#888;'>({{ task_type }}, {{ rule_index }})</span>
 
     </div>
 
     <div class = 'design dark container'>
         <h1 class = 'label_option intro'>
-            <!-- <p>In this HITT, you will answer a series of yes no questions for a number of images. </p>
-            <p></p>Please review the information below to understand the criteria needed to determine if an image should receive a yes or no for each question. These sections include numerous examples to make it easier for you to determine the right response for each question. Make sure to click on them to see the reason why they receive a yes or a no.</p> 
-            <p></p>Underneath the information you will see several images with each one accompanied by five questions. For many of the images you will not have to answer all questions the questions. In this HITT you will only to use the ‘1’ and ‘2’ keys on the keyboard. </p>
-             -->
             
-            <p>In this HIT, you will classify a set of images.</p>          
-            <p>You will be using the 1 and 2 key on your keyboard to classify the image.</p> 
-            <p>Criteria for classifying these images can be found below.</p> 
-            <p style = 'color:brown'>Rejecting a HIT: In the set of images you will classify, several will have a known correct answer. Incorrectly classifying these images will result in your HIT being REJECTED even if you answer the other ones correctly.</p> 
-            <p>If you pay attention to the examples you will EASILY identify the images that have a known correct answer.</p>
+            <p>Criteria for classifying these images can be found to the left. Click the button that says rules.</p>
 
         </h1>
     </div>
@@ -35,26 +26,10 @@
                         {% if rule.rule_index != 0 %}
 
                             <div class = 'label_option rule_container'>
-                                
-                                <div style = 'display:grid; grid-template-columns: 25px 1fr;' >
-                                    <h1 class = 'label_option example'>{{rule.rule_index}}</h1>
-                                    <div >
-                                        <h1 class = 'label_option example'>{{rule.title}}</h1>
-                                        <h1 class = 'label_option rule'>{{rule.description}}</h1>
-  
-                                        <ul>
-                                            {% for directive in rule.directives %}
-                                                <li><h1 class = 'label_option rule'>{{directive}}</h1></li>
-                                            {% endfor %}
-                                        </ul>
-    
-                                    </div>
-                                </div>
 
                                 <div style = 'display:flex; gap:10px; flex-wrap:wrap; '>
                                     
                                     <div class='label_option thumbnail container correct'>
-                                        <h2 class = "label_option label">yes</h2>
 
                                         <div class = 'label_option thumbnail panel' >
 
@@ -74,7 +49,6 @@
                                 
 
                                     <div class='label_option thumbnail container incorrect'>
-                                        <h2 class = "label_option label">no</h2>
                                         
                                         <div class = 'label_option thumbnail panel' >
                                             {% for example in rule.examples %}
@@ -126,14 +100,17 @@
             >
         </div>
 
-        <div class = 'design dark container' >
-
-            <img id = "image_{{asset.asset_id}}" class="design" data-src="{{ asset.image_link }}" src="{% static 'images/empty_icon.png' %}" crossOrigin="anonymous" >
+        <div class = 'design dark container' style="position:relative;">
+            <h1 class = 'label_option rule'>{{ asset.asset_id }}</h1>
+            <img id = "image_{{asset.asset_id}}" class="design" src="{{ asset.image_link }}" alt="Asset {{ asset.asset_id }}">
         
         </div>
         
     <div class = 'listing_info container'>
-              
+
+                <!-- Labeler votes panel -->
+                <div class="rc-votes-panel" data-asset-id="{{ asset.asset_id }}"></div>
+
                 <div class = 'label_option prompt container open' >
 
                     {% for rule in labelling_rules %}
@@ -144,14 +121,14 @@
                             <img id = yes_icon class = 'key icon' src="{% static 'images/yes_icon.png'%}">
                             <div class="switch3-container">
                                 <div class="switch3">
-                                <input type="radio" id="switch3-radio1"  prompt_response = 'yes' class = 'radio_button' data-hotkey="1" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
-                                <label for="switch3-radio1"></label>
+                                <input type="radio" id="switch3-radio1-{{ asset.asset_id }}"  prompt_response = 'yes' class = 'radio_button' data-hotkey="1" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
+                                <label for="switch3-radio1-{{ asset.asset_id }}"></label>
                         
-                                <input type="radio" id="switch3-radio2"  prompt_response = 'none' class = 'radio_button' data-hotkey="3" name="radio_{{forloop.counter}}_{{asset.asset_id}}" checked/>
-                                <label for="switch3-radio2"></label>
+                                <input type="radio" id="switch3-radio2-{{ asset.asset_id }}"  prompt_response = 'none' class = 'radio_button' data-hotkey="3" name="radio_{{forloop.counter}}_{{asset.asset_id}}" checked/>
+                                <label for="switch3-radio2-{{ asset.asset_id }}"></label>
                         
-                                <input type="radio" id="switch3-radio3"  prompt_response = 'no' class = 'radio_button' data-hotkey="2" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
-                                <label for="switch3-radio3"></label>          
+                                <input type="radio" id="switch3-radio3-{{ asset.asset_id }}"  prompt_response = 'no' class = 'radio_button' data-hotkey="2" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
+                                <label for="switch3-radio3-{{ asset.asset_id }}"></label>          
                                 </div>
                             </div>
                             <img id = no_icon class = 'key icon' src="{% static 'images/no_icon.png'%}">
@@ -172,10 +149,36 @@
                     <h1 class = 'listing_info label'>Clear Responses</h1>
                 </div>
 
-          
+                <div class = 'label_option reset button' onclick = 'flag_asset_issue(event)'>
+                    <img src="{% static 'images/lg_flag_icon.png'%}">
+                    <h1 class = 'listing_info label'>Flag Asset Issue</h1>
+                </div>
 
 
         </div>
 
     </div>
-{% endfor %} 
+{% endfor %}
+
+<script>
+(function() {
+    var votesByAsset = {% if votes_by_asset_json %}{{ votes_by_asset_json|safe }}{% else %}{}{% endif %};
+    document.querySelectorAll('.rc-votes-panel').forEach(function(panel) {
+        var aid = panel.getAttribute('data-asset-id');
+        var votes = votesByAsset[aid] || [];
+        if (!votes.length) return;
+        var html = '<div style="margin-bottom:10px; padding:8px 12px; background:#f0f4f4; border-radius:6px; font-family:Roboto,sans-serif; font-size:13px;">'
+            + '<div style="font-weight:700; color:#3a4a4a; margin-bottom:6px; font-size:11px; text-transform:uppercase; letter-spacing:.5px;">Labeler Responses</div>';
+        votes.forEach(function(v) {
+            var color = v.response === 'yes' ? '#2a7a2a' : v.response === 'no' ? '#b03030' : '#888';
+            var bg = v.response === 'yes' ? 'rgba(42,122,42,.1)' : v.response === 'no' ? 'rgba(176,48,48,.1)' : '#f8f8f8';
+            html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0;">'
+                + '<span style="color:#5a6a6a;">' + v.labeler + '</span>'
+                + '<span style="font-weight:700; color:' + color + '; background:' + bg + '; padding:1px 8px; border-radius:3px;">' + v.response + '</span>'
+                + '</div>';
+        });
+        html += '</div>';
+        panel.innerHTML = html;
+    });
+})();
+</script> 

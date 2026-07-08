@@ -26,10 +26,54 @@ urlpatterns = [
     path('label_testing/', views.label_testing, name = 'label_testing'),
     path('select_primary_colors/', views.select_primary_colors, name = 'select_primary_colors'),
     path('select_line_widths/', views.select_line_widths, name = 'select_line_widths'),
+    path('measure_line_widths/', views.measure_line_widths, name='measure_line_widths'),
     path('correct_mismatch_labels/', views.correct_mismatch_labels, name = 'correct_mismatch_labels'),
 
     path('manage_rules/', views.manage_rules, name = 'manage_rules'),
+    path('assign_batch/', views.assign_batch, name = 'assign_batch'),
+    path('change_password/', views.change_password, name = 'change_password'),
 
+    # Labeler workforce views
+    path('earnings/', views.labeler_earnings, name='labeler_earnings'),
+    path('errors/', views.labeler_errors, name='labeler_errors'),
 
+    # Admin workforce views
+    path('admin/labelers/', views.admin_labeler_list, name='admin_labeler_list'),
+    path('admin/labelers/toggle_staff/', views.admin_toggle_staff, name='admin_toggle_staff'),
+    path('admin/labelers/create/', views.admin_create_labeler, name='admin_create_labeler'),
+    path('admin/bulk_assign/', views.admin_bulk_assign, name='admin_bulk_assign'),
+    path('admin/bulk_assign/save/', views.admin_bulk_assign_save, name='admin_bulk_assign_save'),
+    path('admin/bulk_assign/remove/', views.admin_remove_assignments, name='admin_remove_assignments'),
+    path('admin/performance/', views.admin_performance, name='admin_performance'),
+    path('admin/performance/data/', views.admin_performance_data, name='admin_performance_data'),
+    path('admin/labeler_labels/detail/', views.admin_labeler_labels_detail, name='admin_labeler_labels_detail'),
+    path('admin/line_width_samples/', views.admin_line_width_samples, name='admin_line_width_samples'),
+    path('admin/label_comparison/', views.admin_label_comparison, name='admin_label_comparison'),
+    path('admin/label_comparison/data/', views.admin_label_comparison_data, name='admin_label_comparison_data'),
+    path('admin/label_comparison/override/', views.admin_comparison_override, name='admin_comparison_override'),
+    path('admin/payments/', views.admin_payments, name='admin_payments'),
+    path('admin/payments/data/', views.admin_payments_data, name='admin_payments_data'),
+    path('admin/payments/toggle/', views.admin_payments_toggle, name='admin_payments_toggle'),
+    path('admin/update_deadline/', views.admin_update_deadline, name='admin_update_deadline'),
+    path('admin/override_label/', views.admin_override_label, name='admin_override_label'),
+    path('admin/import_gold/', views.admin_import_gold, name='admin_import_gold'),
+    path('admin/subbatch_completion/', views.admin_subbatch_completion, name='admin_subbatch_completion'),
+
+    # Rule guide
+    path('rules/', views.rule_guide, name='rule_guide'),
+    path('rules/api/', views.rule_guide_api, name='rule_guide_api'),
+
+    # Training management (admin)
+    path('admin/training/', views.admin_manage_training, name='admin_manage_training'),
+    path('admin/training/create/', views.admin_training_create, name='admin_training_create'),
+    path('admin/training/remove/', views.admin_training_remove, name='admin_training_remove'),
+    path('admin/training/assets/', views.admin_training_assets, name='admin_training_assets'),
+    path('admin/training/remove_asset/', views.admin_training_remove_asset, name='admin_training_remove_asset'),
+
+    # Training completion
+    path('complete_training/', views.complete_training, name='complete_training'),
+
+    # Image proxy (CORS bypass for measurement tool)
+    path('image_proxy/', views.image_proxy, name='image_proxy'),
 ]
 

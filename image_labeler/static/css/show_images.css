@@ -52,7 +52,10 @@ div.listing.container {
     height:auto;    
     padding:10px;
     margin:20px;
-    width:100%
+    width:100%;
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 div.listing_info.container{
@@ -453,10 +456,10 @@ img.label_option.thumbnail {
 
 img.label_option.thumbnail.expanded {
     width:400px;
+    max-width: 90vw;
     height:auto;
     border-radius: 10px;
     border:1px solid #3c5050;
- 
 }
 
 button.label_option.button {
@@ -500,7 +503,9 @@ div.label_option.thumbnail.container {
     flex-direction:column;
     padding:4px;
     border:2px solid #d3e3df;
-
+    max-width: 48%;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 div.label_option.thumbnail.container.correct {
@@ -528,7 +533,8 @@ div.label_options.container.horizontal{
     display:flex;
     flex-wrap:wrap;
     gap:15px;
-
+    max-width: 100%;
+    overflow: hidden;
 }
 
 
@@ -596,6 +602,9 @@ div.label_option.rule_container{
     padding:5px;
     margin:5px;
     border-radius: 15px;
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 img.label_option.example{    

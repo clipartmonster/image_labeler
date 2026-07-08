@@ -194,7 +194,7 @@ function api_update_search_term_status(searchTermId) {
         return Promise.reject('API_ACCESS_KEY not available');
     }
 
-    const apiUrl = 'https://backend-python-nupj.onrender.com/update_search_term_status/';
+    const apiUrl = labelApi('update_search_term_status/');
     
     const requestData = {
         id: searchTermId.toString(),
@@ -760,7 +760,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Function to submit a single listing
             function submitListing(listing, index) {
-                const apiUrl = 'https://backend-python-nupj.onrender.com/update_search_result_response/';
+                const apiUrl = labelApi('update_search_result_response/');
                 
                 const requestData = {
                     id: currentSearchTermId.toString(),

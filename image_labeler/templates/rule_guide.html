@@ -1,0 +1,467 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+<style>
+.rg-page {
+    max-width: 880px;
+    margin: 20px auto;
+    padding: 28px 32px;
+    background: #dbe3e3;
+    border-radius: 10px;
+    font-family: 'Roboto', sans-serif;
+}
+.rg-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+.rg-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1a2a2a;
+}
+.rg-back {
+    padding: 8px 18px;
+    background: #799494;
+    color: #fff;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+}
+.rg-back:hover { background: #6a8585; }
+
+/* Category tabs */
+.rg-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 28px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #b8c8c8;
+}
+.rg-tab {
+    padding: 10px 22px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 600;
+    transition: background 0.15s;
+}
+.rg-tab--active {
+    background: #799494;
+    color: #fff;
+}
+.rg-tab--inactive {
+    background: #c8d4d4;
+    color: #3a5050;
+    border: 1px solid #aabcbc;
+}
+.rg-tab--inactive:hover { background: #b0c0c0; color: #1a2a2a; }
+
+/* Rule card */
+.rg-card {
+    background: #fff;
+    border: 1px solid #c0cccc;
+    border-radius: 10px;
+    padding: 24px 28px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.rg-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+.rg-card h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #1a2a2a;
+}
+.rg-card .rg-tag {
+    font-size: 13px;
+    color: #607878;
+    font-weight: 400;
+    margin-left: 10px;
+}
+.rg-description {
+    font-size: 15px;
+    color: #2a3a3a;
+    line-height: 1.7;
+    margin: 0 0 18px;
+    padding: 14px 18px;
+    background: #eef4f4;
+    border-radius: 8px;
+    border-left: 4px solid #799494;
+}
+
+/* Directives list */
+.rg-directives {
+    padding-left: 24px;
+    margin: 0;
+}
+.rg-directives li {
+    font-size: 15px;
+    color: #2a3a3a;
+    line-height: 1.8;
+    margin-bottom: 4px;
+    padding: 6px 0;
+    border-bottom: 1px solid #e8eeee;
+}
+.rg-directives li:last-child { border-bottom: none; }
+
+/* Reference images */
+.rg-img-wrap {
+    display: inline-block;
+    margin: 6px 10px 6px 0;
+    text-align: center;
+    vertical-align: top;
+}
+.rg-img-wrap img {
+    max-width: 160px;
+    max-height: 120px;
+    border-radius: 6px;
+    display: block;
+}
+.rg-img-caption {
+    font-size: 12px;
+    color: #607878;
+    margin-top: 4px;
+}
+.rg-border-yes { border: 3px solid #4a9a4a; }
+.rg-border-no { border: 3px solid #c05050; }
+.rg-border-neutral { border: 2px solid #b0bcbc; }
+
+/* Admin buttons */
+.rg-btn-sm {
+    background: #eef4f4;
+    border: 1px solid #b0bcbc;
+    color: #3a5050;
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: 'Roboto', sans-serif;
+}
+.rg-btn-sm:hover { background: #d8e2e2; color: #1a2a2a; }
+.rg-btn-danger { border-color: #d08080; color: #c04040; background: #fff0f0; }
+.rg-btn-danger:hover { background: #ffe0e0; }
+.rg-btn-save {
+    background: #799494;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 18px;
+    cursor: pointer;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+}
+.rg-btn-add {
+    background: #799494;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 18px;
+    cursor: pointer;
+    font-family: 'Roboto', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+}
+.rg-edit-form {
+    display: none;
+    margin: 10px 0;
+    padding: 14px;
+    background: #f0f6f6;
+    border-radius: 6px;
+    border: 1px solid #d0dada;
+}
+.rg-edit-label {
+    display: block;
+    font-size: 12px;
+    color: #506060;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+.rg-edit-input {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #b0bcbc;
+    background: #fff;
+    color: #1a2a2a;
+    font-size: 14px;
+    font-family: 'Roboto', sans-serif;
+    box-sizing: border-box;
+    margin-bottom: 8px;
+}
+.rg-edit-input:focus {
+    outline: none;
+    border-color: #799494;
+    box-shadow: 0 0 0 2px rgba(121,148,148,0.2);
+}
+.rg-inline-edit { color: #607878; cursor: pointer; font-size: 12px; margin-left: 6px; background: none; border: none; }
+.rg-inline-edit:hover { color: #3a5050; }
+.rg-inline-del { color: #c04040; cursor: pointer; font-size: 12px; background: none; border: none; }
+.rg-inline-del:hover { color: #a02020; }
+</style>
+
+<div class="rg-page">
+
+    <div class="rg-header">
+        <h1>Labeling Rules Reference</h1>
+        <a href="/label_images/setup_session/" class="rg-back">Back to Dashboard</a>
+    </div>
+
+    <!-- Category tabs -->
+    <div class="rg-tabs">
+        {% for cat in categories %}
+        <a href="?category={{ cat|urlencode }}"
+           class="rg-tab {% if cat == selected_category %}rg-tab--active{% else %}rg-tab--inactive{% endif %}">
+            {{ cat }}
+        </a>
+        {% endfor %}
+    </div>
+
+    {% if user_is_admin %}
+    <!-- Admin: add new rule -->
+    <div style="margin-bottom:24px;">
+        <button onclick="toggleNewGuideForm()" class="rg-btn-add">+ Add New Rule</button>
+        <div id="newGuideForm" class="rg-edit-form">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                <div>
+                    <label class="rg-edit-label">Task Type</label>
+                    <input id="ng_task_type" type="text" placeholder="e.g. asset_type" class="rg-edit-input">
+                </div>
+                <div>
+                    <label class="rg-edit-label">Rule Index</label>
+                    <input id="ng_rule_index" type="number" min="1" class="rg-edit-input">
+                </div>
+            </div>
+            <div>
+                <label class="rg-edit-label">Title</label>
+                <input id="ng_title" type="text" class="rg-edit-input">
+            </div>
+            <div>
+                <label class="rg-edit-label">Category</label>
+                <input id="ng_category" type="text" value="{{ selected_category }}" class="rg-edit-input">
+            </div>
+            <div>
+                <label class="rg-edit-label">Description</label>
+                <textarea id="ng_description" rows="3" class="rg-edit-input" style="resize:vertical;"></textarea>
+            </div>
+            <button onclick="createGuide()" class="rg-btn-save" style="margin-top:4px;">Save Rule</button>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Rules list -->
+    {% for guide in guides %}
+    <div class="rg-card" id="guide_{{ guide.id }}">
+        <div class="rg-card-header">
+            <h2>
+                {{ guide.title }}
+                <span class="rg-tag">({{ guide.task_type }}, rule {{ guide.rule_index }})</span>
+            </h2>
+            {% if user_is_admin %}
+            <div style="display:flex; gap:6px; flex-shrink:0;">
+                <button onclick="toggleEditGuide({{ guide.id }})" class="rg-btn-sm">Edit</button>
+                <button onclick="deleteGuide({{ guide.id }})" class="rg-btn-sm rg-btn-danger">Delete</button>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if user_is_admin %}
+        <div id="editGuide_{{ guide.id }}" class="rg-edit-form">
+            <label class="rg-edit-label">Title</label>
+            <input id="eg_title_{{ guide.id }}" type="text" value="{{ guide.title }}" class="rg-edit-input">
+            <label class="rg-edit-label">Category</label>
+            <input id="eg_category_{{ guide.id }}" type="text" value="{{ guide.category }}" class="rg-edit-input">
+            <label class="rg-edit-label">Description</label>
+            <textarea id="eg_description_{{ guide.id }}" rows="3" class="rg-edit-input" style="resize:vertical;">{{ guide.description }}</textarea>
+            <button onclick="saveGuide({{ guide.id }})" class="rg-btn-save">Save</button>
+        </div>
+        {% endif %}
+
+        <div class="rg-description">{{ guide.description }}</div>
+
+        <!-- Reference images at guide level -->
+        {% for img in guide.reference_images.all %}
+            {% if not img.directive %}
+            <div class="rg-img-wrap">
+                <img src="{{ img.image_url }}" class="{% if img.label == 'yes' %}rg-border-yes{% elif img.label == 'no' %}rg-border-no{% else %}rg-border-neutral{% endif %}">
+                {% if img.caption %}<div class="rg-img-caption">{{ img.caption }}</div>{% endif %}
+                {% if user_is_admin %}
+                <button onclick="deleteImage({{ img.id }}, {{ guide.id }})" class="rg-inline-del">remove</button>
+                {% endif %}
+            </div>
+            {% endif %}
+        {% endfor %}
+
+        <!-- Directives -->
+        <ol class="rg-directives">
+            {% for d in guide.directives.all %}
+            <li id="directive_{{ d.id }}">
+                {% if user_is_admin %}
+                <span id="dt_{{ d.id }}">{{ d.text }}</span>
+                <button onclick="toggleEditDirective({{ d.id }})" class="rg-inline-edit">edit</button>
+                <button onclick="deleteDirective({{ d.id }}, {{ guide.id }})" class="rg-inline-del">x</button>
+                <div id="editDir_{{ d.id }}" class="rg-edit-form">
+                    <textarea id="edText_{{ d.id }}" rows="2" class="rg-edit-input" style="resize:vertical;">{{ d.text }}</textarea>
+                    <button onclick="saveDirective({{ d.id }})" class="rg-btn-save">Save</button>
+                </div>
+                {% else %}
+                {{ d.text }}
+                {% endif %}
+
+                {% for img in d.reference_images.all %}
+                <div class="rg-img-wrap">
+                    <img src="{{ img.image_url }}" class="{% if img.label == 'yes' %}rg-border-yes{% elif img.label == 'no' %}rg-border-no{% else %}rg-border-neutral{% endif %}">
+                    {% if img.caption %}<div class="rg-img-caption">{{ img.caption }}</div>{% endif %}
+                    {% if user_is_admin %}
+                    <button onclick="deleteImage({{ img.id }}, {{ guide.id }})" class="rg-inline-del">remove</button>
+                    {% endif %}
+                </div>
+                {% endfor %}
+
+                {% if user_is_admin %}
+                <button onclick="toggleAddImage({{ guide.id }}, {{ d.id }})" class="rg-inline-edit">+ image</button>
+                <div id="addImg_{{ guide.id }}_{{ d.id }}" class="rg-edit-form" style="display:none;">
+                    <input id="imgUrl_{{ guide.id }}_{{ d.id }}" type="text" placeholder="Image URL" class="rg-edit-input" style="width:70%;">
+                    <input id="imgCap_{{ guide.id }}_{{ d.id }}" type="text" placeholder="Caption (optional)" class="rg-edit-input" style="width:50%;">
+                    <select id="imgLbl_{{ guide.id }}_{{ d.id }}" class="rg-edit-input" style="width:auto;">
+                        <option value="">--</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                    </select>
+                    <button onclick="saveImage({{ guide.id }}, {{ d.id }})" class="rg-btn-save">Add</button>
+                </div>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ol>
+
+        {% if user_is_admin %}
+        <div style="margin-top:14px; display:flex; gap:10px;">
+            <button onclick="toggleAddDirective({{ guide.id }})" class="rg-btn-sm">+ Add Directive</button>
+            <button onclick="toggleAddImage({{ guide.id }}, 0)" class="rg-btn-sm">+ Add Reference Image</button>
+        </div>
+        <div id="addDir_{{ guide.id }}" class="rg-edit-form">
+            <textarea id="newDirText_{{ guide.id }}" rows="2" class="rg-edit-input" style="resize:vertical;" placeholder="New directive text"></textarea>
+            <button onclick="addDirective({{ guide.id }})" class="rg-btn-save">Save</button>
+        </div>
+        <div id="addImg_{{ guide.id }}_0" class="rg-edit-form">
+            <input id="imgUrl_{{ guide.id }}_0" type="text" placeholder="Image URL" class="rg-edit-input" style="width:70%;">
+            <input id="imgCap_{{ guide.id }}_0" type="text" placeholder="Caption (optional)" class="rg-edit-input" style="width:50%;">
+            <select id="imgLbl_{{ guide.id }}_0" class="rg-edit-input" style="width:auto;">
+                <option value="">--</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+            </select>
+            <button onclick="saveImage({{ guide.id }}, 0)" class="rg-btn-save">Add</button>
+        </div>
+        {% endif %}
+    </div>
+    {% empty %}
+    <div class="rg-card" style="text-align:center; padding:40px;">
+        <p style="color:#90a8a8; font-size:16px; margin:0;">No rules found for this category.</p>
+    </div>
+    {% endfor %}
+</div>
+
+{% if user_is_admin %}
+<script>
+var csrfToken = '{{ csrf_token }}';
+var apiUrl = '/label_images/rules/api/';
+
+function toggleNewGuideForm() {
+    var f = document.getElementById('newGuideForm');
+    f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+function toggleEditGuide(id) {
+    var f = document.getElementById('editGuide_' + id);
+    f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+function toggleEditDirective(id) {
+    var f = document.getElementById('editDir_' + id);
+    f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+function toggleAddDirective(guideId) {
+    var f = document.getElementById('addDir_' + guideId);
+    f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+function toggleAddImage(guideId, directiveId) {
+    var f = document.getElementById('addImg_' + guideId + '_' + directiveId);
+    f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+function _post(data) {
+    var fd = new FormData();
+    fd.append('csrfmiddlewaretoken', csrfToken);
+    for (var k in data) fd.append(k, data[k]);
+    return fetch(apiUrl, { method: 'POST', body: fd }).then(function(r) { return r.json(); });
+}
+function createGuide() {
+    _post({
+        action: 'save_guide',
+        task_type: document.getElementById('ng_task_type').value,
+        rule_index: document.getElementById('ng_rule_index').value,
+        title: document.getElementById('ng_title').value,
+        category: document.getElementById('ng_category').value,
+        description: document.getElementById('ng_description').value
+    }).then(function() { location.reload(); });
+}
+function saveGuide(id) {
+    _post({
+        action: 'save_guide',
+        guide_id: id,
+        title: document.getElementById('eg_title_' + id).value,
+        category: document.getElementById('eg_category_' + id).value,
+        description: document.getElementById('eg_description_' + id).value
+    }).then(function() { location.reload(); });
+}
+function deleteGuide(id) {
+    if (!confirm('Delete this entire rule and all its directives?')) return;
+    _post({ action: 'delete_guide', guide_id: id }).then(function() { location.reload(); });
+}
+function saveDirective(id) {
+    _post({
+        action: 'save_directive',
+        directive_id: id,
+        text: document.getElementById('edText_' + id).value
+    }).then(function() { location.reload(); });
+}
+function deleteDirective(id, guideId) {
+    if (!confirm('Delete this directive?')) return;
+    _post({ action: 'delete_directive', directive_id: id }).then(function() { location.reload(); });
+}
+function addDirective(guideId) {
+    _post({
+        action: 'save_directive',
+        guide_id: guideId,
+        text: document.getElementById('newDirText_' + guideId).value
+    }).then(function() { location.reload(); });
+}
+function saveImage(guideId, directiveId) {
+    var data = {
+        action: 'save_image',
+        guide_id: guideId,
+        image_url: document.getElementById('imgUrl_' + guideId + '_' + directiveId).value,
+        caption: document.getElementById('imgCap_' + guideId + '_' + directiveId).value,
+        label: document.getElementById('imgLbl_' + guideId + '_' + directiveId).value
+    };
+    if (directiveId && directiveId !== 0) data.directive_id = directiveId;
+    _post(data).then(function() { location.reload(); });
+}
+function deleteImage(imgId, guideId) {
+    if (!confirm('Remove this image?')) return;
+    _post({ action: 'delete_image', image_id: imgId }).then(function() { location.reload(); });
+}
+</script>
+{% endif %}
+
+{% endblock %}

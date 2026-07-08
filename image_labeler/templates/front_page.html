@@ -2,74 +2,119 @@
 {% load static %}
 
 {% block content %}
+<style>
+.fp-page {
+    min-height: calc(100vh - 60px);
+    font-family: Roboto, sans-serif;
+    padding: 0 40px 60px;
+    display: flex; flex-direction: column; align-items: center;
+}
+.fp-banner {
+    width: 100%; max-width: 940px;
+    margin: 48px 0 16px;
+    text-align: center;
+    background: #dfe7e7; border-radius: 12px;
+    padding: 28px 32px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.fp-banner h1 {
+    font-size: 32px; font-weight: 700; color: #2e4444; margin: 0 0 6px;
+}
+.fp-banner p {
+    font-size: 14px; color: #4a6060; margin: 0;
+}
+.fp-container {
+    width: 100%; max-width: 940px;
+    background: #dfe7e7; border-radius: 12px;
+    padding: 28px 32px 32px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.fp-hero {
+    margin-bottom: 28px;
+}
+.fp-hero a {
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 4px;
+    padding: 24px 24px;
+    background: #3d5a5a; border-radius: 10px;
+    text-decoration: none; color: #fff;
+    font-size: 18px; font-weight: 600;
+    transition: background .15s;
+    box-shadow: 0 3px 10px rgba(0,0,0,.12);
+}
+.fp-hero a:hover { background: #4a6e6e; }
+.fp-hero a span {
+    font-size: 13px; font-weight: 400; color: #a8c4c4;
+}
 
-    
-<div style = 'display:flex; flex-direction: row;'>
+.fp-sections {
+    display: flex; flex-direction: column; gap: 24px;
+}
+.fp-section-hd {
+    font-size: 12px; font-weight: 700; color: #3a4a4a;
+    text-transform: uppercase; letter-spacing: .8px;
+    margin: 0 0 12px; padding: 0;
+}
+.fp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    gap: 10px;
+}
+.fp-card {
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px 12px;
+    background: #fff; border-radius: 8px;
+    text-decoration: none; color: #344646;
+    font-size: 13px; font-weight: 500; text-align: center;
+    transition: background .12s, box-shadow .12s, transform .12s;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+.fp-card:hover {
+    background: #f4f8f8; box-shadow: 0 3px 10px rgba(0,0,0,.1);
+    transform: translateY(-2px);
+}
+</style>
 
-    <div class = 'listing light container' style = 'display:flex; flex-wrap:wrap' >
-
-        <ul style="list-style-type: none; padding: 0;">
-            
-            <li style="margin-bottom: 5px;">
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/setup_session/">
-                    <h1 class = "label_option intro">Setup session</h1>
-                </a>
-            </li>
-            
-            <li style="margin-bottom: 5px;">
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_asset/">
-                    <h1 class = "label_option intro">View Asset</h1>
-                </a>
-            </li>
-            
-            <li style="margin-bottom: 5px;">
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_model_results/">
-                    <h1 class = "label_option intro">View Model Results</h1>
-                </a>
-            </li>
-            
-            <li>
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_batch_labels/">
-                    <h1 class = "label_option intro">View Batch Labels</h1>
-                </a>
-            </li>
-
-            <li>
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_prediction_labels/?task_type=asset_type&rule_index=3">
-                    <h1 class = "label_option intro">Prediction Labels</h1>
-                </a>
-            </li>
-
-            <li>
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_labels/">
-                    <h1 class = "label_option intro">View Labels [takes a while to load]</h1>
-                </a>
-            </li>
-
-            <li>
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_primary_colors/">
-                    <h1 class = "label_option intro">Primary Colors</h1>
-                </a>
-            </li>
-
-
-            <li>
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_line_widths/">
-                    <h1 class = "label_option intro">Line Width</h1>
-                </a>
-            </li>
-
-            <li>
-                <a href="{{ request.scheme }}://{{ request.get_host }}/label_images/view_rough_fill/">
-                    <h1 class = "label_option intro">Rough Fill</h1>
-                </a>
-            </li>
-
-
-        </ul>
-
+<div class="fp-page">
+    <div class="fp-banner">
+        <h1>Clipart Monster</h1>
+        <p>Internal labeling &amp; model dashboard</p>
     </div>
 
+    <div class="fp-container">
+        <div class="fp-hero">
+            <a href="/label_images/setup_session/">
+                Setup Session
+                <span>Start labeling or manage batches</span>
+            </a>
+        </div>
+
+        {% if user_is_admin %}
+        <div class="fp-sections">
+            <div class="fp-section">
+                <p class="fp-section-hd">Data &amp; Labels</p>
+                <div class="fp-grid">
+                    <a href="/label_images/view_model_results/" class="fp-card">Model Results</a>
+                    <a href="/label_images/view_batch_labels/" class="fp-card">Batch Labels</a>
+                    <a href="/label_images/view_prediction_labels/?task_type=asset_type&rule_index=3" class="fp-card">Prediction Labels</a>
+                    <a href="/label_images/view_labels/" class="fp-card">View Labels</a>
+                    <a href="/label_images/view_asset/" class="fp-card">View Asset</a>
+                </div>
+            </div>
+
+            <div class="fp-section">
+                <p class="fp-section-hd">Tools</p>
+                <div class="fp-grid">
+                    <a href="/label_images/view_primary_colors/" class="fp-card">Primary Colors</a>
+                    <a href="/label_images/view_line_widths/" class="fp-card">Line Width</a>
+                    <a href="/label_images/view_rough_fill/" class="fp-card">Rough Fill</a>
+                    <a href="/label_images/manage_rules/" class="fp-card">Manage Rules</a>
+                    <a href="/label_images/label_search_results/" class="fp-card">Search Results</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
 </div>
 
 {% endblock %}

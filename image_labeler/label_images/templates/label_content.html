@@ -3,6 +3,105 @@
 
     {% block content %}
 
+    <style>
+    .measure-btn {
+        position: absolute; bottom: 10px; right: 10px; z-index: 5;
+        padding: 6px 14px; font-size: 12px; font-weight: 600;
+        font-family: Roboto, sans-serif;
+        background: rgba(61,90,90,0.85); color: #d2e2e2;
+        border: 1px solid #6a8a8a; border-radius: 6px;
+        cursor: pointer; transition: background .15s, border-color .15s;
+    }
+    .measure-btn:hover { background: rgba(74,110,110,0.9); border-color: #8ab0b0; }
+    .measure-btn.active { background: #2a6a6a; border-color: #8fd0d0; color: #fff; }
+    </style>
+
+    <div class="labeling-layout">
+
+        <!-- Rules toggle button — outside sidebar so it's never clipped -->
+        <button class="rules-toggle-btn" id="sidebarToggleBtn" onclick="document.getElementById('rulesSidebar').classList.toggle('open'); this.classList.toggle('open');">
+            &#9776; Rules
+        </button>
+
+        <!-- Rules + Examples Sidebar -->
+        <div class="rules-sidebar" id="rulesSidebar">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <h2 style="margin:0; font-size:18px;">Rules &amp; Examples</h2>
+            </div>
+
+            {% for guide in rule_guides %}
+            <div style="margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid #3a4a4a;">
+                <h3 style="color:#e8f0f0; font-size:15px; margin:0 0 6px; font-weight:700;">
+                    Rule {{ guide.rule_index }}: {{ guide.title }}
+                </h3>
+                <div class="rule-prompt">{{ guide.description }}</div>
+
+                {% for d in guide.directives.all %}
+                <div style="margin-top:10px; padding:8px 10px; background:#1e3030; border-radius:6px;">
+                    <div style="color:#c0d8d8; font-size:13px; line-height:1.5;">{{ d.text }}</div>
+                    {% for img in d.reference_images.all %}
+                    <div style="display:inline-block; margin:6px 4px 0 0; vertical-align:top;">
+                        <img src="{{ img.image_url }}" class="sidebar-example-img" style="max-width:90px; max-height:68px; border-radius:4px; cursor:pointer; border:2px solid #3a6a6a;" onclick="openImageLightbox(this.src, '{{ img.caption|escapejs }}')">
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+
+                {% for img in guide.reference_images.all %}
+                    {% if not img.directive %}
+                    <div style="display:inline-block; margin:8px 4px 0 0; vertical-align:top;">
+                        <img src="{{ img.image_url }}" class="sidebar-example-img" style="max-width:90px; max-height:68px; border-radius:4px; cursor:pointer; border:2px solid #3a4a4a;" onclick="openImageLightbox(this.src, '{{ img.caption|escapejs }}')">
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+            {% endfor %}
+
+            {% if not rule_guides %}
+            {% for rule in labelling_rules %}
+                {% if rule.rule_index != 0 %}
+                <div style="margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid #3a4a4a;">
+                    <h3 style="color:#e8f0f0; font-size:15px; margin:0 0 6px; font-weight:700;">Rule {{ rule.rule_index }}: {{ rule.title }}</h3>
+                    <div class="rule-prompt">{{ rule.description }}</div>
+
+                    {% if rule.directives %}
+                    <ul style="margin:6px 0 0; padding-left:16px; color:#c0d8d8; font-size:13px; line-height:1.6;">
+                        {% for d in rule.directives %}
+                        <li style="margin-bottom:4px;">{{ d.directive }}</li>
+                        {% endfor %}
+                    </ul>
+
+                    {% for d in rule.directives %}
+                        {% if d.examples %}
+                        <div style="margin-top:8px;">
+                            {% if d.valence == 'correct' or d.valence == 'yes' %}
+                            <span style="font-size:11px; font-weight:600; color:#a0e0a0; background:rgba(100,200,100,0.1); padding:2px 6px; border-radius:3px;">YES</span>
+                            {% elif d.valence == 'incorrect' or d.valence == 'no' %}
+                            <span style="font-size:11px; font-weight:600; color:#e0a0a0; background:rgba(200,100,100,0.1); padding:2px 6px; border-radius:3px;">NO</span>
+                            {% endif %}
+                            <div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:4px;">
+                                {% for ex in d.examples %}
+                                <div style="display:inline-block; vertical-align:top;">
+                                    <img src="{{ ex.image_link }}" class="sidebar-example-img" style="max-width:90px; max-height:68px; border-radius:4px; cursor:pointer; border:2px solid {% if d.valence == 'correct' or d.valence == 'yes' %}#4a8a4a{% else %}#8a4a4a{% endif %};" onclick="openImageLightbox(this.src, '{{ ex.caption|escapejs }}')">
+                                    {% if ex.caption %}<div style="font-size:9px; color:#8a9a9a; margin-top:2px; max-width:90px;">{{ ex.caption }}</div>{% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                    {% endif %}
+
+                    <div id="dynamic_examples_{{ rule.rule_index }}"></div>
+                </div>
+                {% endif %}
+            {% endfor %}
+            {% endif %}
+        </div>
+
+        <!-- Main labeling content -->
+        <div class="labeling-main">
+
         <div id = 'mobile_keyboard' class = 'listing light container mobile_keyboard'>
 
             <div style = 'display:flex; gap: 35px;'>
@@ -18,7 +117,7 @@
         </div>
 
 
-        {% if task_type == 'art_type' and labeler_source == 'reconcile_label' %}
+        {% if labeler_source == 'reconcile_label' %}
               {% include 'reconcile_labels.html' %}
          {% else %}
             {% include 'label_art_type.html'%}
@@ -68,5 +167,111 @@
 
             
         {% endif %}
+
+        </div><!-- .labeling-main -->
+    </div><!-- .labeling-layout -->
+
+    {% if is_training %}
+    <script>
+    window._trainingAnswers = {{ training_answers_json|safe }};
+    window._trainingMeta = {
+        taskType: '{{ collection_data.task_type }}',
+        ruleIndex: '{{ collection_data.rule_index }}'
+    };
+    window._trainingStats = { correct: 0, total: 0, startTime: Date.now(), answers: [] };
+    </script>
+    {% endif %}
+
+    <!-- Image Lightbox Overlay -->
+    <div id="imageLightbox" style="display:none; position:fixed; inset:0; z-index:2000; background:rgba(0,0,0,0.85); align-items:center; justify-content:center; cursor:zoom-out;" onclick="closeImageLightbox()">
+        <div style="position:relative; max-width:90vw; max-height:90vh;" onclick="event.stopPropagation()">
+            <img id="lightboxImg" src="" style="max-width:90vw; max-height:85vh; border-radius:8px; box-shadow:0 4px 30px rgba(0,0,0,0.5); cursor:grab;" draggable="false">
+            <div id="lightboxCaption" style="text-align:center; color:#e0e0e0; font-size:13px; margin-top:8px; font-family:Roboto,sans-serif;"></div>
+            <button onclick="closeImageLightbox()" style="position:absolute; top:-12px; right:-12px; background:#444; color:#fff; border:none; border-radius:50%; width:30px; height:30px; font-size:18px; cursor:pointer; line-height:1;">&times;</button>
+        </div>
+    </div>
+
+    <!-- Magnify lens for labeling images -->
+    <div id="magnifyLens" style="display:none; position:fixed; width:180px; height:180px; border-radius:50%; border:3px solid #409393; box-shadow:0 4px 20px rgba(0,0,0,0.4); pointer-events:none; z-index:1500; background-repeat:no-repeat; overflow:hidden;"></div>
+
+    <script>
+    window._taskType = '{{ task_type }}';
+
+    /* Lightbox for enlarging images */
+    function openImageLightbox(src, caption) {
+        var lb = document.getElementById('imageLightbox');
+        var img = document.getElementById('lightboxImg');
+        var cap = document.getElementById('lightboxCaption');
+        img.src = src;
+        cap.textContent = caption || '';
+        lb.style.display = 'flex';
+    }
+    function closeImageLightbox() {
+        document.getElementById('imageLightbox').style.display = 'none';
+    }
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeImageLightbox();
+    });
+
+    /* Magnify lens for label images */
+    (function() {
+        var lens = document.getElementById('magnifyLens');
+        var zoomLevel = 2.5;
+        var activeImg = null;
+
+        document.querySelectorAll('.design.dark.container img.design').forEach(function(img) {
+            img.style.cursor = 'crosshair';
+            img.addEventListener('mouseenter', function() { activeImg = img; lens.style.display = 'block'; });
+            img.addEventListener('mouseleave', function() { activeImg = null; lens.style.display = 'none'; });
+            img.addEventListener('mousemove', function(e) {
+                if (!activeImg) return;
+                var rect = activeImg.getBoundingClientRect();
+                var x = e.clientX - rect.left;
+                var y = e.clientY - rect.top;
+                var percX = x / rect.width;
+                var percY = y / rect.height;
+
+                lens.style.left = (e.clientX - 90) + 'px';
+                lens.style.top = (e.clientY - 90) + 'px';
+                lens.style.backgroundImage = 'url(' + activeImg.src + ')';
+                lens.style.backgroundSize = (rect.width * zoomLevel) + 'px ' + (rect.height * zoomLevel) + 'px';
+                lens.style.backgroundPosition = (-percX * rect.width * zoomLevel + 90) + 'px ' + (-percY * rect.height * zoomLevel + 90) + 'px';
+            });
+        });
+    })();
+
+    // Load dynamic examples from RuleExample model
+    (function() {
+        var taskType = '{{ collection_data.task_type }}';
+        var rules = document.querySelectorAll('[id^="dynamic_examples_"]');
+        rules.forEach(function(container) {
+            var ruleIndex = container.id.replace('dynamic_examples_', '');
+            fetch(window.LABELING_API_BASE_URL + '/get_rule_examples/?task_type=' + taskType + '&rule_index=' + ruleIndex)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var html = '';
+                    if (data.yes_examples && data.yes_examples.length) {
+                        html += '<div class="examples-section"><h3 class="yes-label">YES examples</h3><div class="example-grid">';
+                        data.yes_examples.forEach(function(ex) {
+                            html += '<div class="example-item"><img src="' + ex.image_url + '" class="sidebar-example-img" onclick="openImageLightbox(this.src, \'' + (ex.caption || '').replace(/'/g, "\\'") + '\')" style="cursor:pointer;">';
+                            if (ex.caption) html += '<div class="caption">' + ex.caption + '</div>';
+                            html += '</div>';
+                        });
+                        html += '</div></div>';
+                    }
+                    if (data.no_examples && data.no_examples.length) {
+                        html += '<div class="examples-section"><h3 class="no-label">NO examples</h3><div class="example-grid">';
+                        data.no_examples.forEach(function(ex) {
+                            html += '<div class="example-item"><img src="' + ex.image_url + '" class="sidebar-example-img" onclick="openImageLightbox(this.src, \'' + (ex.caption || '').replace(/'/g, "\\'") + '\')" style="cursor:pointer;">';
+                            if (ex.caption) html += '<div class="caption">' + ex.caption + '</div>';
+                            html += '</div>';
+                        });
+                        html += '</div></div>';
+                    }
+                    container.innerHTML = html;
+                });
+        });
+    })();
+    </script>
 
     {% endblock %}
