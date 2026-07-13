@@ -148,13 +148,13 @@
                                 <label class="ordinal-label" for="ord0_{{forloop.counter}}_{{asset.asset_id}}"><span class="ord-key">1</span><span class="ord-name">Flat</span><span class="ord-sub">no shading</span></label>
 
                                 <input type="radio" id="ord1_{{forloop.counter}}_{{asset.asset_id}}" prompt_response = '1' class = 'radio_button ordinal' data-hotkey="2" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
-                                <label class="ordinal-label" for="ord1_{{forloop.counter}}_{{asset.asset_id}}"><span class="ord-key">2</span><span class="ord-name">Simple</span><span class="ord-sub">1 shade</span></label>
+                                <label class="ordinal-label" for="ord1_{{forloop.counter}}_{{asset.asset_id}}"><span class="ord-key">2</span><span class="ord-name">Simple</span><span class="ord-sub">1 layer</span></label>
 
                                 <input type="radio" id="ord2_{{forloop.counter}}_{{asset.asset_id}}" prompt_response = '2' class = 'radio_button ordinal' data-hotkey="3" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
-                                <label class="ordinal-label" for="ord2_{{forloop.counter}}_{{asset.asset_id}}"><span class="ord-key">3</span><span class="ord-name">Moderate</span><span class="ord-sub">3+ shades</span></label>
+                                <label class="ordinal-label" for="ord2_{{forloop.counter}}_{{asset.asset_id}}"><span class="ord-key">3</span><span class="ord-name">Moderate</span><span class="ord-sub">2-5 layers</span></label>
 
                                 <input type="radio" id="ord3_{{forloop.counter}}_{{asset.asset_id}}" prompt_response = '3' class = 'radio_button ordinal' data-hotkey="4" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
-                                <label class="ordinal-label" for="ord3_{{forloop.counter}}_{{asset.asset_id}}"><span class="ord-key">4</span><span class="ord-name">Rich</span><span class="ord-sub">gradient</span></label>
+                                <label class="ordinal-label" for="ord3_{{forloop.counter}}_{{asset.asset_id}}"><span class="ord-key">4</span><span class="ord-name">Rich</span><span class="ord-sub">5+ layers</span></label>
                             </div>
                             {% else %}
                             <img id = yes_icon class = 'key icon' src="{% static 'images/yes_icon.png'%}">
