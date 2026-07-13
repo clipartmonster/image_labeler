@@ -1,0 +1,138 @@
+<!-- Rules toggle button — outside sidebar so it's never clipped -->
+<button class="rules-toggle-btn" id="sidebarToggleBtn" onclick="document.getElementById('rulesSidebar').classList.toggle('open'); this.classList.toggle('open');">
+    &#9776; Rules
+</button>
+
+<!-- Rules + Examples Sidebar -->
+<div class="rules-sidebar" id="rulesSidebar">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h2 style="margin:0; font-size:18px;">Rules &amp; Examples</h2>
+    </div>
+
+    {% for guide in rule_guides %}
+    <div style="margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid #3a4a4a;">
+        <h3 style="color:#e8f0f0; font-size:15px; margin:0 0 6px; font-weight:700;">
+            Rule {{ guide.rule_index }}: {{ guide.title }}
+        </h3>
+        <div class="rule-prompt">{{ guide.description }}</div>
+
+        {% for d in guide.directives.all %}
+        <div style="margin-top:10px; padding:8px 10px; background:#1e3030; border-radius:6px;">
+            <div style="color:#c0d8d8; font-size:13px; line-height:1.5;">{{ d.text }}</div>
+            {% for img in d.reference_images.all %}
+            <div style="display:inline-block; margin:6px 4px 0 0; vertical-align:top;">
+                <img src="{{ img.image_url }}" class="sidebar-example-img" style="max-width:90px; max-height:68px; border-radius:4px; cursor:pointer; border:2px solid #3a6a6a;" onclick="openImageLightbox(this.src, '{{ img.caption|escapejs }}')">
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+
+        {% for img in guide.reference_images.all %}
+            {% if not img.directive %}
+            <div style="display:inline-block; margin:8px 4px 0 0; vertical-align:top;">
+                <img src="{{ img.image_url }}" class="sidebar-example-img" style="max-width:90px; max-height:68px; border-radius:4px; cursor:pointer; border:2px solid #3a4a4a;" onclick="openImageLightbox(this.src, '{{ img.caption|escapejs }}')">
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endfor %}
+
+    {% if not rule_guides %}
+    {% for rule in labelling_rules %}
+        {% if rule.rule_index != 0 %}
+        <div style="margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid #3a4a4a;">
+            <h3 style="color:#e8f0f0; font-size:15px; margin:0 0 6px; font-weight:700;">Rule {{ rule.rule_index }}: {{ rule.title }}</h3>
+            <div class="rule-prompt">{{ rule.description }}</div>
+
+            {% if rule.directives %}
+            <ul style="margin:6px 0 0; padding-left:16px; color:#c0d8d8; font-size:13px; line-height:1.6;">
+                {% for d in rule.directives %}
+                <li style="margin-bottom:4px;">{{ d.directive }}</li>
+                {% endfor %}
+            </ul>
+
+            {% for d in rule.directives %}
+                {% if d.examples %}
+                <div style="margin-top:8px;">
+                    {% if d.valence == 'correct' or d.valence == 'yes' %}
+                    <span style="font-size:11px; font-weight:600; color:#a0e0a0; background:rgba(100,200,100,0.1); padding:2px 6px; border-radius:3px;">YES</span>
+                    {% elif d.valence == 'incorrect' or d.valence == 'no' %}
+                    <span style="font-size:11px; font-weight:600; color:#e0a0a0; background:rgba(200,100,100,0.1); padding:2px 6px; border-radius:3px;">NO</span>
+                    {% endif %}
+                    <div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:4px;">
+                        {% for ex in d.examples %}
+                        <div style="display:inline-block; vertical-align:top;">
+                            <img src="{{ ex.image_link }}" class="sidebar-example-img" style="max-width:90px; max-height:68px; border-radius:4px; cursor:pointer; border:2px solid {% if d.valence == 'correct' or d.valence == 'yes' %}#4a8a4a{% else %}#8a4a4a{% endif %};" onclick="openImageLightbox(this.src, '{{ ex.caption|escapejs }}')">
+                            {% if ex.caption %}<div style="font-size:9px; color:#8a9a9a; margin-top:2px; max-width:90px;">{{ ex.caption }}</div>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            {% endfor %}
+            {% endif %}
+
+            <div id="dynamic_examples_{{ rule.rule_index }}"></div>
+        </div>
+        {% endif %}
+    {% endfor %}
+    {% endif %}
+</div>
+
+<!-- Image Lightbox Overlay -->
+<div id="imageLightbox" style="display:none; position:fixed; inset:0; z-index:2000; background:rgba(0,0,0,0.85); align-items:center; justify-content:center; cursor:zoom-out;" onclick="closeImageLightbox()">
+    <div style="position:relative; max-width:90vw; max-height:90vh;" onclick="event.stopPropagation()">
+        <img id="lightboxImg" src="" style="max-width:90vw; max-height:85vh; border-radius:8px; box-shadow:0 4px 30px rgba(0,0,0,0.5); cursor:grab;" draggable="false">
+        <div id="lightboxCaption" style="text-align:center; color:#e0e0e0; font-size:13px; margin-top:8px; font-family:Roboto,sans-serif;"></div>
+        <button onclick="closeImageLightbox()" style="position:absolute; top:-12px; right:-12px; background:#444; color:#fff; border:none; border-radius:50%; width:30px; height:30px; font-size:18px; cursor:pointer; line-height:1;">&times;</button>
+    </div>
+</div>
+
+<script>
+function openImageLightbox(src, caption) {
+    var lb = document.getElementById('imageLightbox');
+    var img = document.getElementById('lightboxImg');
+    var cap = document.getElementById('lightboxCaption');
+    img.src = src;
+    cap.textContent = caption || '';
+    lb.style.display = 'flex';
+}
+function closeImageLightbox() {
+    document.getElementById('imageLightbox').style.display = 'none';
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeImageLightbox();
+});
+
+(function() {
+    var taskType = '{{ task_type }}';
+    var rules = document.querySelectorAll('[id^="dynamic_examples_"]');
+    rules.forEach(function(container) {
+        var ruleIndex = container.id.replace('dynamic_examples_', '');
+        fetch(window.LABELING_API_BASE_URL + '/get_rule_examples/?task_type=' + taskType + '&rule_index=' + ruleIndex)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var html = '';
+                if (data.yes_examples && data.yes_examples.length) {
+                    html += '<div class="examples-section"><h3 class="yes-label">YES examples</h3><div class="example-grid">';
+                    data.yes_examples.forEach(function(ex) {
+                        html += '<div class="example-item"><img src="' + ex.image_url + '" class="sidebar-example-img" onclick="openImageLightbox(this.src, \'' + (ex.caption || '').replace(/'/g, "\\'") + '\')" style="cursor:pointer;">';
+                        if (ex.caption) html += '<div class="caption">' + ex.caption + '</div>';
+                        html += '</div>';
+                    });
+                    html += '</div></div>';
+                }
+                if (data.no_examples && data.no_examples.length) {
+                    html += '<div class="examples-section"><h3 class="no-label">NO examples</h3><div class="example-grid">';
+                    data.no_examples.forEach(function(ex) {
+                        html += '<div class="example-item"><img src="' + ex.image_url + '" class="sidebar-example-img" onclick="openImageLightbox(this.src, \'' + (ex.caption || '').replace(/'/g, "\\'") + '\')" style="cursor:pointer;">';
+                        if (ex.caption) html += '<div class="caption">' + ex.caption + '</div>';
+                        html += '</div>';
+                    });
+                    html += '</div></div>';
+                }
+                container.innerHTML = html;
+            });
+    });
+})();
+</script>
