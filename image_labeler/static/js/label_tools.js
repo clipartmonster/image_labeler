@@ -219,10 +219,15 @@ function direct_hotkey_action(hotkey) {
 document.addEventListener('keydown', function(event) {
     const hotkey = event.key;
     if (document.querySelector('.training-paused')) return;
-    // 1-2 drive the binary yes/no control; 3-4 additionally drive the ordinal
-    // 0-3 control (color_fill_type rule 5). Invalid keys are ignored downstream.
+    // Don't hijack keystrokes while typing in the depth-layer number field.
+    var ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+    // 1-2 drive the binary yes/no control. F/G drive the color_fill_type rule 5
+    // depth control (Flat / Gradient); the layer count is typed into its field.
     if (hotkey === '1' || hotkey === '2' || hotkey === '3' || hotkey === '4') {
         direct_hotkey_action(hotkey)
+    } else if (hotkey === 'f' || hotkey === 'F' || hotkey === 'g' || hotkey === 'G') {
+        depth_hotkey(hotkey)
     }
 })
 
@@ -351,6 +356,62 @@ function update_prompt(hotkey, element, response) {
         close_listing_container(element)
     }
 
+}
+
+
+// Close the given rule_validator and advance, mirroring update_prompt's tail.
+// Used by the color_fill_type rule 5 depth control, which submits a free-form
+// value (Flat=0, Gradient, or a typed layer count) instead of clicking a radio.
+function advance_after_prompt(element) {
+    element.className = 'label_option rule_validator closed'
+
+    const open_prompt_count = element
+    .closest('.label_option.prompt.container.active')
+    .querySelectorAll('[class*="open"], [class*="active"]')
+    .length;
+
+    if (open_prompt_count > 0) {
+        element
+        .nextElementSibling
+        .className = 'label_option rule_validator active'
+    } else {
+        close_listing_container(element)
+    }
+}
+
+// Record a depth response ("0" for Flat, "gradient" for Gradient) then advance.
+function submit_depth(el, value) {
+    var rv = el.closest('.label_option.rule_validator')
+    if (!rv) return
+    if (rv.getAttribute('prompt_type') == 'mismatch') {
+        collect_mismatch_prompt(rv, value)
+    } else {
+        collect_prompt(rv, value)
+    }
+    advance_after_prompt(rv)
+}
+
+// Record the typed number of depth layers (integer >= 1) then advance.
+function submit_depth_number(el) {
+    var rv = el.closest('.label_option.rule_validator')
+    if (!rv) return
+    var input = rv.querySelector('input.depth-count')
+    var raw = input ? input.value.trim() : ''
+    var n = parseInt(raw, 10)
+    if (raw === '' || isNaN(n) || n < 1) {
+        if (input) { input.style.borderColor = '#b03030'; input.focus() }
+        return
+    }
+    submit_depth(rv, String(n))
+}
+
+// Keyboard shortcuts for the depth control: F = Flat, G = Gradient. Only fires
+// when a depth rule_validator is active and no text input is focused.
+function depth_hotkey(key) {
+    var rv = document.querySelector('.label_option.rule_validator.active')
+    if (!rv || !rv.querySelector('.depth-controls')) return
+    var val = (key === 'f' || key === 'F') ? '0' : 'gradient'
+    submit_depth(rv, val)
 }
 
 

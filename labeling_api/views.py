@@ -1601,6 +1601,40 @@ def get_lure_questions(request: Request) -> JsonResponse:
     return JsonResponse(grouped_result, safe=False)
 
 
+def _plurality_tie_asset_ids(pr_df):
+    """asset_ids (samples > 1) with no strict plurality winner among responses.
+
+    Generalizes the yes/no 50/50 dispute to multi-value rules (color_fill_type
+    rule 5): an asset is disputed when two or more distinct responses tie for the
+    highest vote count. Responses are compared case-insensitively as strings, so
+    "0", "gradient", "2", etc. are each their own value.
+
+    Args:
+        pr_df (pd.DataFrame): rows with ``asset_id`` and ``prompt_response``.
+
+    Returns:
+        set: disputed ``asset_id`` values.
+    """
+    if pr_df is None or pr_df.empty:
+        return set()
+
+    df = pr_df.copy()
+    df["resp"] = df["prompt_response"].astype(str).str.strip().str.lower()
+    counts = df.groupby(["asset_id", "resp"]).size().rename("n").reset_index()
+    counts["max_n"] = counts.groupby("asset_id")["n"].transform("max")
+    samples = counts.groupby("asset_id")["n"].sum()
+    n_top = (
+        counts[counts.n == counts.max_n]
+        .groupby("asset_id")["resp"]
+        .nunique()
+    )
+    return {
+        aid
+        for aid, ties in n_top.items()
+        if ties > 1 and samples.get(aid, 0) > 1
+    }
+
+
 @csrf_exempt
 @api_authorization
 @api_view(["GET"])
@@ -1638,20 +1672,33 @@ def get_disputed_assets(request: Request) -> JsonResponse:
 
     #################################
 
-    dispusted_assets = (
-        pd.DataFrame(list(data))
-        .filter(["asset_id", "labeler_id", "prompt_response"])
-        .assign(samples=lambda x: x.groupby("asset_id")["asset_id"].transform("count"))
-        .query("samples > 1")
-        .assign(yes_response=lambda x: np.where(x.prompt_response == "yes", 1, 0))
-        .groupby(["asset_id", "samples"])
-        .agg(yes_response=("yes_response", "sum"))
-        .reset_index()
-        .assign(percent_agree=lambda x: x.yes_response / x.samples)
-        .query("percent_agree == .5")
-        .merge(asset_links, on="asset_id", how="left")
-        .filter(["asset_id", "image_link"])
+    pr_df = pd.DataFrame(list(data)).filter(
+        ["asset_id", "labeler_id", "prompt_response"]
     )
+
+    # color_fill_type rule 5 is graded (Flat / N layers / gradient), so a dispute
+    # is a plurality tie rather than a yes/no 50/50 split.
+    if str(task_type) == "color_fill_type" and int(rule_index) == 5:
+        disputed_ids = _plurality_tie_asset_ids(pr_df)
+        dispusted_assets = (
+            pd.DataFrame({"asset_id": list(disputed_ids)})
+            .merge(asset_links, on="asset_id", how="left")
+            .filter(["asset_id", "image_link"])
+        )
+    else:
+        dispusted_assets = (
+            pr_df
+            .assign(samples=lambda x: x.groupby("asset_id")["asset_id"].transform("count"))
+            .query("samples > 1")
+            .assign(yes_response=lambda x: np.where(x.prompt_response == "yes", 1, 0))
+            .groupby(["asset_id", "samples"])
+            .agg(yes_response=("yes_response", "sum"))
+            .reset_index()
+            .assign(percent_agree=lambda x: x.yes_response / x.samples)
+            .query("percent_agree == .5")
+            .merge(asset_links, on="asset_id", how="left")
+            .filter(["asset_id", "image_link"])
+        )
 
     #######
     # Remove flagged assets
@@ -4256,6 +4303,16 @@ def get_reconcile_count(request):
 
         if pr_df.empty:
             return JsonResponse({"disputed_count": 0})
+
+        # color_fill_type rule 5 is graded, so a dispute is a plurality tie rather
+        # than a yes/no 50/50 split.
+        if task_type == "color_fill_type" and rule_index == 5:
+            disputed_ids = {
+                aid
+                for aid in _plurality_tie_asset_ids(pr_df)
+                if aid not in flagged_ids
+            }
+            return JsonResponse({"disputed_count": len(disputed_ids)})
 
         disputed = (
             pr_df.groupby("asset_id")

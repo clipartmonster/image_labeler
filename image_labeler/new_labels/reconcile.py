@@ -26,8 +26,13 @@ print(f"current_data: {len(current_data)} rows in {time.time()-t:.1f}s")
 _COLS = ["asset_id", "task_type", "rule_index", "label", "percent_agree",
          "label_strength", "label_source"]
 
-# color_fill_type rule 5 is an ordinal 0-3 scale (graded Color Depth), not yes/no.
-# It reuses the same tables but is reconciled by median instead of yes-rate.
+# color_fill_type rule 5 is a graded Color Depth scale, not yes/no. Responses are
+# "0" (Flat), an integer >= 1 (counted depth layers), or "gradient" (continuous
+# shading). It reuses the same tables and is reconciled by plurality (majority
+# vote), exactly like the yes/no rules -- assets with no clear winner are left
+# out here and resolved by a human in the reconcile review UI. "gradient" is
+# encoded as 99 so it sorts above any countable depth.
+GRADIENT_CODE = 99
 ordinal_mask = (prompt_data.task_type == "color_fill_type") & (prompt_data.rule_index == 5)
 binary_data = prompt_data[~ordinal_mask]
 ordinal_data = prompt_data[ordinal_mask]
@@ -54,27 +59,46 @@ binary_label_set = (
     .reset_index()
 )[_COLS]
 
-print("loading ordinal label set (color_fill_type rule 5)")
+print("loading graded label set (color_fill_type rule 5)")
 if len(ordinal_data):
     _o = ordinal_data.assign(
-        val=lambda x: pd.to_numeric(x.prompt_response, errors="coerce")
+        val=lambda x: pd.to_numeric(
+            x.prompt_response.astype(str).str.strip().str.lower()
+            .replace({"gradient": str(GRADIENT_CODE)}),
+            errors="coerce",
+        )
     ).dropna(subset=["val"])
-    _grp = _o.groupby(["asset_id", "task_type", "rule_index"])["val"]
-    _med = _grp.median().round().astype(int).rename("label")
-    _samples = _grp.size().rename("samples")
-    _tmp = _o.merge(_med.reset_index(), on=["asset_id", "task_type", "rule_index"])
-    _tmp["match"] = _tmp.val.round().astype(int) == _tmp.label
-    _agree = (
-        _tmp.groupby(["asset_id", "task_type", "rule_index"])["match"]
-        .mean()
-        .rename("percent_agree")
+    _o["val"] = _o["val"].astype(int)
+
+    # Reconcile by plurality (majority vote), matching the binary rules. Assets
+    # with no strict winner (a tie for the top vote count) are left out here so
+    # they surface in the reconcile review UI, just like the 50/50 ties do for
+    # yes/no rules.
+    _counts = (
+        _o.groupby(["asset_id", "task_type", "rule_index", "val"])
+        .size().rename("n").reset_index()
+    )
+    _counts["max_n"] = _counts.groupby(
+        ["asset_id", "task_type", "rule_index"]
+    )["n"].transform("max")
+    _top = _counts[_counts.n == _counts.max_n]
+    _agg = (
+        _top.groupby(["asset_id", "task_type", "rule_index"])
+        .agg(label=("val", "min"), n_top=("val", "size"), max_n=("n", "max"))
+        .reset_index()
+    )
+    _samples = (
+        _counts.groupby(["asset_id", "task_type", "rule_index"])["n"]
+        .sum().rename("samples").reset_index()
     )
     ordinal_label_set = (
-        pd.concat([_med, _samples, _agree], axis=1)
-        .reset_index()
+        _agg.merge(_samples, on=["asset_id", "task_type", "rule_index"])
         .query("samples > 1")
+        .query("n_top == 1")
         .assign(
-            label_strength=lambda x: np.where(x.percent_agree == 1, "strong", "weak"),
+            label=lambda x: x.label.astype(int),
+            percent_agree=lambda x: x.max_n / x.samples,
+            label_strength=lambda x: np.where(x.max_n == x.samples, "strong", "weak"),
             label_source="Internal",
         )
     )[_COLS]
