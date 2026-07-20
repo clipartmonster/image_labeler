@@ -809,6 +809,19 @@ function flag_asset_issue(event){
         api_collect_label_issue(data)
     }
 
+    // The graded depth control (color_fill_type rule 5) has no yes/no radio, so
+    // the synthetic "2" keypress used to record + advance for binary rules does
+    // nothing there. Record a "flag" entry directly and advance instead.
+    var depthControls = button
+        .closest('.listing.light.container')
+        .querySelector('.label_option.rule_validator .depth-controls')
+
+    if (depthControls) {
+        var rv = depthControls.closest('.label_option.rule_validator')
+        collect_prompt(rv, 'flag')
+        advance_after_prompt(rv)
+        return
+    }
 
     const key_event = new KeyboardEvent('keydown', {
         key: '2',        // Key value
