@@ -219,15 +219,16 @@ function direct_hotkey_action(hotkey) {
 document.addEventListener('keydown', function(event) {
     const hotkey = event.key;
     if (document.querySelector('.training-paused')) return;
-    // Don't hijack keystrokes while typing in the depth-layer number field.
+    // Don't hijack keystrokes while typing in a text field.
     var ae = document.activeElement;
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
-    // 1-2 drive the binary yes/no control. F/G drive the color_fill_type rule 5
-    // depth control (Flat / Gradient); the layer count is typed into its field.
+    // When the color_fill_type rule 5 depth control is active, 0-9 enter the layer
+    // count (0 = Flat, 9 = "9+"), F = Flat, G = Gradient. Checked first so digits
+    // route to the depth control rather than the binary yes/no handler.
+    if (depth_hotkey(hotkey)) return;
+    // 1-2 drive the binary yes/no control.
     if (hotkey === '1' || hotkey === '2' || hotkey === '3' || hotkey === '4') {
         direct_hotkey_action(hotkey)
-    } else if (hotkey === 'f' || hotkey === 'F' || hotkey === 'g' || hotkey === 'G') {
-        depth_hotkey(hotkey)
     }
 })
 
@@ -391,27 +392,17 @@ function submit_depth(el, value) {
     advance_after_prompt(rv)
 }
 
-// Record the typed number of depth layers (integer >= 1) then advance.
-function submit_depth_number(el) {
-    var rv = el.closest('.label_option.rule_validator')
-    if (!rv) return
-    var input = rv.querySelector('input.depth-count')
-    var raw = input ? input.value.trim() : ''
-    var n = parseInt(raw, 10)
-    if (raw === '' || isNaN(n) || n < 1) {
-        if (input) { input.style.borderColor = '#b03030'; input.focus() }
-        return
-    }
-    submit_depth(rv, String(n))
-}
-
-// Keyboard shortcuts for the depth control: F = Flat, G = Gradient. Only fires
-// when a depth rule_validator is active and no text input is focused.
+// Keyboard shortcuts for the depth control (color_fill_type rule 5): digits 0-9
+// enter the layer count directly (0 = Flat, 9 = "9+"), F = Flat, G = Gradient.
+// Only acts when a depth rule_validator is active. Returns true if it handled the
+// key so the caller can skip the binary yes/no handler.
 function depth_hotkey(key) {
     var rv = document.querySelector('.label_option.rule_validator.active')
-    if (!rv || !rv.querySelector('.depth-controls')) return
-    var val = (key === 'f' || key === 'F') ? '0' : 'gradient'
-    submit_depth(rv, val)
+    if (!rv || !rv.querySelector('.depth-controls')) return false
+    if (key >= '0' && key <= '9') { submit_depth(rv, key); return true }
+    if (key === 'f' || key === 'F') { submit_depth(rv, '0'); return true }
+    if (key === 'g' || key === 'G') { submit_depth(rv, 'gradient'); return true }
+    return false
 }
 
 

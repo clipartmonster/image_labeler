@@ -215,6 +215,9 @@
 
     /* Magnify lens for label images */
     (function() {
+        // Color depth (color_fill_type rule 5) is judged on overall shading rather
+        // than pixel detail, so the hover magnifier is disabled for it.
+        if ('{{ task_type }}' === 'color_fill_type' && '{{ rule_index }}' === '5') return;
         var lens = document.getElementById('magnifyLens');
         var zoomLevel = 2.5;
         var activeImg = null;
