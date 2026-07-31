@@ -216,6 +216,20 @@ function direct_hotkey_action(hotkey) {
 
 }
 
+function select_content_choice(label) {
+    const prompt = label.closest('.label_option.rule_validator');
+    const inputId = label.getAttribute('for');
+    const radio = inputId ? document.getElementById(inputId) : null;
+    if (!prompt || !radio) return;
+
+    const hotkey = radio.getAttribute('data-hotkey');
+    const response = radio.getAttribute('prompt_response');
+    if (!hotkey || !response) return;
+
+    collect_prompt(prompt, response);
+    update_prompt(hotkey, prompt, response);
+}
+
 document.addEventListener('keydown', function(event) {
     const hotkey = event.key;
     if (document.querySelector('.training-paused')) return;
@@ -537,13 +551,10 @@ function reset_responses(event){
 
         prompt.className = 'label_option rule_validator open'
 
-        prompt.querySelectorAll('.radio_button').forEach(radio_button =>{
-
-            if (radio_button.getAttribute('data-hotkey')==='3'){
-                radio_button.checked = true;
-            }
-
-        })
+        const defaultRadio = prompt.querySelector(
+            '.radio_button[data-default="true"], .radio_button[prompt_response="none"]'
+        )
+        if (defaultRadio) defaultRadio.checked = true
 
     })
 

@@ -28,6 +28,38 @@ def is_admin(request):
     return request.user.is_superuser
 
 
+def _asset_model_for_task(task_type):
+    from labeling_api.models import task_asset_model
+
+    return task_asset_model(task_type)
+
+
+def _all_asset_sub_batches():
+    from django.db.utils import OperationalError, ProgrammingError
+    from labeling_api.models import (
+        label_data_selected_assets_new,
+        select_content_assets,
+    )
+
+    fields = ("task_type", "rule_index", "batch_id", "large_sub_batch")
+    rows = list(
+        label_data_selected_assets_new.objects.values(*fields).distinct()
+    )
+    try:
+        rows.extend(select_content_assets.objects.values(*fields).distinct())
+    except (OperationalError, ProgrammingError):
+        pass
+    return sorted(
+        rows,
+        key=lambda row: (
+            row["task_type"],
+            row["rule_index"],
+            row["batch_id"],
+            row["large_sub_batch"],
+        ),
+    )
+
+
 @login_required
 def change_password(request):
     """Force new users to set their own password on first login."""
@@ -328,17 +360,14 @@ def setup_session(request):
             )
 
         from django.contrib.auth.models import User
-        from labeling_api.models import labelling_rules, label_data_selected_assets_new
+        from labeling_api.models import labelling_rules
         labeler_users = User.objects.filter(is_staff=True, is_superuser=False).values_list("username", flat=True)
 
         all_rules = list(labelling_rules.objects.exclude(task_type="color_type")
                          .values("task_type", "rule_index", "title")
                          .order_by("task_type", "rule_index"))
 
-        all_sub_batches = list(label_data_selected_assets_new.objects
-                               .values("task_type", "rule_index", "batch_id", "large_sub_batch")
-                               .distinct()
-                               .order_by("task_type", "rule_index", "batch_id", "large_sub_batch"))
+        all_sub_batches = _all_asset_sub_batches()
 
         selected_options = {
             "labeler_id": labeler_id,
@@ -362,7 +391,7 @@ def setup_session(request):
         )
     else:
         now = timezone.now()
-        from labeling_api.models import label_data_selected_assets_new, prompt_responses, labelling_rules as LR
+        from labeling_api.models import prompt_responses, labelling_rules as LR
         from .models import TrainingBatchAsset
 
         rule_titles = {}
@@ -406,8 +435,9 @@ def setup_session(request):
 
         work_assignments = []
         for a in work_qs:
+            asset_model = _asset_model_for_task(a.task_type)
             batch_asset_ids = set(
-                label_data_selected_assets_new.objects.filter(
+                asset_model.objects.filter(
                     task_type=a.task_type,
                     rule_index=a.rule_index,
                     batch_id=a.batch_id,
@@ -458,6 +488,7 @@ def setup_session(request):
             training_required = (
                 (a.task_type, a.rule_index) not in completed_training_features
                 and not (a.task_type == "line_width_type" and a.rule_index == 2)
+                and a.task_type != "select_content"
             )
             work_assignments.append({
                 "id": a.id,
@@ -1023,6 +1054,127 @@ def view_batch_labels(request):
 
         traceback.print_exc()
         raise e
+
+
+@login_required
+def manage_select_content(request):
+    """Browse select_content labels with Best / Worst filters."""
+    from collections import Counter
+    from labeling_api.models import (
+        prompt_responses,
+        select_content_assets,
+        labelling_rules as LR,
+    )
+
+    label_filter = request.GET.get("label_filter", "all")
+    batch_id = request.GET.get("batch_id", "")
+    sort_by = request.GET.get("sort_by", "date_desc")
+
+    rule_entry = (
+        LR.objects.filter(task_type="select_content", rule_index=1)
+        .values("task_type", "rule_index", "title", "prompt")
+        .first()
+    ) or {
+        "task_type": "select_content",
+        "rule_index": 1,
+        "title": "Select Best/Worst",
+        "prompt": "Select Best or Worst.",
+    }
+
+    assets_qs = select_content_assets.objects.filter(
+        task_type="select_content", rule_index=1
+    )
+    batch_options = sorted(
+        set(assets_qs.values_list("batch_id", flat=True).distinct())
+    )
+    if batch_id != "":
+        try:
+            assets_qs = assets_qs.filter(batch_id=int(batch_id))
+        except (TypeError, ValueError):
+            batch_id = ""
+
+    image_map = {
+        row["asset_id"]: row["image_link"]
+        for row in assets_qs.values("asset_id", "image_link")
+    }
+    asset_ids = list(image_map.keys())
+
+    responses = list(
+        prompt_responses.objects.filter(
+            task_type="select_content",
+            rule_index=1,
+            asset_id__in=asset_ids,
+            prompt_response__in=["best", "worst"],
+        ).values("asset_id", "prompt_response", "datetime_created")
+    )
+
+    # Majority vote per asset; newest response breaks ties.
+    by_asset = {}
+    for row in responses:
+        by_asset.setdefault(row["asset_id"], []).append(row)
+
+    labeled_assets = []
+    for asset_id, rows in by_asset.items():
+        votes = Counter(r["prompt_response"] for r in rows)
+        top_count = max(votes.values())
+        winners = [label for label, count in votes.items() if count == top_count]
+        if len(winners) == 1:
+            label = winners[0]
+            agree_status = "agree" if top_count == len(rows) else "majority"
+        else:
+            # Tie — use most recent response as display label.
+            newest = max(rows, key=lambda r: r["datetime_created"] or "")
+            label = newest["prompt_response"]
+            agree_status = "disputed"
+        newest_date = max(
+            (r["datetime_created"] for r in rows if r["datetime_created"]),
+            default=None,
+        )
+        labeled_assets.append(
+            {
+                "asset_id": asset_id,
+                "image_link": image_map.get(asset_id, ""),
+                "label": label,
+                "agree_status": agree_status,
+                "samples": len(rows),
+                "date_labeled": newest_date,
+            }
+        )
+
+    label_counts = (
+        Counter(a["label"] for a in labeled_assets)
+        if labeled_assets
+        else Counter()
+    )
+    counts = [
+        {"label": "best", "count": label_counts.get("best", 0)},
+        {"label": "worst", "count": label_counts.get("worst", 0)},
+    ]
+
+    if label_filter in ("best", "worst"):
+        labeled_assets = [a for a in labeled_assets if a["label"] == label_filter]
+
+    reverse = sort_by != "date_asc"
+    labeled_assets.sort(
+        key=lambda a: a["date_labeled"] or "",
+        reverse=reverse,
+    )
+
+    return render(
+        request,
+        "manage_select_content.html",
+        {
+            "rule_entry": rule_entry,
+            "assets": labeled_assets,
+            "total_assets": len(labeled_assets),
+            "label_counts": counts,
+            "label_filter": label_filter,
+            "label_type_filters": ["all", "best", "worst"],
+            "batch_options": batch_options,
+            "batch_id": batch_id,
+            "sort_by": sort_by,
+        },
+    )
 
 
 @login_required
@@ -2333,7 +2485,7 @@ def admin_create_labeler(request):
 @admin_required
 def admin_bulk_assign(request):
     from django.contrib.auth.models import User
-    from labeling_api.models import label_data_selected_assets_new, labelling_rules
+    from labeling_api.models import labelling_rules
 
     labeler_users = list(
         User.objects.filter(is_staff=True, is_superuser=False)
@@ -2341,12 +2493,7 @@ def admin_bulk_assign(request):
         .values("id", "username")
     )
 
-    all_sub_batches = list(
-        label_data_selected_assets_new.objects
-        .values("task_type", "rule_index", "batch_id", "large_sub_batch")
-        .distinct()
-        .order_by("task_type", "rule_index", "batch_id", "large_sub_batch")
-    )
+    all_sub_batches = _all_asset_sub_batches()
 
     all_rules = list(
         labelling_rules.objects.exclude(task_type="color_type")
