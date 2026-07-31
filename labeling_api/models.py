@@ -96,6 +96,36 @@ class label_data_selected_assets_new(models.Model):
         db_table = "label_data.selected_assets_new"
 
 
+class select_content_assets(models.Model):
+    """Assets queued for the three-choice social-content selection task.
+
+    Kept separate from ``selected_assets_new`` so an asset can be reviewed for
+    social publishing even when it already appears in another labeling task.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    asset_id = models.BigIntegerField()
+    image_link = models.CharField()
+    batch_id = models.IntegerField()
+    large_sub_batch = models.IntegerField()
+    task_type = models.CharField(default="select_content")
+    rule_index = models.SmallIntegerField(default=1)
+    status = models.CharField(default="queued")
+    date_created = models.DateTimeField()
+    date_updated = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = "label_data.select_content_assets"
+
+
+def task_asset_model(task_type: str):
+    """Return the queue model used by a labeling task."""
+    if task_type == "select_content":
+        return select_content_assets
+    return label_data_selected_assets_new
+
+
 # Same model; keep old name so `from .models import *` and legacy references work.
 label_data_selected_assets: Type[label_data_selected_assets_new] = (
     label_data_selected_assets_new

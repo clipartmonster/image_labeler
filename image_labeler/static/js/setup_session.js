@@ -70,11 +70,12 @@ document.addEventListener('DOMContentLoaded', function(){
 
 
 // Toggle the "+" sub-batch trigger when the user has picked a task_type.
+// select_content batches are created by the offline script, not Add Sub-batch.
 function syncAddSubBatchBtn() {
     const btn = document.getElementById('add_sub_batch_btn')
     if (!btn) return
     const taskType = document.getElementById('selected_options').getAttribute('task_type')
-    btn.style.display = taskType ? 'block' : 'none'
+    btn.style.display = (taskType && taskType !== 'select_content') ? 'block' : 'none'
 }
 
 // Show batch buttons that match the chosen rule_index; hide the rest.
@@ -333,8 +334,9 @@ function show_batch_indicator_container(rule_index){
     function syncAddButton() {
         const btn = document.getElementById('add_sub_batch_btn');
         if (!btn) return;
-        // Show + button as long as we have a task_type (rule picked inside modal)
-        btn.style.display = getSelectedTaskType() ? 'block' : 'none';
+        const taskType = getSelectedTaskType();
+        // select_content batches are created offline, not via this modal
+        btn.style.display = (taskType && taskType !== 'select_content') ? 'block' : 'none';
     }
 
     // syncAddButton is called directly from filterBatchOptions / filterSubBatches
@@ -417,7 +419,7 @@ function show_batch_indicator_container(rule_index){
                             : `Batch ${b.batch_id}  (FULL — ${b.asset_count} / 20000)`;
                         return `<option value="${b.batch_id}" ${b.has_room ? '' : 'disabled'}>${label}</option>`;
                     }).join('')
-                    : '<option value="">No batches yet — first batch will be created</option>';
+                    : '<option value="1">Batch 1 (new)</option>';
 
                 updateCapacityNote();
             })

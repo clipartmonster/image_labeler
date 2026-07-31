@@ -12,6 +12,57 @@
 .ordinal-label .ord-sub { font-size:10px; color:#7a8a8a; }
 .ordinal-scale input.ordinal:checked + .ordinal-label { border-color:#409393; background:#e6f2f2; }
 .ordinal-scale input.ordinal:checked + .ordinal-label .ord-key { color:#409393; }
+
+/* Best / Worst control for select_content rule 1.
+   Uses the same palette as the yes/no switch (switch3): green #8eb284,
+   red #bd4444, Roboto text. */
+.content-choice-scale {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+    flex-wrap: wrap;
+}
+.content-choice-scale input { display: none; }
+.content-choice {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 84px;
+    padding: 8px 14px;
+    border: 2px solid #8a9c9c;
+    border-radius: 25px;
+    background: #bdc7c7;
+    cursor: pointer;
+    text-align: center;
+    transition: all .12s;
+}
+.content-choice .choice-key {
+    font-family: "Roboto";
+    font-size: 12px;
+    font-weight: 800;
+    color: #6f7a7a;
+}
+.content-choice .choice-name {
+    font-family: "Roboto";
+    font-size: 15px;
+    font-weight: 700;
+    color: #282b2b;
+}
+.content-choice:hover { border-color: #409393; }
+/* Selected: fill with the same colors the yes/no switch uses. */
+.content-choice-scale input:checked + .content-choice.best {
+    background: #8eb284;
+    border-color: #6f9a65;
+}
+.content-choice-scale input:checked + .content-choice.worst {
+    background: #bd4444;
+    border-color: #9a3535;
+}
+.content-choice-scale input:checked + .content-choice .choice-name,
+.content-choice-scale input:checked + .content-choice .choice-key {
+    color: #ffffff;
+}
 </style>
 
 <div class = 'listing light container rules'>
@@ -142,7 +193,43 @@
 
                         <div id = 'rule_valdiator_{{asset.asset_id}}_{{rule.rule_index}}' class = 'label_option rule_validator open' rule_index = {{rule.rule_index}}>
 
-                            {% if task_type == 'color_fill_type' and rule.rule_index == 5 %}
+                            {% if task_type == 'select_content' and rule.rule_index == 1 %}
+                            <div class="content-choice-scale">
+                                <input type="radio"
+                                       id="content-unanswered-{{ forloop.counter }}-{{ asset.asset_id }}"
+                                       prompt_response="unanswered"
+                                       class="radio_button"
+                                       data-default="true"
+                                       name="radio_{{ forloop.counter }}_{{ asset.asset_id }}"
+                                       checked>
+
+                                <input type="radio"
+                                       id="content-best-{{ forloop.counter }}-{{ asset.asset_id }}"
+                                       prompt_response="best"
+                                       class="radio_button"
+                                       data-hotkey="1"
+                                       name="radio_{{ forloop.counter }}_{{ asset.asset_id }}">
+                                <label class="content-choice best"
+                                       for="content-best-{{ forloop.counter }}-{{ asset.asset_id }}"
+                                       onclick="select_content_choice(this)">
+                                    <span class="choice-key">1</span>
+                                    <span class="choice-name">Best</span>
+                                </label>
+
+                                <input type="radio"
+                                       id="content-worst-{{ forloop.counter }}-{{ asset.asset_id }}"
+                                       prompt_response="worst"
+                                       class="radio_button"
+                                       data-hotkey="2"
+                                       name="radio_{{ forloop.counter }}_{{ asset.asset_id }}">
+                                <label class="content-choice worst"
+                                       for="content-worst-{{ forloop.counter }}-{{ asset.asset_id }}"
+                                       onclick="select_content_choice(this)">
+                                    <span class="choice-key">2</span>
+                                    <span class="choice-name">Worst</span>
+                                </label>
+                            </div>
+                            {% elif task_type == 'color_fill_type' and rule.rule_index == 5 %}
                             <div class="ordinal-scale">
                                 <input type="radio" id="ord0_{{forloop.counter}}_{{asset.asset_id}}" prompt_response = '0' class = 'radio_button ordinal' data-hotkey="1" name="radio_{{forloop.counter}}_{{asset.asset_id}}"/>
                                 <label class="ordinal-label" for="ord0_{{forloop.counter}}_{{asset.asset_id}}"><span class="ord-key">1</span><span class="ord-name">Flat</span><span class="ord-sub">no shading</span></label>
