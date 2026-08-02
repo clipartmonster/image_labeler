@@ -22,12 +22,22 @@ urlpatterns = [
         name="remove_prompt_responses",
     ),
     path(
+        "remove_style_prompt/",
+        views.remove_style_prompt,
+        name="remove_style_prompt",
+    ),
+    path(
         "get_prompt_responses/", views.get_prompt_responses, name="get_prompt_responses"
     ),
     path(
         "collect_prompt_internal_source/",
         views.collect_prompt_internal_source,
         name="collect_prompt_internal_source",
+    ),
+    path(
+        "collect_style_prompt/",
+        views.collect_style_prompt,
+        name="collect_style_prompt",
     ),
     path(
         "collect_validation_response/",

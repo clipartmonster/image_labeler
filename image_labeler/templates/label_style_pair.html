@@ -1,0 +1,153 @@
+{% load static %}
+
+<style>
+/* Pair-comparison control for same_style rule 2. Tap (or click) 1-4:
+   1 = Same, 2 = Similar, 3 = Different, 4 = Duplicate. */
+.style-controls { display:flex; gap:8px; align-items:stretch; flex-wrap:wrap; }
+.style-btn { display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:8px 14px; border:2px solid #a0b4b4; border-radius:8px; cursor:pointer;
+    background:#fff; min-width:88px; text-align:center; font-family:inherit; transition:all .12s; }
+.style-btn:hover { border-color:#409393; background:#e6f2f2; }
+.style-btn .style-key { font-size:18px; font-weight:800; color:#5a7878; }
+.style-btn .style-name { font-size:13px; font-weight:700; color:#2a4a4a; }
+/* Two images side by side. */
+.style-pair-images { display:flex; gap:12px; justify-content:center; align-items:center; flex-wrap:wrap; }
+.style-pair-images .style-pair-item { display:flex; flex-direction:column; align-items:center; }
+.style-pair-images img.design { max-width:46%; height:auto; }
+</style>
+
+<div class = 'listing light container rules'>
+
+    <div style = 'display:flex; flex-direction:column; align-items:center'>
+        <h1 class = 'label_option label' style='font-size:1.4em;'>{% for rule in labelling_rules %}{% if rule.rule_index != 0 %}{{ rule.title }}{% endif %}{% endfor %}</h1>
+        <span style='font-size:0.9em; color:#888;'>({{ task_type }}, {{ rule_index }})</span>
+    </div>
+
+    <div class = 'design dark container'>
+        <h1 class = 'label_option intro'>
+            <p>Compare the two images. Criteria can be found to the left. Click the button that says rules.</p>
+        </h1>
+    </div>
+
+    <div class = 'label_options container horizontal'>
+
+            <div class = 'label_option panel' label = {{label}}>
+
+                    {% for rule in labelling_rules %}
+                        {% if rule.rule_index != 0 %}
+
+                            <div class = 'label_option rule_container'>
+
+                                <div style = 'display:flex; gap:10px; flex-wrap:wrap; '>
+
+                                    <div class='label_option thumbnail container correct'>
+                                        <div class = 'label_option thumbnail panel' >
+                                            {% for example in rule.examples %}
+                                                {% if example.example_type == 'correct' %}
+                                                <img class="label_option thumbnail correct" src="{{ example.image_path }}" onclick = "expand_image(event)">
+                                                <div class = 'label_option expanded example'>
+                                                    <img class="label_option thumbnail expanded" src="{{ example.image_path }}">
+                                                    <h1 class = 'label_option rule'>{{example.caption}}</h1>
+                                                </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+
+                                    <div class='label_option thumbnail container incorrect'>
+                                        <div class = 'label_option thumbnail panel' >
+                                            {% for example in rule.examples %}
+                                                {% if example.example_type == 'incorrect' %}
+                                                <img class="label_option thumbnail incorrect" src="{{ example.image_path }}" onclick = "expand_image(event)">
+                                                <div class = 'label_option expanded example'>
+                                                    <img class="label_option thumbnail expanded" src="{{ example.image_path }}">
+                                                    <h1 class = 'label_option rule'>{{example.caption}}</h1>
+                                                </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+
+            </div>
+
+    </div>
+
+</div>
+
+<div class = 'listing light container rules' style = 'text-align:center;'>
+    <button class = 'label_option start_labelling' onclick = 'show_listings()'> <h1>Click to Begin</h1></button>
+</div>
+
+{% for pair in assets_to_label %}
+
+    <div id = 'listing_container_{{forloop.counter0}}' class = 'listing light container open' style = 'display:grid; grid-template-columns: 1fr 1fr;'>
+
+        <div class = 'collection_data' style = 'display:none'
+            pair_id = {{pair.pair_id}}
+            asset_id_1 = {{pair.asset_id_1}}
+            asset_id_2 = {{pair.asset_id_2}}
+            task_type = {{collection_data.task_type}}
+            labeler_source = {{collection_data.labeler_source}}
+            labeler_id = {{collection_data.labeler_id}}
+            label_type = {{collection_data.label_type}}
+            assignment_id = {{collection_data.assignment_id}}
+            hit_id = {{collection_data.hit_id}}
+            mturk_batch_id = {{collection_data.mturk_batch_id}}
+            is_lure_question = 'no'
+            >
+        </div>
+
+        <div class = 'design dark container' style="position:relative;">
+            <div class="style-pair-images">
+                <div class="style-pair-item">
+                    <h1 class = 'label_option rule'>{{pair.asset_id_1}}</h1>
+                    <img id = "image_{{pair.asset_id_1}}" class="design" src="{{ pair.image_link_1 }}">
+                </div>
+                <div class="style-pair-item">
+                    <h1 class = 'label_option rule'>{{pair.asset_id_2}}</h1>
+                    <img id = "image_{{pair.asset_id_2}}" class="design" src="{{ pair.image_link_2 }}">
+                </div>
+            </div>
+        </div>
+
+    <div class = 'listing_info container'>
+
+                <div class = 'label_option prompt container open' >
+
+                    {% for rule in labelling_rules %}
+                    {% if rule.rule_index != 0 %}
+
+                        <div id = 'rule_valdiator_{{pair.asset_id_1}}_{{pair.asset_id_2}}_{{rule.rule_index}}' class = 'label_option rule_validator open' rule_index = {{rule.rule_index}}>
+
+                            <div class="style-controls">
+                                <button type="button" class="style-btn" onclick="collect_style_prompt(this,'same')"><span class="style-key">1</span><span class="style-name">Same</span></button>
+                                <button type="button" class="style-btn" onclick="collect_style_prompt(this,'similar')"><span class="style-key">2</span><span class="style-name">Similar</span></button>
+                                <button type="button" class="style-btn" onclick="collect_style_prompt(this,'different')"><span class="style-key">3</span><span class="style-name">Different</span></button>
+                                <button type="button" class="style-btn" onclick="collect_style_prompt(this,'duplicate')"><span class="style-key">4</span><span class="style-name">Duplicate</span></button>
+                            </div>
+                            <div class = 'separator'>||</div>
+                            <h1 class = 'label_option rule'>
+                                {{rule.prompt}}
+                            </h1>
+                        </div>
+
+                    {% endif %}
+                    {% endfor %}
+
+                </div>
+
+                    <div class = 'label_option reset button' onclick = 'reset_responses(event)'>
+                        <img src="{% static 'images/reset.png'%}">
+                        <h1 class = 'listing_info label'>Clear Responses</h1>
+                    </div>
+
+        </div>
+
+    </div>
+{% endfor %}

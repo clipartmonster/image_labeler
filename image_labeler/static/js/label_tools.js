@@ -222,10 +222,12 @@ document.addEventListener('keydown', function(event) {
     // Don't hijack keystrokes while typing in a text field.
     var ae = document.activeElement;
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
-    // When the color_fill_type rule 5 depth control is active, 0-9 enter the layer
-    // count (0 = Flat, 9 = "9+"), F = Flat, G = Gradient. Checked first so digits
-    // route to the depth control rather than the binary yes/no handler.
+    // When the color_fill_type rule 5 depth control is active, 0-5 enter the layer
+    // count (0 = Flat, 5 = "5+"), F = Flat, G = Gradient, S = Skip. Checked first
+    // so digits route to the depth control rather than the binary yes/no handler.
     if (depth_hotkey(hotkey)) return;
+    // The same_style rule 2 pair control uses 1-4 (same/similar/different/duplicate).
+    if (style_hotkey(hotkey)) return;
     // 1-2 drive the binary yes/no control.
     if (hotkey === '1' || hotkey === '2' || hotkey === '3' || hotkey === '4') {
         direct_hotkey_action(hotkey)
@@ -412,6 +414,48 @@ function depth_hotkey(key) {
     if (key === 'g' || key === 'G') { submit_depth(rv, 'gradient'); return true }
     if (key === 's' || key === 'S') { skip_depth(rv); return true }
     return false
+}
+
+// Record a pair-comparison response (same_style rule 2) then advance. Reads
+// asset_id_1/asset_id_2 from the listing's collection_data and posts to the
+// style_prompt_responses endpoint.
+function collect_style_prompt(el, response) {
+    var rv = el.closest('.label_option.rule_validator')
+    if (!rv) return
+
+    var collection_data = rv
+        .closest('.listing.light.container')
+        .querySelector('.collection_data')
+
+    var data = {
+        task_type: collection_data.getAttribute('task_type'),
+        pair_id: collection_data.getAttribute('pair_id'),
+        asset_id_1: collection_data.getAttribute('asset_id_1'),
+        asset_id_2: collection_data.getAttribute('asset_id_2'),
+        labeler_source: collection_data.getAttribute('labeler_source'),
+        labeler_id: collection_data.getAttribute('labeler_id'),
+        rule_index: parseInt(rv.getAttribute('rule_index')),
+        prompt_response: response,
+    }
+
+    if (!window._trainingAnswers) {
+        api_collect_style_prompt(data)
+    }
+
+    advance_after_prompt(rv)
+}
+
+// Keyboard shortcuts for the pair-comparison control (same_style rule 2):
+// 1 = Same, 2 = Similar, 3 = Different, 4 = Duplicate. Only acts when a style
+// pair control is active. Returns true if it handled the key.
+var _STYLE_HOTKEYS = { '1': 'same', '2': 'similar', '3': 'different', '4': 'duplicate' }
+function style_hotkey(key) {
+    var rv = document.querySelector('.label_option.rule_validator.active')
+    if (!rv || !rv.querySelector('.style-controls')) return false
+    var response = _STYLE_HOTKEYS[key]
+    if (!response) return false
+    collect_style_prompt(rv, response)
+    return true
 }
 
 
@@ -631,11 +675,23 @@ function reset_responses(event){
         console.log("just remove prompt")
 
         if (!window._trainingAnswers) {
-            api_remove_prompt_responses(listing_data.getAttribute('asset_id'),
+            var pair_asset_id_1 = listing_data.getAttribute('asset_id_1')
+            if (pair_asset_id_1) {
+                // Pair-comparison listing (same_style rule 2): remove from
+                // style_prompt_responses keyed on both asset ids.
+                api_remove_style_prompt(pair_asset_id_1,
+                                        listing_data.getAttribute('asset_id_2'),
                                         listing_data.getAttribute('labeler_id'),
                                         listing_data.getAttribute('labeler_source'),
                                         listing_data.getAttribute('task_type'),
                                         active_prompt.getAttribute('rule_index'))
+            } else {
+                api_remove_prompt_responses(listing_data.getAttribute('asset_id'),
+                                            listing_data.getAttribute('labeler_id'),
+                                            listing_data.getAttribute('labeler_source'),
+                                            listing_data.getAttribute('task_type'),
+                                            active_prompt.getAttribute('rule_index'))
+            }
         }
 
     }

@@ -403,9 +403,68 @@ def setup_session(request):
             })
 
         from labeling_api.models import label_issues_table, line_width_sample_table
+        from labeling_api.models import (
+            label_data_selected_pair_labels,
+            style_prompt_responses,
+        )
 
         work_assignments = []
         for a in work_qs:
+            # Pair-comparison assignments (same_style rule 2): progress is measured
+            # in labeled pairs from style_prompt_responses vs pairs in the batch.
+            if a.task_type == "same_style" and a.rule_index == 2:
+                batch_pairs = set(
+                    label_data_selected_pair_labels.objects.filter(
+                        task_type=a.task_type,
+                        rule_index=a.rule_index,
+                        batch_id=a.batch_id,
+                        large_sub_batch=a.large_sub_batch,
+                    ).values_list("asset_id_1", "asset_id_2")
+                )
+                total = len(batch_pairs)
+                labeled_pairs = set(
+                    style_prompt_responses.objects.filter(
+                        task_type=a.task_type,
+                        rule_index=a.rule_index,
+                        labeler_id=request.user.username,
+                    ).values_list("asset_id_1", "asset_id_2")
+                )
+                completed = len(batch_pairs & labeled_pairs)
+
+                if total > 0 and completed >= total:
+                    from django.utils import timezone as tz
+                    a.completed_at = tz.now()
+                    a.save(update_fields=["completed_at"])
+                    continue
+
+                days_left = (a.deadline - now).days
+                if days_left < 0:
+                    deadline_status = "overdue"
+                elif days_left <= 2:
+                    deadline_status = "urgent"
+                else:
+                    deadline_status = "ok"
+
+                work_assignments.append({
+                    "id": a.id,
+                    "task_type": a.task_type,
+                    "rule_index": a.rule_index,
+                    "feature_name": rule_titles.get((a.task_type, a.rule_index), ""),
+                    "batch_id": a.batch_id,
+                    "large_sub_batch": a.large_sub_batch,
+                    "payment_amount": a.payment_amount,
+                    "bonus_amount": getattr(a, "bonus_amount", 0) or 0,
+                    "deadline": a.deadline,
+                    "deadline_status": deadline_status,
+                    "total": total,
+                    "completed": completed,
+                    "progress_pct": int((completed / total * 100) if total > 0 else 0),
+                    "is_training": False,
+                    # Pair task has no training batch yet; don't gate labeling on it.
+                    "training_required": False,
+                })
+                continue
+
             batch_asset_ids = set(
                 label_data_selected_assets_new.objects.filter(
                     task_type=a.task_type,

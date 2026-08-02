@@ -371,6 +371,58 @@ class prompt_responses(models.Model):
         db_table = "label_data.prompt_responses"
 
 
+class label_data_selected_pair_labels(models.Model):
+    """Image pairs queued for pair-comparison labeling (e.g. same_style rule 2).
+
+    **Table:** ``label_data.selected_pair_labels``
+
+    Mirrors ``label_data_selected_assets_new`` but holds two assets per row so the
+    labeler compares them side by side. Queried only via ``.values(...)`` (the
+    implicit ``id`` is never selected).
+    """
+
+    pair_id = models.BigIntegerField()
+    asset_id_1 = models.BigIntegerField()
+    asset_id_2 = models.BigIntegerField()
+    image_link_1 = models.CharField()
+    image_link_2 = models.CharField()
+    batch_id = models.SmallIntegerField()
+    large_sub_batch = models.IntegerField()
+    sub_batch = models.IntegerField()
+    task_type = models.CharField()
+    rule_index = models.SmallIntegerField()
+
+    class Meta:
+        managed = False
+        db_table = "label_data.selected_pair_labels"
+
+
+class style_prompt_responses(models.Model):
+    """Stored responses for pair-comparison labeling (e.g. same_style rule 2).
+
+    **Table:** ``label_data.style_prompt_responses``
+
+    Same columns as :class:`prompt_responses` except ``asset_id`` is replaced by
+    ``asset_id_1`` and ``asset_id_2`` (the compared pair). ``prompt_response`` is
+    one of ``same``, ``similar``, ``different``, ``duplicate``.
+    """
+
+    datetime_created = models.DateTimeField()
+    pair_id = models.BigIntegerField()
+    asset_id_1 = models.BigIntegerField()
+    asset_id_2 = models.BigIntegerField()
+    labeler_source = models.CharField()
+    labeler_id = models.CharField()
+    labeler_count = models.IntegerField()
+    task_type = models.CharField()
+    rule_index = models.SmallIntegerField()
+    prompt_response = models.CharField()
+
+    class Meta:
+        managed = False
+        db_table = "label_data.style_prompt_responses"
+
+
 class search_term_table(models.Model):
     """Search-topic terms and selection state for asset discovery.
 

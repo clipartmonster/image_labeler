@@ -405,6 +405,58 @@ function api_collect_prompt(data) {
 }
 
 
+// Pair-comparison labeling (same_style rule 2): post a style prompt response for
+// a pair of assets to label_data.style_prompt_responses.
+function api_collect_style_prompt(data) {
+
+    api_url = labelApi('collect_style_prompt/')
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    return fetch(api_url, {
+    method:'POST',
+    headers : headers,
+    mode:'cors',
+    body: JSON.stringify(data)})
+    .then(response => { return response.json() })
+    .then(data => { return console.log(data) })
+
+}
+
+
+// Remove the current labeler's style prompt response for a pair (Clear button).
+function api_remove_style_prompt(asset_id_1, asset_id_2, labeler_id, labeler_source, task_type, rule_index) {
+
+    api_url = labelApi('remove_style_prompt/')
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    data = {
+        asset_id_1:asset_id_1,
+        asset_id_2:asset_id_2,
+        labeler_id:labeler_id,
+        labeler_source:labeler_source,
+        rule_index:rule_index,
+        task_type:task_type
+    }
+
+    return fetch(api_url, {
+    method:'POST',
+    headers : headers,
+    mode:'cors',
+    body: JSON.stringify(data)})
+    .then(response => { return response.json() })
+    .then(data => { return console.log(data) })
+
+}
+
+
 function api_remove_prompt_responses(asset_id, labeler_id, labeler_source, task_type, rule_index) {
 
     api_url = labelApi('remove_prompt_responses/')

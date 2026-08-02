@@ -119,6 +119,8 @@
 
         {% if labeler_source == 'reconcile_label' %}
               {% include 'reconcile_labels.html' %}
+         {% elif task_type == 'same_style' and rule_index == 2 %}
+            {% include 'label_style_pair.html' %}
          {% else %}
             {% include 'label_art_type.html'%}
         {% endif %}

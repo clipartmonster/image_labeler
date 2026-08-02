@@ -750,6 +750,83 @@ def collect_prompt_internal_source(request: Request) -> JsonResponse:
     return JsonResponse(result, safe=False)
 
 
+@csrf_exempt
+@api_authorization
+@api_view(["POST"])
+def collect_style_prompt(request: Request) -> JsonResponse:
+    """Append a pair-comparison response (same_style rule 2) to style_prompt_responses.
+
+    Mirrors :func:`collect_prompt_internal_source` but keys on the pair
+    ``(asset_id_1, asset_id_2)`` instead of a single ``asset_id``.
+
+    Args:
+        request (Request): POST body. ``asset_id_1``, ``asset_id_2``, ``labeler_id``,
+        ``task_type``, ``rule_index``, ``prompt_response`` (same/similar/different/
+        duplicate); optional ``labeler_source`` (default ``Internal``).
+
+    Returns:
+        JsonResponse: ``status`` and ``explanation`` after saving.
+    """
+
+    pair_id = request.data.get("pair_id", None)
+    asset_id_1 = request.data.get("asset_id_1", None)
+    asset_id_2 = request.data.get("asset_id_2", None)
+    labeler_source = request.data.get("labeler_source", "Internal")
+    labeler_id = request.data.get("labeler_id", None)
+    task_type = request.data.get("task_type", None)
+    rule_index = request.data.get("rule_index", None)
+    prompt_response = request.data.get("prompt_response", None)
+
+    # Prevent duplicate labels for this labeler + pair. Admins and reconcile
+    # labels are exempt so they can re-label.
+    is_admin = hasattr(request, "user") and request.user.is_authenticated and request.user.is_superuser
+    is_reconcile = labeler_source == "reconcile_label"
+    if not is_admin and not is_reconcile:
+        already_exists = style_prompt_responses.objects.filter(
+            asset_id_1=asset_id_1, asset_id_2=asset_id_2,
+            task_type=task_type, rule_index=rule_index, labeler_id=labeler_id,
+        ).exists()
+        if already_exists:
+            return JsonResponse({"status": "skipped", "explanation": "already labeled"}, safe=False)
+
+    labeler_count = (
+        style_prompt_responses.objects.filter(
+            asset_id_1=asset_id_1, asset_id_2=asset_id_2,
+            task_type=task_type, labeler_id=labeler_id, rule_index=rule_index,
+        )
+        .order_by("-labeler_count")
+        .values_list("labeler_count", flat=True)
+        .first()
+    ) or 0
+
+    labeler_count += 1
+
+    new_entry = style_prompt_responses(
+        datetime_created=timezone.now(),
+        pair_id=pair_id,
+        asset_id_1=asset_id_1,
+        asset_id_2=asset_id_2,
+        labeler_source=labeler_source,
+        labeler_id=labeler_id,
+        labeler_count=labeler_count,
+        task_type=task_type,
+        rule_index=rule_index,
+        prompt_response=prompt_response,
+    )
+
+    new_entry.save()
+
+    _check_batch_complete(labeler_id, task_type, rule_index)
+
+    return JsonResponse(
+        {
+            "status": "success",
+            "explanation": f"added style prompt for pair ({asset_id_1}, {asset_id_2})",
+        },
+        safe=False,
+    )
+
+
 def _check_batch_complete(labeler_id, task_type, rule_index):
     """Mark the labeler's BatchAssignment as completed when every asset is
     labeled or flagged.  Called after each prompt response and flag."""
@@ -773,6 +850,31 @@ def _check_batch_complete(labeler_id, task_type, rule_index):
         completed_at__isnull=True,
     )
     for a in assignments:
+        # Pair-comparison assignments (same_style rule 2): compare labeled pairs
+        # in style_prompt_responses against the pairs in selected_pair_labels.
+        if _is_pair_task(a.task_type, a.rule_index):
+            batch_pairs = set(
+                label_data_selected_pair_labels.objects.filter(
+                    task_type=a.task_type,
+                    rule_index=a.rule_index,
+                    batch_id=a.batch_id,
+                    large_sub_batch=a.large_sub_batch,
+                ).values_list("asset_id_1", "asset_id_2")
+            )
+            if not batch_pairs:
+                continue
+            labeled_pairs = set(
+                style_prompt_responses.objects.filter(
+                    task_type=a.task_type,
+                    rule_index=a.rule_index,
+                    labeler_id=labeler_id,
+                ).values_list("asset_id_1", "asset_id_2")
+            )
+            if batch_pairs.issubset(labeled_pairs):
+                a.completed_at = tz.now()
+                a.save(update_fields=["completed_at"])
+            continue
+
         batch_asset_ids = set(
             label_data_selected_assets_new.objects.filter(
                 task_type=a.task_type,
@@ -977,6 +1079,51 @@ def remove_prompt_responses(request: Request) -> JsonResponse:
     #             + str(rule_index)
     #             + ' for asset '
     #             + str(asset_id)}
+
+    return JsonResponse(result, safe=False)
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["POST"])
+def remove_style_prompt(request: Request) -> JsonResponse:
+    """Delete the most recent ``style_prompt_responses`` row for a pair/rule.
+
+    Pair-comparison counterpart of :func:`remove_prompt_responses` (same_style
+    rule 2 Clear button): keyed on ``asset_id_1``/``asset_id_2``.
+
+    Args:
+        request (Request): POST body. ``asset_id_1``, ``asset_id_2``, ``labeler_id``,
+        ``rule_index``, ``task_type``; ``labeler_source`` (default ``Internal``).
+
+    Returns:
+        JsonResponse: ``status`` and ``explanation``.
+    """
+
+    asset_id_1 = request.data.get("asset_id_1")
+    asset_id_2 = request.data.get("asset_id_2")
+    labeler_id = request.data.get("labeler_id")
+    rule_index = request.data.get("rule_index")
+    task_type = request.data.get("task_type")
+
+    entries = style_prompt_responses.objects.filter(
+        asset_id_1=asset_id_1,
+        asset_id_2=asset_id_2,
+        labeler_id=labeler_id,
+        rule_index=rule_index,
+        task_type=task_type,
+    )
+
+    most_recent_entry = entries.order_by("-datetime_created").first()
+
+    if most_recent_entry:
+        most_recent_entry.delete()
+        result = {
+            "status": "success",
+            "explanation": f"removed style prompt for pair ({asset_id_1}, {asset_id_2}).",
+        }
+    else:
+        result = {"status": "failure", "explanation": "Entry does not exist."}
 
     return JsonResponse(result, safe=False)
 
@@ -1377,6 +1524,24 @@ def get_batch_for_viewing(request: Request) -> JsonResponse:
     return JsonResponse({"assets_w_labels": assets_w_labels}, safe=False)
 
 
+def _is_pair_task(task_type, rule_index):
+    """True for pair-comparison labeling (currently same_style rule 2).
+
+    Pair tasks serve two images per card from ``label_data.selected_pair_labels``
+    and store answers in ``label_data.style_prompt_responses`` (keyed by
+    ``asset_id_1``/``asset_id_2``) instead of the single-asset pipeline.
+    """
+    try:
+        return str(task_type) == "same_style" and int(rule_index) == 2
+    except (TypeError, ValueError):
+        return False
+
+
+def _is_pair_task_type(task_type):
+    """True for task types that are pair-based (used for session-setup stats)."""
+    return str(task_type) == "same_style"
+
+
 @csrf_exempt
 @api_authorization
 @api_view(["GET"])
@@ -1434,6 +1599,48 @@ def get_asset_batch(request: Request) -> JsonResponse:
     # Fallback: accept labeler_id from the request data (used by internal API calls)
     if not labeler_username:
         labeler_username = request.data.get("labeler_id") or request.GET.get("labeler_id")
+
+    # Pair-comparison tasks (same_style rule 2) serve image pairs instead of
+    # single assets: pull from selected_pair_labels and exclude pairs this labeler
+    # already answered in style_prompt_responses.
+    if _is_pair_task(task_type, rule_index):
+        pair_rows = list(
+            label_data_selected_pair_labels.objects.filter(
+                task_type=task_type,
+                rule_index=rule_index,
+                batch_id=batch_id,
+                large_sub_batch__in=large_sub_batch,
+            ).values(
+                "pair_id",
+                "asset_id_1",
+                "image_link_1",
+                "asset_id_2",
+                "image_link_2",
+            )
+        )
+
+        if labeler_username:
+            already_labeled_pairs = set(
+                style_prompt_responses.objects.filter(
+                    task_type=task_type,
+                    rule_index=rule_index,
+                    labeler_id=labeler_username,
+                ).values_list("asset_id_1", "asset_id_2")
+            )
+        else:
+            already_labeled_pairs = set()
+
+        asset_batch = [
+            row
+            for row in pair_rows
+            if (row["asset_id_1"], row["asset_id_2"]) not in already_labeled_pairs
+        ]
+
+        logger.debug("get_asset_batch: %d pairs in batch", len(asset_batch))
+        return JsonResponse(
+            {"batch_index": large_sub_batch, "asset_batch": asset_batch},
+            safe=False,
+        )
 
     batch_asset_ids = set(
         label_data_selected_assets_new.objects.filter(
@@ -1790,6 +1997,121 @@ def get_assets_w_rule_labels(request: Request) -> JsonResponse:
     return JsonResponse(data, safe=False)
 
 
+def _build_pair_session_options(task_type, task_types, labeler_ids, labeling_rule_options):
+    """Session-setup stats for pair-comparison tasks (same_style rule 2).
+
+    Mirrors the output shape of :func:`_build_session_options` but each row is an
+    image pair from ``label_data.selected_pair_labels``. A pair is "completed"
+    once >= 2 labelers have answered it in ``label_data.style_prompt_responses``.
+
+    Args:
+        task_type: The pair task type (e.g. ``same_style``).
+        task_types, labeler_ids, labeling_rule_options: Shared menu data already
+            built by :func:`_build_session_options`.
+
+    Returns:
+        dict with the same keys as :func:`_build_session_options`.
+    """
+    pairs_df = pd.DataFrame(
+        list(
+            label_data_selected_pair_labels.objects.filter(task_type=task_type).values(
+                "asset_id_1", "asset_id_2", "batch_id", "large_sub_batch", "rule_index"
+            )
+        )
+    )
+
+    empty = {
+        "task_types": task_types,
+        "labeler_ids": labeler_ids,
+        "batch_options": [],
+        "labeling_rule_options": labeling_rule_options.to_dict(orient="records"),
+        "rule_summary": labeling_rule_options.assign(
+            completed_labels=0, samples=0
+        ).to_dict(orient="records"),
+        "rule_index_stats": [],
+        "sub_batch_stats": [],
+    }
+    if pairs_df.empty:
+        return empty
+
+    pairs_df["task_type"] = task_type
+
+    # Per-pair completion counts: distinct labelers per (pair, rule).
+    resp_qs = (
+        style_prompt_responses.objects.filter(task_type=task_type)
+        .values("asset_id_1", "asset_id_2", "rule_index")
+        .annotate(_cnt=Count("labeler_id", distinct=True))
+    )
+    resp_df = pd.DataFrame(list(resp_qs))
+
+    if not resp_df.empty:
+        resp_df = resp_df.rename(columns={"_cnt": "count"})
+        pair_list = pairs_df.merge(
+            resp_df, on=["asset_id_1", "asset_id_2", "rule_index"], how="left"
+        ).fillna({"count": 0})
+    else:
+        pair_list = pairs_df.assign(count=0)
+
+    pair_list["completed"] = (pair_list["count"] >= 2).astype(int)
+    pair_list["one_label"] = (pair_list["count"] == 1).astype(int)
+
+    batch_options = (
+        pair_list[["batch_id"]]
+        .drop_duplicates()
+        .sort_values("batch_id")
+        .to_dict(orient="records")
+    )
+
+    rule_index_stats = (
+        pair_list.groupby(["task_type", "batch_id", "rule_index"])
+        .agg(completed_labels=("completed", "sum"), samples=("asset_id_1", "count"))
+        .astype({"completed_labels": "int"})
+        .reset_index()
+        .merge(labeling_rule_options, on=["task_type", "rule_index"], how="left")
+    )
+
+    rule_summary = (
+        rule_index_stats.groupby(["task_type", "rule_index"])
+        .agg(completed_labels=("completed_labels", "sum"), samples=("samples", "sum"))
+        .astype({"completed_labels": "int"})
+        .reset_index()
+        .merge(labeling_rule_options, on=["task_type", "rule_index"], how="left")
+    )
+
+    sub_batch_stats = (
+        pair_list.groupby(["task_type", "batch_id", "large_sub_batch", "rule_index"])
+        .agg(
+            completed_labels=("completed", "sum"),
+            one_label=("one_label", "sum"),
+            samples=("asset_id_1", "count"),
+        )
+        .astype({"completed_labels": "int"})
+        .reset_index()
+        .assign(no_labels=lambda x: x.samples - (x.completed_labels + x.one_label))
+        .assign(
+            percent_complete=lambda x: np.round(
+                (x["completed_labels"] / x["samples"]) * 100, 2
+            )
+        )
+        .assign(
+            percent_remaining=lambda x: np.round(
+                ((x["samples"] - x["completed_labels"]) / x["samples"]) * 100, 2
+            )
+        )
+        .astype({"no_labels": "int", "one_label": "int"})
+    )
+
+    return {
+        "task_types": task_types,
+        "labeler_ids": labeler_ids,
+        "batch_options": batch_options,
+        "labeling_rule_options": labeling_rule_options.to_dict(orient="records"),
+        "rule_summary": rule_summary.to_dict(orient="records"),
+        "rule_index_stats": rule_index_stats.to_dict(orient="records"),
+        "sub_batch_stats": sub_batch_stats.to_dict(orient="records"),
+    }
+
+
 def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -> dict:
     """Core data-building logic for the setup_session page.
 
@@ -1835,6 +2157,16 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
     labeling_rule_options = selected_rules.sort_values("rule_index").reset_index(
         drop=True
     )
+
+    # ── pair-comparison tasks (same_style rule 2) ────────────────────────────
+    # Source batch/sub-batch metadata and completion from the pair tables so
+    # admins can see and assign pair batches in Bulk Assign.
+    if _is_pair_task_type(task_type):
+        data = _build_pair_session_options(
+            task_type, task_types, labeler_ids, labeling_rule_options
+        )
+        cache.set(cache_key, data, timeout=120)
+        return data
 
     # ── selected assets (batch/sub-batch metadata) ──────────────────────────
     assets_qs = label_data_selected_assets_new.objects.filter(
