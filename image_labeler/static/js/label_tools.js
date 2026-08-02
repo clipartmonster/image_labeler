@@ -392,16 +392,25 @@ function submit_depth(el, value) {
     advance_after_prompt(rv)
 }
 
-// Keyboard shortcuts for the depth control (color_fill_type rule 5): digits 0-9
-// enter the layer count directly (0 = Flat, 9 = "9+"), F = Flat, G = Gradient.
-// Only acts when a depth rule_validator is active. Returns true if it handled the
-// key so the caller can skip the binary yes/no handler.
+// Skip the current asset (color_fill_type rule 5) without recording an answer,
+// mirroring the line-width Skip: just advance to the next asset.
+function skip_depth(el) {
+    var rv = el.closest('.label_option.rule_validator')
+    if (!rv) return
+    advance_after_prompt(rv)
+}
+
+// Keyboard shortcuts for the depth control (color_fill_type rule 5): digits 0-5
+// enter the layer count directly (0 = Flat, 5 = "5+"), F = Flat, G = Gradient,
+// S = Skip. Only acts when a depth rule_validator is active. Returns true if it
+// handled the key so the caller can skip the binary yes/no handler.
 function depth_hotkey(key) {
     var rv = document.querySelector('.label_option.rule_validator.active')
     if (!rv || !rv.querySelector('.depth-controls')) return false
-    if (key >= '0' && key <= '9') { submit_depth(rv, key); return true }
+    if (key >= '0' && key <= '5') { submit_depth(rv, key); return true }
     if (key === 'f' || key === 'F') { submit_depth(rv, '0'); return true }
     if (key === 'g' || key === 'G') { submit_depth(rv, 'gradient'); return true }
+    if (key === 's' || key === 'S') { skip_depth(rv); return true }
     return false
 }
 
