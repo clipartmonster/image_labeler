@@ -420,16 +420,18 @@ function depth_hotkey(key) {
 // asset_id_1/asset_id_2 from the listing's collection_data and posts to the
 // style_prompt_responses endpoint.
 function collect_style_prompt(el, response) {
+    var listing = el.closest('.listing.light.container')
+    if (!listing) return
+    // The choice buttons live inside the rule_validator; the Flag button lives
+    // outside it, so fall back to the listing's rule_validator.
     var rv = el.closest('.label_option.rule_validator')
+        || listing.querySelector('.label_option.rule_validator')
     if (!rv) return
 
-    var collection_data = rv
-        .closest('.listing.light.container')
-        .querySelector('.collection_data')
+    var collection_data = listing.querySelector('.collection_data')
 
     var data = {
         task_type: collection_data.getAttribute('task_type'),
-        pair_id: collection_data.getAttribute('pair_id'),
         asset_id_1: collection_data.getAttribute('asset_id_1'),
         asset_id_2: collection_data.getAttribute('asset_id_2'),
         labeler_source: collection_data.getAttribute('labeler_source'),

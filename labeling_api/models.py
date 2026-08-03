@@ -381,7 +381,6 @@ class label_data_selected_pair_labels(models.Model):
     implicit ``id`` is never selected).
     """
 
-    pair_id = models.BigIntegerField()
     asset_id_1 = models.BigIntegerField()
     asset_id_2 = models.BigIntegerField()
     image_link_1 = models.CharField()

@@ -768,7 +768,10 @@ def collect_style_prompt(request: Request) -> JsonResponse:
         JsonResponse: ``status`` and ``explanation`` after saving.
     """
 
-    pair_id = request.data.get("pair_id", None)
+    # selected_pair_labels has no pair_id column yet, so the served pair may not
+    # carry one. Store NULL rather than an empty string (pair_id is a nullable
+    # bigint) so submits never fail.
+    pair_id = request.data.get("pair_id") or None
     asset_id_1 = request.data.get("asset_id_1", None)
     asset_id_2 = request.data.get("asset_id_2", None)
     labeler_source = request.data.get("labeler_source", "Internal")
@@ -1611,7 +1614,6 @@ def get_asset_batch(request: Request) -> JsonResponse:
                 batch_id=batch_id,
                 large_sub_batch__in=large_sub_batch,
             ).values(
-                "pair_id",
                 "asset_id_1",
                 "image_link_1",
                 "asset_id_2",

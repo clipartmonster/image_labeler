@@ -89,7 +89,6 @@
     <div id = 'listing_container_{{forloop.counter0}}' class = 'listing light container open' style = 'display:grid; grid-template-columns: 1fr 1fr;'>
 
         <div class = 'collection_data' style = 'display:none'
-            pair_id = {{pair.pair_id}}
             asset_id_1 = {{pair.asset_id_1}}
             asset_id_2 = {{pair.asset_id_2}}
             task_type = {{collection_data.task_type}}
@@ -145,6 +144,11 @@
                     <div class = 'label_option reset button' onclick = 'reset_responses(event)'>
                         <img src="{% static 'images/reset.png'%}">
                         <h1 class = 'listing_info label'>Clear Responses</h1>
+                    </div>
+
+                    <div class = 'label_option reset button' onclick = 'collect_style_prompt(this, "flag")'>
+                        <img src="{% static 'images/lg_flag_icon.png'%}">
+                        <h1 class = 'listing_info label'>Flag Pair Issue</h1>
                     </div>
 
         </div>

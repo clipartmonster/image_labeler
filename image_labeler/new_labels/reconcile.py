@@ -148,6 +148,96 @@ new_rows.to_sql(
 )
 print(f"saved in {time.time()-t:.1f}s")
 
+# ── Pair-comparison reconciliation: same_style rule 2 ────────────────────────
+# Pair labels live in label_data.style_prompt_responses (keyed on a pair:
+# pair_id, asset_id_1, asset_id_2) with the categorical responses
+# same / similar / different / duplicate. They reconcile by plurality, exactly
+# like the yes/no and ordinal rules above: a strict winner becomes the label and
+# ties are left out for human review. Output mirrors label_data.asset_type.rule.labels
+# but keys on the pair, going to label_data.same_style.rule.labels.
+PAIR_COLS = [
+    "pair_id", "asset_id_1", "asset_id_2", "task_type", "rule_index",
+    "label", "percent_agree", "label_strength", "label_source",
+]
+PAIR_KEY = ["asset_id_1", "asset_id_2", "task_type", "rule_index"]
+VALID_STYLE_RESPONSES = ["same", "similar", "different", "duplicate"]
+
+try:
+    t = time.time()
+    style_data = pd.read_sql(
+        'SELECT * FROM "label_data.style_prompt_responses"', connection_dev
+    )
+    print(f"style_data: {len(style_data)} rows in {time.time()-t:.1f}s")
+
+    pair_current = pd.read_sql(
+        'SELECT * FROM "label_data.same_style.rule.labels"', connection_dev
+    )
+    print(f"pair_current: {len(pair_current)} rows")
+
+    print("loading pair label set (same_style rule 2)")
+    _p = style_data.assign(
+        resp=lambda x: x.prompt_response.astype(str).str.strip().str.lower()
+    )
+    _p = _p[_p.resp.isin(VALID_STYLE_RESPONSES)]
+
+    if len(_p):
+        _pc = _p.groupby(PAIR_KEY + ["resp"]).size().rename("n").reset_index()
+        _pc["max_n"] = _pc.groupby(PAIR_KEY)["n"].transform("max")
+        _ptop = _pc[_pc.n == _pc.max_n]
+        _pagg = (
+            _ptop.groupby(PAIR_KEY)
+            .agg(label=("resp", "first"), n_top=("resp", "size"), max_n=("n", "max"))
+            .reset_index()
+        )
+        _psamples = _pc.groupby(PAIR_KEY)["n"].sum().rename("samples").reset_index()
+        # Carry pair_id (constant per pair) through to the output.
+        _pid = _p.groupby(PAIR_KEY)["pair_id"].first().reset_index()
+        pair_label_set = (
+            _pagg.merge(_psamples, on=PAIR_KEY)
+            .merge(_pid, on=PAIR_KEY)
+            .query("samples > 1")
+            .query("n_top == 1")
+            .assign(
+                percent_agree=lambda x: x.max_n / x.samples,
+                label_strength=lambda x: np.where(
+                    x.max_n == x.samples, "strong", "weak"
+                ),
+                label_source="Internal",
+            )
+        )[PAIR_COLS]
+    else:
+        pair_label_set = pd.DataFrame(columns=PAIR_COLS)
+
+    if len(pair_current):
+        pair_new_rows = (
+            pair_label_set.merge(
+                pair_current[["asset_id_1", "asset_id_2", "task_type", "rule_index"]],
+                on=PAIR_KEY,
+                how="left",
+                indicator=True,
+            )
+            .query('_merge == "left_only"')
+            .drop(columns="_merge")
+        )
+    else:
+        pair_new_rows = pair_label_set
+
+    print(f"new pair rows to insert: {len(pair_new_rows)} of {len(pair_label_set)} total")
+
+    if len(pair_new_rows):
+        t = time.time()
+        pair_new_rows.to_sql(
+            "label_data.same_style.rule.labels",
+            con=engine_dev,
+            if_exists="append",
+            index=False,
+            method="multi",
+            chunksize=1000,
+        )
+        print(f"saved pair labels in {time.time()-t:.1f}s")
+except Exception as e:
+    print(f"skipped pair reconciliation (same_style rule 2): {e}")
+
 print("done")
 # prompt_data \
 #     .query('task_type == "color_fill_type"') \
