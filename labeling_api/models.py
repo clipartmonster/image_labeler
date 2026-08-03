@@ -381,6 +381,7 @@ class label_data_selected_pair_labels(models.Model):
     implicit ``id`` is never selected).
     """
 
+    pair_id = models.CharField()
     asset_id_1 = models.BigIntegerField()
     asset_id_2 = models.BigIntegerField()
     image_link_1 = models.CharField()
@@ -407,7 +408,7 @@ class style_prompt_responses(models.Model):
     """
 
     datetime_created = models.DateTimeField()
-    pair_id = models.BigIntegerField()
+    pair_id = models.CharField(null=True)
     asset_id_1 = models.BigIntegerField()
     asset_id_2 = models.BigIntegerField()
     labeler_source = models.CharField()

@@ -432,6 +432,7 @@ function collect_style_prompt(el, response) {
 
     var data = {
         task_type: collection_data.getAttribute('task_type'),
+        pair_id: collection_data.getAttribute('pair_id'),
         asset_id_1: collection_data.getAttribute('asset_id_1'),
         asset_id_2: collection_data.getAttribute('asset_id_2'),
         labeler_source: collection_data.getAttribute('labeler_source'),

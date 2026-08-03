@@ -1614,6 +1614,7 @@ def get_asset_batch(request: Request) -> JsonResponse:
                 batch_id=batch_id,
                 large_sub_batch__in=large_sub_batch,
             ).values(
+                "pair_id",
                 "asset_id_1",
                 "image_link_1",
                 "asset_id_2",
