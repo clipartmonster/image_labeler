@@ -938,6 +938,72 @@ def reconcile_labels(request):
     )
 
 
+def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by):
+    """Batch-labels page for pair-comparison tasks (same_style rule 2).
+
+    Shows each labeled pair (pair_id + both asset ids + both images) with its
+    reconciled/plurality label and a 4-way control to switch it. Data comes from
+    ``get_batch_for_viewing`` (pair branch); switches persist via ``set_pair_label``.
+    """
+    header = {
+        "Content-Type": "application/json",
+        "Authorization": settings.API_ACCESS_KEY,
+    }
+
+    response = requests.get(
+        f"{settings.LABELING_API_BASE_URL}/get_batch_for_viewing/",
+        json={"task_type": task_type, "rule_index": rule_index, "batch_index": batch_index},
+        headers=header,
+    )
+    pairs = json.loads(response.content).get("assets_w_labels", [])
+    pairs_df = pd.DataFrame(pairs)
+
+    if not pairs_df.empty and "date_labeled" in pairs_df.columns:
+        pairs_df = pairs_df.sort_values("date_labeled", ascending=(sort_by == "date_asc"))
+
+    if not pairs_df.empty and "label" in pairs_df.columns:
+        label_counts = (
+            pairs_df.groupby("label")
+            .agg(count=("label", "count"))
+            .reset_index()
+            .to_dict(orient="records")
+        )
+    else:
+        label_counts = []
+
+    # Rules (for title/prompt and the task_type dropdown).
+    rules_response = requests.get(
+        f"{settings.LABELING_API_BASE_URL}/get_labelling_rules/", json={}, headers=header
+    )
+    labelling_rules = dict(json.loads(rules_response.content))
+    rule_entry, all_rules = [], []
+    if "labelling_rules" in labelling_rules:
+        rules_df = pd.DataFrame(labelling_rules["labelling_rules"])
+        if not rules_df.empty and {"task_type", "rule_index"}.issubset(rules_df.columns):
+            rule_entry = (
+                rules_df.query("task_type == @task_type")
+                .query("rule_index == @rule_index")
+                .to_dict(orient="records")
+            )
+            all_rules = rules_df[["task_type", "rule_index", "title"]].to_dict(orient="records")
+
+    rule_entry = rule_entry[0] if rule_entry else {
+        "title": "No Rule Found", "prompt": "", "task_type": task_type, "rule_index": rule_index,
+    }
+
+    data = {
+        "rule_entry": rule_entry,
+        "all_rules": all_rules,
+        "label_counts": label_counts,
+        "total_pairs": len(pairs_df),
+        "sort_by": sort_by,
+        "pair_choices": ["same", "similar", "different", "duplicate"],
+        "batch_of_pairs": pairs_df.to_dict(orient="records") if not pairs_df.empty else [],
+    }
+
+    return render(request, "view_batch_pair_labels.html", data)
+
+
 @login_required
 def view_batch_labels(request):
 
@@ -948,6 +1014,11 @@ def view_batch_labels(request):
     sort_by = request.GET.get("sort_by", "date_desc")
 
     print(task_type, rule_index, batch_index)
+
+    # Pair-comparison tasks (same_style rule 2) are keyed on a pair with a
+    # categorical label, so they use a dedicated view + template.
+    if task_type == "same_style" and rule_index == 2:
+        return _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by)
 
     ###############################
     # get batches assets

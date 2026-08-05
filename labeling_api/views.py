@@ -1420,6 +1420,14 @@ def get_batch_for_viewing(request: Request) -> JsonResponse:
     rule_index = int(request.data.get("rule_index", None))
     batch_index = request.data.get("batch_index", None)
 
+    # Pair-comparison tasks (same_style rule 2) are keyed on a pair, not a single
+    # asset, so aggregate style_prompt_responses by pair instead.
+    if _is_pair_task(task_type, rule_index):
+        return JsonResponse(
+            {"assets_w_labels": _pair_batch_for_viewing(task_type, rule_index, batch_index)},
+            safe=False,
+        )
+
     corrected_labels = pd.DataFrame(
         list(
             modified_prompt_table.objects.filter(
@@ -1525,6 +1533,165 @@ def get_batch_for_viewing(request: Request) -> JsonResponse:
     # assets_w_labels = {}
 
     return JsonResponse({"assets_w_labels": assets_w_labels}, safe=False)
+
+
+# Valid pair-comparison responses (same_style rule 2), in display order.
+PAIR_CHOICES = ["same", "similar", "different", "duplicate"]
+
+
+def _pair_batch_for_viewing(task_type, rule_index, batch_index):
+    """Build the batch-labels rows for a pair task (same_style rule 2).
+
+    Aggregates ``style_prompt_responses`` by pair (plurality vote), attaches the
+    pair metadata + both image links from ``selected_pair_labels``, and lets any
+    reconciled/corrected label in ``label_data.same_style.rule.labels`` override
+    the live plurality (mirroring how ``modified_prompt_responses`` overrides the
+    yes/no view).
+
+    Returns:
+        list[dict]: one record per labeled pair with ``pair_id``, ``asset_id_1``,
+        ``asset_id_2``, ``image_link_1``, ``image_link_2``, ``label``,
+        ``agree_status``, ``samples`` and ``date_labeled``.
+    """
+    key = ["asset_id_1", "asset_id_2"]
+
+    responses = pd.DataFrame(
+        list(
+            style_prompt_responses.objects.filter(
+                task_type=task_type, rule_index=rule_index
+            ).values("asset_id_1", "asset_id_2", "prompt_response", "datetime_created")
+        )
+    )
+    if responses.empty:
+        return []
+
+    responses["resp"] = responses["prompt_response"].astype(str).str.strip().str.lower()
+    responses = responses[responses["resp"].isin(PAIR_CHOICES)]
+    if responses.empty:
+        return []
+
+    counts = responses.groupby(key + ["resp"]).size().rename("n").reset_index()
+    counts["max_n"] = counts.groupby(key)["n"].transform("max")
+    top = counts[counts["n"] == counts["max_n"]]
+    agg = (
+        top.groupby(key)
+        .agg(label=("resp", "min"), n_top=("resp", "size"), max_n=("n", "max"))
+        .reset_index()
+    )
+    extras = (
+        responses.groupby(key)
+        .agg(samples=("resp", "count"), date_labeled=("datetime_created", "max"))
+        .reset_index()
+    )
+    labels = agg.merge(extras, on=key)
+    labels["percent_agree"] = labels["max_n"] / labels["samples"]
+    labels["agree_status"] = np.where(labels["n_top"] > 1, "disagree", "agree")
+    labels["agree_status"] = np.where(
+        labels["max_n"] == labels["samples"], "strongly_agree", labels["agree_status"]
+    )
+    labels["agree_status"] = np.where(
+        labels["samples"] == 1, "indeterminate", labels["agree_status"]
+    )
+
+    # Pair metadata (pair_id, image links, batch) — inner join keeps only pairs
+    # that exist in the current pair set for this task/rule.
+    meta = pd.DataFrame(
+        list(
+            label_data_selected_pair_labels.objects.filter(
+                task_type=task_type, rule_index=rule_index
+            ).values(
+                "pair_id", "asset_id_1", "asset_id_2",
+                "image_link_1", "image_link_2", "batch_id",
+            )
+        )
+    )
+    if meta.empty:
+        return []
+    labels = labels.merge(meta, on=key, how="inner")
+
+    # Reconciled/corrected override from the pair labels table.
+    overrides = pd.DataFrame(
+        list(
+            label_data_same_style_rule_labels.objects.filter(
+                task_type=task_type, rule_index=rule_index
+            ).values("asset_id_1", "asset_id_2", "label")
+        )
+    )
+    if not overrides.empty:
+        overrides = overrides.rename(columns={"label": "override_label"})
+        labels = labels.merge(overrides, on=key, how="left")
+        labels["agree_status"] = np.where(
+            labels["override_label"].notna(), "potentially_corrected", labels["agree_status"]
+        )
+        labels["label"] = np.where(
+            labels["override_label"].notna(), labels["override_label"], labels["label"]
+        )
+        labels = labels.drop(columns=["override_label"])
+
+    if batch_index is not None:
+        labels = labels.query("batch_id == @batch_index")
+
+    labels["date_labeled"] = labels["date_labeled"].astype(str)
+
+    return labels[
+        [
+            "pair_id", "asset_id_1", "asset_id_2", "image_link_1", "image_link_2",
+            "label", "agree_status", "samples", "date_labeled",
+        ]
+    ].to_dict(orient="records")
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["POST"])
+def set_pair_label(request: Request) -> JsonResponse:
+    """Upsert an admin-corrected pair label into label_data.same_style.rule.labels.
+
+    Used by the batch-labels view to switch a pair's label (same_style rule 2).
+    The table has no primary key, so this deletes any existing row for the pair
+    and inserts the corrected one.
+
+    Args:
+        request (Request): POST body. ``pair_id``, ``asset_id_1``, ``asset_id_2``,
+        ``task_type``, ``rule_index``, ``label``.
+
+    Returns:
+        JsonResponse: ``status`` and ``explanation``.
+    """
+    pair_id = request.data.get("pair_id") or None
+    asset_id_1 = request.data.get("asset_id_1")
+    asset_id_2 = request.data.get("asset_id_2")
+    task_type = request.data.get("task_type")
+    rule_index = request.data.get("rule_index")
+    label = request.data.get("label")
+
+    if label not in PAIR_CHOICES:
+        return JsonResponse(
+            {"status": "failure", "explanation": f"invalid label '{label}'"}, safe=False
+        )
+
+    from django.db import connection
+
+    table = '"label_data.same_style.rule.labels"'
+    with connection.cursor() as c:
+        c.execute(
+            f"DELETE FROM {table} WHERE asset_id_1=%s AND asset_id_2=%s "
+            "AND task_type=%s AND rule_index=%s",
+            [asset_id_1, asset_id_2, task_type, rule_index],
+        )
+        c.execute(
+            f"INSERT INTO {table} "
+            "(pair_id, asset_id_1, asset_id_2, task_type, rule_index, label, "
+            "percent_agree, label_strength, label_source) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            [pair_id, asset_id_1, asset_id_2, task_type, rule_index, label,
+             1.0, "strong", "corrected"],
+        )
+
+    return JsonResponse(
+        {"status": "success", "explanation": f"set pair ({asset_id_1}, {asset_id_2}) to {label}"},
+        safe=False,
+    )
 
 
 def _is_pair_task(task_type, rule_index):

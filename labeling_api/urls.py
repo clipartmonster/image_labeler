@@ -66,6 +66,7 @@ urlpatterns = [
         views.get_batch_for_viewing,
         name="get_batch_for_viewing",
     ),
+    path("set_pair_label/", views.set_pair_label, name="set_pair_label"),
     path("get_predictions/", views.get_predictions, name="get_predictions"),
     path(
         "get_assets_w_label_issues/",

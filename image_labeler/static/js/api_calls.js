@@ -457,6 +457,28 @@ function api_remove_style_prompt(asset_id_1, asset_id_2, labeler_id, labeler_sou
 }
 
 
+// Admin correction for a pair label (same_style rule 2) from the batch-labels
+// view. Upserts into label_data.same_style.rule.labels.
+function api_set_pair_label(data) {
+
+    api_url = labelApi('set_pair_label/')
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': API_ACCESS_KEY,
+    }
+
+    return fetch(api_url, {
+    method:'POST',
+    headers : headers,
+    mode:'cors',
+    body: JSON.stringify(data)})
+    .then(response => { return response.json() })
+    .then(data => { return console.log(data) })
+
+}
+
+
 function api_remove_prompt_responses(asset_id, labeler_id, labeler_source, task_type, rule_index) {
 
     api_url = labelApi('remove_prompt_responses/')

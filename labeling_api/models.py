@@ -423,6 +423,34 @@ class style_prompt_responses(models.Model):
         db_table = "label_data.style_prompt_responses"
 
 
+class label_data_same_style_rule_labels(models.Model):
+    """Reconciled pair labels for pair-comparison tasks (same_style rule 2).
+
+    **Table:** ``label_data.same_style.rule.labels``
+
+    Pair analog of ``assets_w_rule_labels``/``label_data.asset_type.rule.labels``:
+    keys on the pair (``pair_id``, ``asset_id_1``, ``asset_id_2``) and stores the
+    consensus ``label`` (``same``/``similar``/``different``/``duplicate``). Written
+    by ``new_labels/reconcile.py`` and by admin corrections. Queried only via
+    ``.values(...)`` (the implicit ``id`` is never selected); corrections upsert via
+    raw SQL since the table has no primary key.
+    """
+
+    pair_id = models.CharField(null=True)
+    asset_id_1 = models.BigIntegerField()
+    asset_id_2 = models.BigIntegerField()
+    task_type = models.CharField()
+    rule_index = models.IntegerField()
+    label = models.CharField()
+    percent_agree = models.FloatField(null=True)
+    label_strength = models.CharField(null=True)
+    label_source = models.CharField(null=True)
+
+    class Meta:
+        managed = False
+        db_table = "label_data.same_style.rule.labels"
+
+
 class search_term_table(models.Model):
     """Search-topic terms and selection state for asset discovery.
 

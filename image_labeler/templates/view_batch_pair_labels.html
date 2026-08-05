@@ -1,0 +1,101 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+<style>
+/* Pair batch-labels layout (same_style rule 2). */
+.pair-row { display:flex; flex-direction:column; gap:8px; margin:10px; padding:12px;
+    border:1px solid #3a4a4a; border-radius:10px; background:#16292a; }
+.pair-row .pair-meta { display:flex; gap:16px; align-items:center; flex-wrap:wrap;
+    color:#c0d8d8; font-size:13px; font-family:Roboto, sans-serif; }
+.pair-row .pair-meta .pair-id { font-weight:700; color:#e8f0f0; }
+.pair-images { display:flex; gap:12px; justify-content:center; align-items:flex-start; flex-wrap:wrap; }
+.pair-images .pair-item { display:flex; flex-direction:column; align-items:center; }
+.pair-images .pair-item h4 { margin:0 0 4px; color:#a0b8b8; font-size:12px; font-family:Roboto; }
+.pair-images img { width:220px; height:auto; border-radius:6px; border:1px solid #4a5a5a; background:#fff; }
+.pair-choices { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:4px; }
+.pair-choice-btn { padding:8px 16px; border:2px solid #a0b4b4; border-radius:8px; cursor:pointer;
+    background:#fff; font-weight:700; color:#2a4a4a; font-family:Roboto, sans-serif; transition:all .12s; }
+.pair-choice-btn:hover { border-color:#409393; background:#e6f2f2; }
+.pair-choice-btn.selected { background:#2a6a6a; border-color:#8fd0d0; color:#fff; }
+</style>
+
+<div style='display:flex; flex-direction: row;'>
+
+    <div class='listing light container side_panel'>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Task Type</h1>
+            <select id="task_type_select" class='title_font field_label'>
+                {% for rule in all_rules %}
+                <option value="{{ rule.task_type }}" data-rule-index="{{ rule.rule_index }}"
+                    {% if rule.task_type == rule_entry.task_type and rule.rule_index == rule_entry.rule_index %}selected{% endif %}>
+                    {{ rule.task_type }} — {{ rule.title }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Sort by Date</h1>
+            <select id="sort_by_select" class='title_font field_label'>
+                <option value="date_desc" {% if sort_by == "date_desc" %}selected{% endif %}>Newest first</option>
+                <option value="date_asc" {% if sort_by == "date_asc" %}selected{% endif %}>Oldest first</option>
+            </select>
+        </div>
+
+        <div style='display:flex; gap:10px; flex-wrap:wrap'>
+            <h2 id=image_count class='label_option label'>total: {{total_pairs}} </h2>
+            {% for label_count in label_counts %}
+            <h2 class="label_option label"> {{ label_count.label }}: {{ label_count.count }} </h2>
+            {% endfor %}
+        </div>
+
+        <div>
+            <h1 class='label_option intro'>{{rule_entry.title}}</h1>
+            <h3 class='title view_batch'>{{rule_entry.prompt}}</h3>
+        </div>
+
+    </div>
+
+    <div class='listing light container' style='display:flex; flex-direction:column; flex:1'>
+
+        {% for pair in batch_of_pairs %}
+
+        <div class='pair-row' pair_id="{{pair.pair_id}}" asset_id_1="{{pair.asset_id_1}}"
+            asset_id_2="{{pair.asset_id_2}}" task_type="{{rule_entry.task_type}}"
+            rule_index="{{rule_entry.rule_index}}">
+
+            <div class='pair-meta'>
+                <span class='pair-id'>pair: {{pair.pair_id}}</span>
+                <span>agreement: {{pair.agree_status}}</span>
+                <span>votes: {{pair.samples}}</span>
+            </div>
+
+            <div class='pair-images'>
+                <div class='pair-item'>
+                    <h4>{{pair.asset_id_1}}</h4>
+                    <img src="{{ pair.image_link_1 }}" crossOrigin="anonymous">
+                </div>
+                <div class='pair-item'>
+                    <h4>{{pair.asset_id_2}}</h4>
+                    <img src="{{ pair.image_link_2 }}" crossOrigin="anonymous">
+                </div>
+            </div>
+
+            <div class='pair-choices'>
+                {% for choice in pair_choices %}
+                <div class='pair-choice-btn {% if pair.label == choice %}selected{% endif %}'
+                    data-choice="{{choice}}">{{choice}}</div>
+                {% endfor %}
+            </div>
+
+        </div>
+
+        {% endfor %}
+
+    </div>
+</div>
+
+{% endblock %}

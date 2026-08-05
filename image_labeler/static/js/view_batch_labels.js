@@ -48,8 +48,37 @@ if (window.location.pathname === '/label_images/view_batch_labels/') {
             });
         }
 
+        // Pair-comparison batch labels (same_style rule 2): switch a pair's label.
+        document.querySelectorAll('.pair-choice-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                switch_pair_label(btn);
+            });
+        });
+
     });
 
+}
+
+function switch_pair_label(btn) {
+    var row = btn.closest('.pair-row');
+    var choice = btn.getAttribute('data-choice');
+
+    // Highlight the chosen button within this pair only.
+    row.querySelectorAll('.pair-choice-btn').forEach(function (b) {
+        b.classList.remove('selected');
+    });
+    btn.classList.add('selected');
+
+    var data = {
+        pair_id: row.getAttribute('pair_id'),
+        asset_id_1: row.getAttribute('asset_id_1'),
+        asset_id_2: row.getAttribute('asset_id_2'),
+        task_type: row.getAttribute('task_type'),
+        rule_index: row.getAttribute('rule_index'),
+        label: choice,
+    };
+
+    api_set_pair_label(data);
 }
 
 function toggle_slider_control(slider_control){
