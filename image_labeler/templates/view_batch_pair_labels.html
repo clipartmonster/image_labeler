@@ -112,14 +112,16 @@
                 {% endif %}
             </div>
 
+            <!-- No crossOrigin here: nothing on this page reads the pixels back, and
+                 hosts that omit CORS headers reject the request outright. -->
             <div class='pair-images'>
                 <div class='pair-item'>
                     <h4>{{pair.asset_id_1}}</h4>
-                    <img src="{{ pair.image_link_1 }}" crossOrigin="anonymous">
+                    <img src="{{ pair.image_link_1 }}" loading="lazy">
                 </div>
                 <div class='pair-item'>
                     <h4>{{pair.asset_id_2}}</h4>
-                    <img src="{{ pair.image_link_2 }}" crossOrigin="anonymous">
+                    <img src="{{ pair.image_link_2 }}" loading="lazy">
                 </div>
             </div>
 
@@ -157,7 +159,16 @@
             return;
         }
 
+        // A failed image collapses to a thin box, so its rendered height can't be
+        // trusted; size the lens from the source's own aspect ratio instead.
+        if (!img.naturalWidth || !img.naturalHeight) {
+            lens.style.display = 'none';
+            return;
+        }
+
         var rect = img.getBoundingClientRect();
+        var bgW = rect.width * ZOOM;
+        var bgH = bgW * (img.naturalHeight / img.naturalWidth);
         var percX = (e.clientX - rect.left) / rect.width;
         var percY = (e.clientY - rect.top) / rect.height;
 
@@ -165,10 +176,9 @@
         lens.style.left = (e.clientX - HALF) + 'px';
         lens.style.top = (e.clientY - HALF) + 'px';
         lens.style.backgroundImage = 'url(' + img.src + ')';
-        lens.style.backgroundSize = (rect.width * ZOOM) + 'px ' + (rect.height * ZOOM) + 'px';
+        lens.style.backgroundSize = bgW + 'px ' + bgH + 'px';
         lens.style.backgroundPosition =
-            (-percX * rect.width * ZOOM + HALF) + 'px ' +
-            (-percY * rect.height * ZOOM + HALF) + 'px';
+            (-percX * bgW + HALF) + 'px ' + (-percY * bgH + HALF) + 'px';
     });
 
     list.addEventListener('mouseleave', function () { lens.style.display = 'none'; });
