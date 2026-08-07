@@ -1607,7 +1607,39 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index):
     )
     if meta.empty:
         return []
+    # selected_pair_labels can contain the same pair more than once; dedupe so the
+    # join doesn't multiply rows.
+    meta = meta.drop_duplicates(subset=key)
     labels = labels.merge(meta, on=key, how="inner")
+
+    # Model scores (joined on pair_id) so reviewers can sort by confidence and
+    # spot model/human disagreements.
+    cv = pd.DataFrame(
+        list(
+            label_data_style_cv_scores.objects.values(
+                "pair_id", "prob", "pred", "correct", "suspicion", "flag",
+                "prompt_response",
+            )
+        )
+    )
+    if not cv.empty:
+        cv = cv.drop_duplicates(subset=["pair_id"]).rename(
+            columns={
+                "prob": "cv_prob",
+                "pred": "cv_pred",
+                "correct": "cv_correct",
+                "suspicion": "cv_suspicion",
+                "flag": "cv_flag",
+                "prompt_response": "cv_scored_label",
+            }
+        )
+        cv["pair_id"] = cv["pair_id"].astype(str)
+        labels["pair_id"] = labels["pair_id"].astype(str)
+        labels = labels.merge(cv, on="pair_id", how="left")
+    else:
+        for col in ["cv_prob", "cv_pred", "cv_correct", "cv_suspicion", "cv_flag",
+                    "cv_scored_label"]:
+            labels[col] = None
 
     # Reconciled/corrected override from the pair labels table.
     overrides = pd.DataFrame(
@@ -1633,10 +1665,27 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index):
 
     labels["date_labeled"] = labels["date_labeled"].astype(str)
 
+    # The model is binary (1 = same, 0 = different); surface it as a readable
+    # label plus a disagreement flag against the label it was scored on.
+    labels["cv_model_label"] = np.where(
+        labels["cv_pred"].isna(), None,
+        np.where(labels["cv_pred"] == 1, "same", "different"),
+    )
+    labels["cv_disagrees"] = labels["cv_correct"] == False  # noqa: E712
+    # A label edited after scoring makes the stored score stale.
+    labels["cv_stale"] = (
+        labels["cv_scored_label"].notna()
+        & (labels["cv_scored_label"] != labels["label"])
+    )
+
+    labels = labels.replace({np.nan: None})
+
     return labels[
         [
             "pair_id", "asset_id_1", "asset_id_2", "image_link_1", "image_link_2",
             "label", "agree_status", "samples", "date_labeled",
+            "cv_prob", "cv_pred", "cv_model_label", "cv_flag", "cv_correct",
+            "cv_suspicion", "cv_scored_label", "cv_disagrees", "cv_stale",
         ]
     ].to_dict(orient="records")
 

@@ -19,6 +19,15 @@
     background:#fff; font-weight:700; color:#2a4a4a; font-family:Roboto, sans-serif; transition:all .12s; }
 .pair-choice-btn:hover { border-color:#409393; background:#e6f2f2; }
 .pair-choice-btn.selected { background:#2a6a6a; border-color:#8fd0d0; color:#fff; }
+/* Model CV score badges. */
+.cv-badge { font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px;
+    background:#22383a; border:1px solid #3f5a5a; color:#c0d8d8; }
+.cv-flag-ok { color:#a0e0a0; border-color:#4a8a4a; background:rgba(100,200,100,0.12); }
+.cv-flag-uncertain { color:#e8d79a; border-color:#8a7a4a; background:rgba(220,190,90,0.12); }
+.cv-flag-suspect_fp, .cv-flag-suspect_fn { color:#e0a0a0; border-color:#8a4a4a; background:rgba(200,100,100,0.12); }
+.cv-disagree { color:#ffd0d0; border-color:#a45a5a; background:rgba(200,80,80,0.2); }
+.cv-stale { color:#d8c0e8; border-color:#6a4a8a; background:rgba(150,100,200,0.15); }
+.cv-unscored { color:#8a9a9a; }
 </style>
 
 <div style='display:flex; flex-direction: row;'>
@@ -38,10 +47,22 @@
         </div>
 
         <div style='margin:5px; width:100%'>
-            <h1 class='listing_info label'>Sort by Date</h1>
+            <h1 class='listing_info label'>Sort</h1>
             <select id="sort_by_select" class='title_font field_label'>
                 <option value="date_desc" {% if sort_by == "date_desc" %}selected{% endif %}>Newest first</option>
                 <option value="date_asc" {% if sort_by == "date_asc" %}selected{% endif %}>Oldest first</option>
+                <option value="prob_desc" {% if sort_by == "prob_desc" %}selected{% endif %}>Model prob: high → low</option>
+                <option value="prob_asc" {% if sort_by == "prob_asc" %}selected{% endif %}>Model prob: low → high</option>
+                <option value="suspicion_desc" {% if sort_by == "suspicion_desc" %}selected{% endif %}>Most suspicious first</option>
+            </select>
+        </div>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Model Flag</h1>
+            <select id="flag_filter_select" class='title_font field_label'>
+                {% for option in flag_filter_options %}
+                <option value="{{ option }}" {% if flag_filter == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
             </select>
         </div>
 
@@ -71,6 +92,18 @@
                 <span class='pair-id'>pair: {{pair.pair_id}}</span>
                 <span>agreement: {{pair.agree_status}}</span>
                 <span>votes: {{pair.samples}}</span>
+                {% if pair.cv_prob != None %}
+                <span class='cv-badge'>model: {{pair.cv_model_label}} ({{pair.cv_prob|floatformat:3}})</span>
+                <span class='cv-badge cv-flag-{{pair.cv_flag}}'>{{pair.cv_flag}}</span>
+                {% if pair.cv_disagrees %}
+                <span class='cv-badge cv-disagree'>disagrees (scored: {{pair.cv_scored_label}})</span>
+                {% endif %}
+                {% if pair.cv_stale %}
+                <span class='cv-badge cv-stale'>label changed since scoring</span>
+                {% endif %}
+                {% else %}
+                <span class='cv-badge cv-unscored'>not scored</span>
+                {% endif %}
             </div>
 
             <div class='pair-images'>

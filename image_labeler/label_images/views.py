@@ -942,9 +942,12 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
     """Batch-labels page for pair-comparison tasks (same_style rule 2).
 
     Shows each labeled pair (pair_id + both asset ids + both images) with its
-    reconciled/plurality label and a 4-way control to switch it. Data comes from
-    ``get_batch_for_viewing`` (pair branch); switches persist via ``set_pair_label``.
+    reconciled/plurality label, the model's CV score, and a 4-way control to
+    switch the label. Data comes from ``get_batch_for_viewing`` (pair branch);
+    switches persist via ``set_pair_label``.
     """
+    flag_filter = request.GET.get("flag_filter", "all")
+
     header = {
         "Content-Type": "application/json",
         "Authorization": settings.API_ACCESS_KEY,
@@ -958,8 +961,28 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
     pairs = json.loads(response.content).get("assets_w_labels", [])
     pairs_df = pd.DataFrame(pairs)
 
-    if not pairs_df.empty and "date_labeled" in pairs_df.columns:
-        pairs_df = pairs_df.sort_values("date_labeled", ascending=(sort_by == "date_asc"))
+    # Filter on the model's flag / disagreements before sorting.
+    if not pairs_df.empty and flag_filter != "all":
+        if flag_filter == "disagree":
+            pairs_df = pairs_df[pairs_df.get("cv_disagrees") == True]  # noqa: E712
+        elif flag_filter == "scored":
+            pairs_df = pairs_df[pairs_df["cv_prob"].notna()]
+        elif flag_filter == "unscored":
+            pairs_df = pairs_df[pairs_df["cv_prob"].isna()]
+        else:
+            pairs_df = pairs_df[pairs_df.get("cv_flag") == flag_filter]
+
+    if not pairs_df.empty:
+        # Model-score sorts put unscored pairs last.
+        if sort_by in ("prob_desc", "prob_asc", "suspicion_desc"):
+            col = "cv_suspicion" if sort_by == "suspicion_desc" else "cv_prob"
+            pairs_df = pairs_df.sort_values(
+                col, ascending=(sort_by == "prob_asc"), na_position="last"
+            )
+        elif "date_labeled" in pairs_df.columns:
+            pairs_df = pairs_df.sort_values(
+                "date_labeled", ascending=(sort_by == "date_asc")
+            )
 
     if not pairs_df.empty and "label" in pairs_df.columns:
         label_counts = (
@@ -997,6 +1020,11 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
         "label_counts": label_counts,
         "total_pairs": len(pairs_df),
         "sort_by": sort_by,
+        "flag_filter": flag_filter,
+        "flag_filter_options": [
+            "all", "disagree", "ok", "uncertain", "suspect_fp", "suspect_fn",
+            "scored", "unscored",
+        ],
         "pair_choices": ["same", "similar", "different", "duplicate"],
         "batch_of_pairs": pairs_df.to_dict(orient="records") if not pairs_df.empty else [],
     }

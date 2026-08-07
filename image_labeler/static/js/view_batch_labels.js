@@ -48,6 +48,15 @@ if (window.location.pathname === '/label_images/view_batch_labels/') {
             });
         }
 
+        const flag_filter_select = document.getElementById('flag_filter_select');
+        if (flag_filter_select) {
+            flag_filter_select.addEventListener('change', function () {
+                const url = new URL(window.location.href);
+                url.searchParams.set('flag_filter', this.value);
+                window.location.href = url.toString();
+            });
+        }
+
         // Pair-comparison batch labels (same_style rule 2): switch a pair's label.
         document.querySelectorAll('.pair-choice-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {

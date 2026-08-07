@@ -451,6 +451,39 @@ class label_data_same_style_rule_labels(models.Model):
         db_table = "label_data.same_style.rule.labels"
 
 
+class label_data_style_cv_scores(models.Model):
+    """Cross-validated model scores for labeled pairs (same_style rule 2).
+
+    **Table:** ``label_data.style_cv_scores``
+
+    One row per ``pair_id``: ``prob``/``pred`` are the model's output, ``y`` and
+    ``prompt_response`` are the human label it was scored against, ``correct``
+    flags agreement, and ``flag`` buckets the row as ``ok``, ``uncertain``,
+    ``suspect_fp`` or ``suspect_fn``. Joined into the batch-labels view so
+    reviewers can sort by model confidence and find model/human disagreements.
+    Queried only via ``.values(...)`` (the table has no primary key).
+    """
+
+    pair_id = models.CharField()
+    asset_id_1 = models.CharField()
+    asset_id_2 = models.CharField()
+    prompt_response = models.CharField(null=True)
+    y = models.BigIntegerField(null=True)
+    prob = models.FloatField(null=True)
+    pred = models.BigIntegerField(null=True)
+    correct = models.BooleanField(null=True)
+    suspicion = models.FloatField(null=True)
+    flag = models.CharField(null=True)
+    fold = models.BigIntegerField(null=True)
+    component_id = models.CharField(null=True)
+    cv_run_id = models.CharField(null=True)
+    date_scored = models.CharField(null=True)
+
+    class Meta:
+        managed = False
+        db_table = "label_data.style_cv_scores"
+
+
 class search_term_table(models.Model):
     """Search-topic terms and selection state for asset discovery.
 
