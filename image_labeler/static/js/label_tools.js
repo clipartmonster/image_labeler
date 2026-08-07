@@ -268,13 +268,17 @@ function select_element(elements) {
 function activate_listing_container(listing_container) {
 
     // === OPTIMIZATION: Lazy Load Images ===
+    // Pair listings (same_style rule 2) show two images and get their own
+    // broken-image handling, so the single-asset wiring below is skipped for them.
+    var is_pair_listing = watch_pair_images(listing_container);
+
     // 1. Load image for current container
     let img = listing_container.querySelector('img.design');
     if (img && img.dataset.src) {
         img.src = img.dataset.src;
         img.removeAttribute('data-src');
     }
-    if (img) {
+    if (img && !is_pair_listing) {
         img.onerror = function() {
             var cd = listing_container.querySelector('.collection_data');
             var rv = listing_container.querySelector('.label_option.rule_validator');
@@ -331,6 +335,11 @@ function activate_listing_container(listing_container) {
         listing_container.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
+    // A pair whose image(s) already failed to load can't be judged, so skip it now
+    // that the container is active (advance_after_prompt needs the active classes).
+    if (is_pair_listing && listing_container.dataset.brokenImage === '1') {
+        skip_broken_pair(listing_container);
+    }
 
 }
 
@@ -446,6 +455,65 @@ function collect_style_prompt(el, response) {
     }
 
     advance_after_prompt(rv)
+}
+
+// Watch both images of a pair listing (same_style rule 2) for load failures. A
+// pair can't be compared if either image is missing, so it is recorded as
+// "broken_image" and skipped rather than shown to the labeler. Returns true when
+// the container is a pair listing.
+function watch_pair_images(listing_container) {
+    var cd = listing_container.querySelector('.collection_data')
+    if (!cd || !cd.getAttribute('asset_id_1')) return false
+
+    listing_container.querySelectorAll('img.design').forEach(function (img) {
+        // A missing link never requests anything, so no error event ever fires.
+        if (!img.getAttribute('src')) {
+            listing_container.dataset.brokenImage = '1'
+            return
+        }
+        if (!img.dataset.pairErrorWired) {
+            img.dataset.pairErrorWired = '1'
+            img.addEventListener('error', function () {
+                retry_or_break_pair(img, listing_container)
+            })
+        }
+        // An image that finished loading with no dimensions has failed. This
+        // catches failures that happened before the container became active,
+        // e.g. the host throttling the initial burst of requests.
+        if (img.complete && img.naturalWidth === 0) {
+            retry_or_break_pair(img, listing_container)
+        }
+    })
+
+    return true
+}
+
+// Give a failed pair image one more chance before writing the pair off, so a
+// transient/throttled request doesn't skip a perfectly good pair.
+function retry_or_break_pair(img, listing_container) {
+    if (img.dataset.pairRetried !== '1') {
+        img.dataset.pairRetried = '1'
+        var src = img.getAttribute('src')
+        img.removeAttribute('src')
+        img.src = src
+        return
+    }
+
+    listing_container.dataset.brokenImage = '1'
+    skip_broken_pair(listing_container)
+}
+
+// Record the current pair as unviewable and advance. Only acts on the pair the
+// labeler is actually on; others are handled when they become active.
+function skip_broken_pair(listing_container) {
+    if (!listing_container.classList.contains('active')) return
+    if (listing_container.dataset.brokenSkipped === '1') return
+
+    var rv = listing_container.querySelector('.label_option.rule_validator.active')
+    if (!rv) return
+
+    listing_container.dataset.brokenSkipped = '1'
+    collect_style_prompt(rv, 'broken_image')
 }
 
 // Keyboard shortcuts for the pair-comparison control (same_style rule 2):
