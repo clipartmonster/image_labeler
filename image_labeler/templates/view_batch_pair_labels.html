@@ -13,7 +13,13 @@
 .pair-images { display:flex; gap:12px; justify-content:center; align-items:flex-start; flex-wrap:wrap; }
 .pair-images .pair-item { display:flex; flex-direction:column; align-items:center; }
 .pair-images .pair-item h4 { margin:0 0 4px; color:#a0b8b8; font-size:12px; font-family:Roboto; }
-.pair-images img { width:220px; height:auto; border-radius:6px; border:1px solid #4a5a5a; background:#fff; }
+.pair-images img { width:220px; height:auto; border-radius:6px; border:1px solid #4a5a5a; background:#fff;
+    cursor:crosshair; }
+/* Hover magnifier, matching the lens on the labeling page. White background so
+   transparent clipart stays readable over the dark page. */
+#pairMagnifyLens { display:none; position:fixed; width:180px; height:180px; border-radius:50%;
+    border:3px solid #409393; box-shadow:0 4px 20px rgba(0,0,0,0.4); pointer-events:none;
+    z-index:1500; background-repeat:no-repeat; background-color:#fff; }
 .pair-choices { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:4px; }
 .pair-choice-btn { padding:8px 16px; border:2px solid #a0b4b4; border-radius:8px; cursor:pointer;
     background:#fff; font-weight:700; color:#2a4a4a; font-family:Roboto, sans-serif; transition:all .12s; }
@@ -80,7 +86,7 @@
 
     </div>
 
-    <div class='listing light container' style='display:flex; flex-direction:column; flex:1'>
+    <div id='pair_list' class='listing light container' style='display:flex; flex-direction:column; flex:1'>
 
         {% for pair in batch_of_pairs %}
 
@@ -130,5 +136,43 @@
 
     </div>
 </div>
+
+<div id='pairMagnifyLens'></div>
+
+<script>
+/* Hover magnifier for the pair thumbnails. Delegated from the list rather than
+   bound per image, since a batch can hold hundreds of pairs. */
+(function () {
+    var lens = document.getElementById('pairMagnifyLens');
+    var list = document.getElementById('pair_list');
+    if (!lens || !list) return;
+
+    var ZOOM = 2.5;
+    var HALF = 90;  // half of the lens size set in CSS
+
+    list.addEventListener('mousemove', function (e) {
+        var img = e.target.closest('.pair-images img');
+        if (!img) {
+            lens.style.display = 'none';
+            return;
+        }
+
+        var rect = img.getBoundingClientRect();
+        var percX = (e.clientX - rect.left) / rect.width;
+        var percY = (e.clientY - rect.top) / rect.height;
+
+        lens.style.display = 'block';
+        lens.style.left = (e.clientX - HALF) + 'px';
+        lens.style.top = (e.clientY - HALF) + 'px';
+        lens.style.backgroundImage = 'url(' + img.src + ')';
+        lens.style.backgroundSize = (rect.width * ZOOM) + 'px ' + (rect.height * ZOOM) + 'px';
+        lens.style.backgroundPosition =
+            (-percX * rect.width * ZOOM + HALF) + 'px ' +
+            (-percY * rect.height * ZOOM + HALF) + 'px';
+    });
+
+    list.addEventListener('mouseleave', function () { lens.style.display = 'none'; });
+})();
+</script>
 
 {% endblock %}
