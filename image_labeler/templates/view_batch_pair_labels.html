@@ -63,6 +63,19 @@
             </select>
         </div>
 
+        {% if cv_runs %}
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Model Run</h1>
+            <select id="cv_run_select" class='title_font field_label'>
+                {% for run in cv_runs %}
+                <option value="{{ run.cv_run_id }}" {% if run.cv_run_id == cv_run_id %}selected{% endif %}>
+                    {{ run.last_scored }} — {{ run.cv_run_id }} ({{ run.pairs }} pairs){% if forloop.first %} — latest{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+
         <div style='margin:5px; width:100%'>
             <h1 class='listing_info label'>Model Flag</h1>
             <select id="flag_filter_select" class='title_font field_label'>

@@ -947,6 +947,8 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
     switches persist via ``set_pair_label``.
     """
     flag_filter = request.GET.get("flag_filter", "all")
+    # No cv_run in the URL means "use the most recent run"; the API resolves it.
+    cv_run = request.GET.get("cv_run") or None
 
     header = {
         "Content-Type": "application/json",
@@ -955,11 +957,18 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
 
     response = requests.get(
         f"{settings.LABELING_API_BASE_URL}/get_batch_for_viewing/",
-        json={"task_type": task_type, "rule_index": rule_index, "batch_index": batch_index},
+        json={
+            "task_type": task_type,
+            "rule_index": rule_index,
+            "batch_index": batch_index,
+            "cv_run_id": cv_run,
+        },
         headers=header,
     )
-    pairs = json.loads(response.content).get("assets_w_labels", [])
-    pairs_df = pd.DataFrame(pairs)
+    batch_payload = json.loads(response.content)
+    pairs_df = pd.DataFrame(batch_payload.get("assets_w_labels", []))
+    cv_runs = batch_payload.get("cv_runs", [])
+    cv_run_id = batch_payload.get("cv_run_id")
 
     # Filter on the model's flag / disagreements before sorting.
     if not pairs_df.empty and flag_filter != "all":
@@ -1026,6 +1035,8 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
             "scored", "unscored",
         ],
         "pair_choices": ["same", "similar", "different", "duplicate"],
+        "cv_runs": cv_runs,
+        "cv_run_id": cv_run_id,
         "batch_of_pairs": pairs_df.to_dict(orient="records") if not pairs_df.empty else [],
     }
 

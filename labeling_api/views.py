@@ -1424,7 +1424,9 @@ def get_batch_for_viewing(request: Request) -> JsonResponse:
     # asset, so aggregate style_prompt_responses by pair instead.
     if _is_pair_task(task_type, rule_index):
         return JsonResponse(
-            {"assets_w_labels": _pair_batch_for_viewing(task_type, rule_index, batch_index)},
+            _pair_batch_for_viewing(
+                task_type, rule_index, batch_index, request.data.get("cv_run_id")
+            ),
             safe=False,
         )
 
@@ -1539,7 +1541,29 @@ def get_batch_for_viewing(request: Request) -> JsonResponse:
 PAIR_CHOICES = ["same", "similar", "different", "duplicate"]
 
 
-def _pair_batch_for_viewing(task_type, rule_index, batch_index):
+def _style_cv_runs():
+    """Available scoring runs in label_data.style_cv_scores, most recent first.
+
+    ``date_scored`` only records the day, so same-day runs would tie; ``cv_run_id``
+    embeds the timestamp (``cv_YYYYMMDD_HHMM``) and breaks those ties.
+
+    Returns:
+        list[dict]: ``cv_run_id``, ``last_scored`` and the distinct ``pairs`` count
+        per run, newest first.
+    """
+    runs = list(
+        label_data_style_cv_scores.objects.values("cv_run_id").annotate(
+            last_scored=Max("date_scored"),
+            pairs=Count("pair_id", distinct=True),
+        )
+    )
+    runs.sort(
+        key=lambda r: (r["last_scored"] or "", r["cv_run_id"] or ""), reverse=True
+    )
+    return runs
+
+
+def _pair_batch_for_viewing(task_type, rule_index, batch_index, cv_run_id=None):
     """Build the batch-labels rows for a pair task (same_style rule 2).
 
     Aggregates ``style_prompt_responses`` by pair (plurality vote), attaches the
@@ -1548,12 +1572,24 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index):
     the live plurality (mirroring how ``modified_prompt_responses`` overrides the
     yes/no view).
 
+    Args:
+        cv_run_id: Which scoring run in ``label_data.style_cv_scores`` to attach.
+            Unknown or omitted falls back to the most recent run.
+
     Returns:
-        list[dict]: one record per labeled pair with ``pair_id``, ``asset_id_1``,
-        ``asset_id_2``, ``image_link_1``, ``image_link_2``, ``label``,
-        ``agree_status``, ``samples`` and ``date_labeled``.
+        dict: ``assets_w_labels`` (one record per labeled pair with ``pair_id``,
+        ``asset_id_1``, ``asset_id_2``, ``image_link_1``, ``image_link_2``,
+        ``label``, ``agree_status``, ``samples``, ``date_labeled`` and the ``cv_*``
+        score fields), plus ``cv_runs`` and the resolved ``cv_run_id``.
     """
     key = ["asset_id_1", "asset_id_2"]
+
+    cv_runs = _style_cv_runs()
+    run_ids = [r["cv_run_id"] for r in cv_runs]
+    selected_run = cv_run_id if cv_run_id in run_ids else (run_ids[0] if run_ids else None)
+
+    def payload(rows):
+        return {"assets_w_labels": rows, "cv_runs": cv_runs, "cv_run_id": selected_run}
 
     responses = pd.DataFrame(
         list(
@@ -1563,12 +1599,12 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index):
         )
     )
     if responses.empty:
-        return []
+        return payload([])
 
     responses["resp"] = responses["prompt_response"].astype(str).str.strip().str.lower()
     responses = responses[responses["resp"].isin(PAIR_CHOICES)]
     if responses.empty:
-        return []
+        return payload([])
 
     counts = responses.groupby(key + ["resp"]).size().rename("n").reset_index()
     counts["max_n"] = counts.groupby(key)["n"].transform("max")
@@ -1606,23 +1642,28 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index):
         )
     )
     if meta.empty:
-        return []
+        return payload([])
     # selected_pair_labels can contain the same pair more than once; dedupe so the
     # join doesn't multiply rows.
     meta = meta.drop_duplicates(subset=key)
     labels = labels.merge(meta, on=key, how="inner")
 
     # Model scores (joined on pair_id) so reviewers can sort by confidence and
-    # spot model/human disagreements.
+    # spot model/human disagreements. Scoped to one run, since a pair can be
+    # scored by several runs.
+    cv_qs = label_data_style_cv_scores.objects.all()
+    if selected_run is not None:
+        cv_qs = cv_qs.filter(cv_run_id=selected_run)
     cv = pd.DataFrame(
         list(
-            label_data_style_cv_scores.objects.values(
+            cv_qs.values(
                 "pair_id", "prob", "pred", "correct", "suspicion", "flag",
                 "prompt_response",
             )
         )
     )
     if not cv.empty:
+        # A run can still repeat a pair; keep one row per pair.
         cv = cv.drop_duplicates(subset=["pair_id"]).rename(
             columns={
                 "prob": "cv_prob",
@@ -1680,14 +1721,16 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index):
 
     labels = labels.replace({np.nan: None})
 
-    return labels[
-        [
-            "pair_id", "asset_id_1", "asset_id_2", "image_link_1", "image_link_2",
-            "label", "agree_status", "samples", "date_labeled",
-            "cv_prob", "cv_pred", "cv_model_label", "cv_flag", "cv_correct",
-            "cv_suspicion", "cv_scored_label", "cv_disagrees", "cv_stale",
-        ]
-    ].to_dict(orient="records")
+    return payload(
+        labels[
+            [
+                "pair_id", "asset_id_1", "asset_id_2", "image_link_1", "image_link_2",
+                "label", "agree_status", "samples", "date_labeled",
+                "cv_prob", "cv_pred", "cv_model_label", "cv_flag", "cv_correct",
+                "cv_suspicion", "cv_scored_label", "cv_disagrees", "cv_stale",
+            ]
+        ].to_dict(orient="records")
+    )
 
 
 @csrf_exempt
