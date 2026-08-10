@@ -1857,21 +1857,25 @@ def _style_term_coverage():
     """
     from django.core.cache import cache
 
-    cache_key = "style_term_coverage_v1"
+    cache_key = "style_term_coverage_v2"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
     with connection.cursor() as c:
+        # COUNT(DISTINCT ...) makes repeated pair rows harmless here, so this can
+        # read selected_pair_labels directly. groups_used deliberately counts every
+        # group that appears: once a group has been drawn from it is spent, which is
+        # exactly what the "pull these groups" SQL assumes when it excludes them.
         c.execute(
             f"""
-            WITH pair_group AS ({_PAIR_GROUP_SQL}),
-                 group_term AS ({_GROUP_TERM_SQL})
+            WITH group_term AS ({_GROUP_TERM_SQL})
             SELECT gt.term,
-                   COUNT(DISTINCT pg.pair_id) AS pairs_selected,
-                   COUNT(DISTINCT pg.group_id) AS groups_used
-            FROM pair_group pg
-            JOIN group_term gt ON gt.group_id = pg.group_id
+                   COUNT(DISTINCT spl.pair_id) AS pairs_selected,
+                   COUNT(DISTINCT spl.group_id) AS groups_used
+            FROM "label_data.selected_pair_labels" spl
+            JOIN group_term gt ON gt.group_id = spl.group_id
+            WHERE spl.group_id IS NOT NULL
             GROUP BY gt.term
             """
         )
@@ -1987,7 +1991,9 @@ def get_style_analysis(request: Request) -> JsonResponse:
     """
     from label_images.text import STYLE_TERM_CATEGORIES, categories_for_term
 
-    data = request.data if request.method == "POST" else request.GET
+    # The page sends its filters as a JSON body on a GET, so request.data is the
+    # real source; the query-string fallback keeps hand-built URLs working.
+    data = request.data or request.GET
     try:
         min_support = int(data.get("min_support") or 20)
     except (TypeError, ValueError):

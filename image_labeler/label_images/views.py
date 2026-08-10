@@ -3206,7 +3206,9 @@ def style_analysis(request):
     one on the pair batch-labels page.
     """
     category = request.GET.get("category", "all")
-    priority = request.GET.get("priority", "all")
+    # Several buckets can be ticked at once (e.g. uncovered + weak), so the terms
+    # for one labeling push can be pulled together.
+    priorities = [p for p in request.GET.getlist("priority") if p in STYLE_PRIORITY_ORDER]
     sort_by = request.GET.get("sort_by", "priority")
     search = (request.GET.get("search") or "").strip().lower()
     cv_run = request.GET.get("cv_run") or None
@@ -3249,10 +3251,17 @@ def style_analysis(request):
 
     if not terms_df.empty and category != "all":
         terms_df = terms_df[terms_df["categories"].apply(lambda c: category in (c or []))]
-    if not terms_df.empty and priority != "all":
-        terms_df = terms_df[terms_df["priority"] == priority]
+    if not terms_df.empty and priorities:
+        terms_df = terms_df[terms_df["priority"].isin(priorities)]
     if not terms_df.empty and search:
         terms_df = terms_df[terms_df["term"].str.lower().str.contains(search, regex=False)]
+
+    # Built before the NaN scrub below, which turns the numeric columns into
+    # objects and would break the arithmetic.
+    group_sql, sql_summary = _style_group_sql(
+        terms_df, int(payload.get("min_support", 20) or 20),
+        {"priority": ", ".join(priorities) or "all", "type": category, "search": search or "none"},
+    )
 
     if not terms_df.empty:
         terms_df = _sort_style_terms(terms_df, sort_by)
@@ -3270,12 +3279,104 @@ def style_analysis(request):
         "cv_run_id": payload.get("cv_run_id"),
         "min_support": payload.get("min_support", 20),
         "category": category,
-        "priority": priority,
+        "priorities": priorities,
         "sort_by": sort_by,
         "search": search,
         "shown": len(terms_df),
+        "group_sql": group_sql,
+        "sql_summary": sql_summary,
     }
     return render(request, "style_analysis.html", data)
+
+
+def _sql_quote(value):
+    """Quote a string for inline SQL, doubling any embedded single quotes."""
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def _style_group_sql(terms_df, min_support, filter_labels):
+    """Build a query that pulls the groups needed to fill out the filtered terms.
+
+    A term short of ``min_support`` is topped up to it. A term already at or above
+    it -- every ``weak`` and ``ok`` term, by definition -- would otherwise ask for
+    nothing, so it gets another ``min_support`` pairs instead; picking the weak
+    bucket is a request for more data on it, not a request for zero rows.
+
+    Only groups that can actually form a pair (2+ assets) and that no existing pair
+    has drawn from are offered. Terms with no untapped groups are left out, since no
+    query can conjure supply for them.
+
+    Returns:
+        tuple[str, dict]: the SQL (empty when there's nothing to pull) and a summary
+        with the term count, estimated rows and how many terms were skipped.
+    """
+    empty = {"terms": 0, "groups": 0, "no_supply": 0}
+    if terms_df.empty:
+        return "", empty
+
+    deficit = (min_support - terms_df["support"]).clip(lower=0)
+    wanted = terms_df.assign(
+        pairs_needed=deficit.where(deficit > 0, min_support).astype(int)
+    )
+    no_supply = int((wanted["untapped_groups"] <= 0).sum())
+    wanted = wanted[wanted["untapped_groups"] > 0].sort_values("term")
+
+    if wanted.empty:
+        return "", {**empty, "no_supply": no_supply}
+
+    # With one pair per group, a term can't be filled past its untapped supply.
+    estimated = int(
+        np.minimum(wanted["pairs_needed"], wanted["untapped_groups"]).sum()
+    )
+    values = ",\n        ".join(
+        f"({_sql_quote(row.term)}, {int(row.pairs_needed)})"
+        for row in wanted.itertuples()
+    )
+
+    sql = f"""-- Style groups to label next.
+-- Filters: priority = {filter_labels['priority']} | type = {filter_labels['type']} | search = {filter_labels['search']}
+-- Goal: top each term up to {min_support} scored pairs; terms already there get
+--       another {min_support} pairs, capped by whatever supply is left.
+-- Offers only groups with 2+ assets that no existing pair has drawn from.
+-- Terms: {len(wanted)}. Expected rows: {estimated}.
+WITH params AS (
+    -- How many labeling pairs you build from a single group. Raise this and the
+    -- query pulls proportionally fewer groups per term.
+    SELECT 1::numeric AS pairs_per_group
+),
+used_groups AS (
+    SELECT DISTINCT group_id
+    FROM "label_data.selected_pair_labels"
+    WHERE group_id IS NOT NULL
+),
+target_terms (term, pairs_needed) AS (
+    VALUES
+        {values}
+),
+candidates AS (
+    SELECT DISTINCT sg.group_id, sg.term, sg.author_id, sg.group_size
+    FROM "label_data.style_groups" sg
+    JOIN target_terms tt ON tt.term = sg.term
+    WHERE sg.group_size >= 2
+      AND sg.group_id NOT IN (SELECT group_id FROM used_groups)
+),
+ranked AS (
+    -- Biggest groups first: more assets to choose a pair from.
+    SELECT c.group_id, c.term, c.author_id, c.group_size, tt.pairs_needed,
+           ROW_NUMBER() OVER (
+               PARTITION BY c.term
+               ORDER BY c.group_size DESC, c.group_id
+           ) AS rn
+    FROM candidates c
+    JOIN target_terms tt ON tt.term = c.term
+)
+SELECT r.group_id, r.term, r.author_id, r.group_size, r.pairs_needed
+FROM ranked r
+CROSS JOIN params p
+WHERE r.rn <= CEIL(r.pairs_needed / p.pairs_per_group)
+ORDER BY r.term, r.rn;"""
+
+    return sql, {"terms": len(wanted), "groups": estimated, "no_supply": no_supply}
 
 
 def _pooled_f1(terms_df):

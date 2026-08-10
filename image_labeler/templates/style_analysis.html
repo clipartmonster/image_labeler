@@ -51,6 +51,23 @@
 .sa-help { color:#8fa8a8; font-size:12px; font-family:Roboto, sans-serif;
     line-height:1.5; margin:6px 0 0; }
 .sa-empty { color:#a8c4c4; font-family:Roboto, sans-serif; padding:24px 6px; }
+
+.sa-check { display:flex; align-items:center; gap:6px; margin:4px 0; cursor:pointer;
+    font-family:Roboto, sans-serif; }
+.sa-check .sa-check-n { color:#8fa8a8; font-size:11px; margin-left:auto; }
+
+/* Generated SQL panel. */
+.sa-sql { margin:4px 0 14px; background:#122324; border:1px solid #3a4a4a;
+    border-radius:10px; padding:10px 14px; font-family:Roboto, sans-serif; }
+.sa-sql summary { cursor:pointer; color:#8fd0d0; font-weight:700; font-size:13px; }
+.sa-sql textarea { width:100%; box-sizing:border-box; margin-top:10px; min-height:260px;
+    background:#0d1a1b; color:#cfe4e4; border:1px solid #35494a; border-radius:8px;
+    padding:10px; font-family:Consolas, Menlo, monospace; font-size:11.5px;
+    line-height:1.45; white-space:pre; resize:vertical; }
+.sa-sql-btn { margin-top:8px; padding:6px 14px; background:#2a6a6a; color:#fff;
+    border:1px solid #8fd0d0; border-radius:6px; cursor:pointer; font-weight:700;
+    font-family:Roboto, sans-serif; font-size:12px; }
+.sa-sql-btn:hover { background:#348080; }
 </style>
 
 <div class='sa-layout'>
@@ -84,14 +101,15 @@
 
         <div style='margin:5px; width:100%'>
             <h1 class='listing_info label'>Priority</h1>
-            <select id="sa_priority" class='title_font field_label'>
-                <option value="all" {% if priority == "all" %}selected{% endif %}>all</option>
-                {% for row in priority_counts %}
-                <option value="{{ row.bucket }}" {% if priority == row.bucket %}selected{% endif %}>
-                    {{ row.bucket }} ({{ row.count }})
-                </option>
-                {% endfor %}
-            </select>
+            {% for row in priority_counts %}
+            <label class='sa-check'>
+                <input type="checkbox" class="sa_priority_box" value="{{ row.bucket }}"
+                    {% if row.bucket in priorities %}checked{% endif %}>
+                <span class='sa-badge sa-p-{{ row.bucket }}'>{{ row.bucket }}</span>
+                <span class='sa-check-n'>{{ row.count }}</span>
+            </label>
+            {% endfor %}
+            <p class='sa-help'>Tick none to show every bucket.</p>
         </div>
 
         <div style='margin:5px; width:100%'>
@@ -184,6 +202,39 @@
             {% endfor %}
         </div>
 
+        <details class='sa-sql' {% if group_sql %}open{% endif %}>
+            <summary>
+                SQL to pull these groups
+                {% if group_sql %}
+                — {{ sql_summary.terms }} terms, {{ sql_summary.groups }} groups
+                {% endif %}
+            </summary>
+
+            {% if group_sql %}
+            <p class='sa-help'>
+                Every term short of {{ min_support }} scored pairs gets topped up to
+                it; terms already there (all <b>weak</b> and <b>ok</b> ones) get
+                another {{ min_support }} pairs. Only unused groups with 2+ assets
+                are offered. Assumes one pair per group — if you build more, raise
+                <code>pairs_per_group</code> at the top of the query.
+                {% if sql_summary.no_supply %}
+                {{ sql_summary.no_supply }} term(s) were left out for having no
+                untapped groups left.
+                {% endif %}
+            </p>
+            <textarea id="sa_sql" readonly spellcheck="false">{{ group_sql }}</textarea>
+            <button type="button" class='sa-sql-btn' id="sa_sql_copy">Copy SQL</button>
+            {% else %}
+            <p class='sa-help'>
+                Nothing to pull for this filter.
+                {% if sql_summary.no_supply %}
+                All {{ sql_summary.no_supply }} matching term(s) have no untapped
+                groups left to draw from.
+                {% endif %}
+            </p>
+            {% endif %}
+        </details>
+
         {% if terms %}
         <table class='sa-table'>
             <colgroup>
@@ -273,9 +324,34 @@
 
     bind('sa_cv_run', 'cv_run', 'change');
     bind('sa_category', 'category', 'change');
-    bind('sa_priority', 'priority', 'change');
     bind('sa_sort_by', 'sort_by', 'change');
     bind('sa_min_support', 'min_support', 'change');
+
+    // Priority is multi-select, so every ticked box becomes its own repeat of the
+    // same query param.
+    var boxes = document.querySelectorAll('.sa_priority_box');
+    boxes.forEach(function (box) {
+        box.addEventListener('change', function () {
+            var url = new URL(window.location.href);
+            url.searchParams.delete('priority');
+            boxes.forEach(function (b) {
+                if (b.checked) url.searchParams.append('priority', b.value);
+            });
+            window.location.href = url.toString();
+        });
+    });
+
+    var copy = document.getElementById('sa_sql_copy');
+    if (copy) {
+        copy.addEventListener('click', function () {
+            var box = document.getElementById('sa_sql');
+            box.select();
+            navigator.clipboard.writeText(box.value).then(function () {
+                copy.textContent = 'Copied';
+                setTimeout(function () { copy.textContent = 'Copy SQL'; }, 1500);
+            });
+        });
+    }
 
     // Search on Enter so it doesn't reload on every keystroke.
     var search = document.getElementById('sa_search');
