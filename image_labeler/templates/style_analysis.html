@@ -1,0 +1,279 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+<style>
+/* Style analysis: one row per style term, combining catalog supply, how many
+   pairs have been labeled, and how the model scores on them. */
+.sa-layout { display:flex; flex-direction:row; align-items:flex-start; }
+.sa-main { flex:1; padding:10px 14px; min-width:0; }
+
+.sa-totals { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+.sa-stat { background:#16292a; border:1px solid #3a4a4a; border-radius:10px;
+    padding:8px 14px; font-family:Roboto, sans-serif; }
+.sa-stat .sa-stat-val { display:block; font-size:20px; font-weight:700; color:#e8f0f0; }
+.sa-stat .sa-stat-lbl { font-size:11px; text-transform:uppercase; letter-spacing:.04em;
+    color:#8fa8a8; }
+
+.sa-table { width:100%; border-collapse:collapse; font-family:Roboto, sans-serif;
+    font-size:13px; color:#d6e4e4; }
+.sa-table th { position:sticky; top:0; background:#16292a; color:#a8c4c4; text-align:right;
+    font-size:11px; text-transform:uppercase; letter-spacing:.04em; padding:8px 6px;
+    border-bottom:2px solid #3a4a4a; white-space:nowrap; z-index:2; }
+.sa-table th.sa-left, .sa-table td.sa-left { text-align:left; }
+.sa-table td { text-align:right; padding:7px 6px; border-bottom:1px solid #26383a;
+    white-space:nowrap; }
+.sa-table tbody tr:hover { background:#1b3032; }
+.sa-table .sa-term { font-weight:700; color:#fff; }
+.sa-table .sa-type { font-size:11px; color:#8fa8a8; }
+/* Group boundaries between supply / coverage / model metrics. */
+.sa-table .sa-sep { border-left:1px solid #3a4a4a; }
+.sa-muted { color:#6f8686; }
+
+.sa-badge { font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px;
+    border:1px solid #3f5a5a; background:#22383a; color:#c0d8d8; }
+.sa-p-uncovered { color:#ffd0d0; border-color:#a45a5a; background:rgba(200,80,80,0.22); }
+.sa-p-thin { color:#e8d79a; border-color:#8a7a4a; background:rgba(220,190,90,0.15); }
+.sa-p-weak { color:#f0b8b8; border-color:#8a4a4a; background:rgba(200,100,100,0.15); }
+.sa-p-ok { color:#a0e0a0; border-color:#4a8a4a; background:rgba(100,200,100,0.12); }
+.sa-p-exhausted { color:#90a0a0; border-color:#4a5a5a; background:rgba(120,140,140,0.12); }
+
+/* Weak metrics should be obvious when scanning the column. */
+.sa-bad { color:#ff9f9f; font-weight:700; }
+
+.sa-help { color:#8fa8a8; font-size:12px; font-family:Roboto, sans-serif;
+    line-height:1.5; margin:6px 0 0; }
+.sa-empty { color:#a8c4c4; font-family:Roboto, sans-serif; padding:24px 6px; }
+</style>
+
+<div class='sa-layout'>
+
+    <div class='listing light container side_panel'>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Model Run</h1>
+            {% if cv_runs %}
+            <select id="sa_cv_run" class='title_font field_label'>
+                {% for run in cv_runs %}
+                <option value="{{ run.cv_run_id }}" {% if run.cv_run_id == cv_run_id %}selected{% endif %}>
+                    {{ run.last_scored }} — {{ run.cv_run_id }} ({{ run.pairs }} pairs){% if forloop.first %} — latest{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+            {% else %}
+            <p class='sa-help'>No scoring runs found.</p>
+            {% endif %}
+        </div>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Type</h1>
+            <select id="sa_category" class='title_font field_label'>
+                <option value="all" {% if category == "all" %}selected{% endif %}>all types</option>
+                {% for option in categories %}
+                <option value="{{ option }}" {% if category == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Priority</h1>
+            <select id="sa_priority" class='title_font field_label'>
+                <option value="all" {% if priority == "all" %}selected{% endif %}>all</option>
+                {% for row in priority_counts %}
+                <option value="{{ row.bucket }}" {% if priority == row.bucket %}selected{% endif %}>
+                    {{ row.bucket }} ({{ row.count }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Sort</h1>
+            <select id="sa_sort_by" class='title_font field_label'>
+                <option value="priority" {% if sort_by == "priority" %}selected{% endif %}>What to label next</option>
+                <option value="f1_asc" {% if sort_by == "f1_asc" %}selected{% endif %}>F1: low → high</option>
+                <option value="precision_asc" {% if sort_by == "precision_asc" %}selected{% endif %}>Precision: low → high</option>
+                <option value="recall_asc" {% if sort_by == "recall_asc" %}selected{% endif %}>Recall: low → high</option>
+                <option value="support_asc" {% if sort_by == "support_asc" %}selected{% endif %}>Support: low → high</option>
+                <option value="support_desc" {% if sort_by == "support_desc" %}selected{% endif %}>Support: high → low</option>
+                <option value="untapped_desc" {% if sort_by == "untapped_desc" %}selected{% endif %}>Untapped groups: high → low</option>
+                <option value="groups_desc" {% if sort_by == "groups_desc" %}selected{% endif %}>Groups: high → low</option>
+                <option value="assets_desc" {% if sort_by == "assets_desc" %}selected{% endif %}>Assets: high → low</option>
+                <option value="selected_desc" {% if sort_by == "selected_desc" %}selected{% endif %}>Pairs labeled: high → low</option>
+                <option value="term" {% if sort_by == "term" %}selected{% endif %}>Term (A–Z)</option>
+            </select>
+        </div>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Trust metrics above</h1>
+            <input id="sa_min_support" class='title_font field_label' type="number" min="1"
+                value="{{ min_support }}" title="Scored pairs a term needs before its metrics count as trustworthy">
+        </div>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Search term</h1>
+            <input id="sa_search" class='title_font field_label' type="text" value="{{ search }}"
+                placeholder="e.g. watercolor">
+        </div>
+
+        <p class='sa-help'>
+            <b>uncovered</b> — has groups to pull from but the run never scored it.<br>
+            <b>thin</b> — scored on fewer than {{ min_support }} pairs, so the metrics
+            aren't trustworthy yet.<br>
+            <b>weak</b> — enough pairs to trust, and F1 is under 0.70.<br>
+            <b>ok</b> — enough pairs, F1 at or above 0.70.<br>
+            <b>exhausted</b> — no groups left to pull from.
+        </p>
+
+        <p class='sa-help'>
+            Metrics treat <b>same</b> as the positive class, so <b>similar</b> and
+            <b>different</b> both count as negatives. Low precision means the model
+            calls too many pairs the same style; low recall means it misses pairs
+            that are.
+        </p>
+
+        <p class='sa-help'>
+            Only pairs carrying a group_id can be traced back to a term, so support
+            here is smaller than the run's total scored pairs.
+        </p>
+
+    </div>
+
+    <div class='sa-main'>
+
+        <div class='sa-totals'>
+            <div class='sa-stat'>
+                <span class='sa-stat-val'>{{ totals.terms }}</span>
+                <span class='sa-stat-lbl'>terms</span>
+            </div>
+            <div class='sa-stat'>
+                <span class='sa-stat-val'>{{ totals.scored_terms }}</span>
+                <span class='sa-stat-lbl'>scored by this run</span>
+            </div>
+            <div class='sa-stat'>
+                <span class='sa-stat-val'>{{ totals.support }}</span>
+                <span class='sa-stat-lbl'>scored pairs</span>
+            </div>
+            <div class='sa-stat'>
+                <span class='sa-stat-val'>
+                    {% if totals.f1 != None %}{{ totals.f1|floatformat:3 }}{% else %}—{% endif %}
+                </span>
+                <span class='sa-stat-lbl'>pooled F1</span>
+            </div>
+            <div class='sa-stat'>
+                <span class='sa-stat-val'>{{ totals.untapped_groups }}</span>
+                <span class='sa-stat-lbl'>untapped groups</span>
+            </div>
+            {% for row in priority_counts %}
+            <div class='sa-stat'>
+                <span class='sa-stat-val'>{{ row.count }}</span>
+                <span class='sa-stat-lbl'>{{ row.bucket }}</span>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if terms %}
+        <table class='sa-table'>
+            <thead>
+                <tr>
+                    <th class='sa-left'>Term</th>
+                    <th class='sa-left'>Priority</th>
+                    <th class='sa-sep'>Groups</th>
+                    <th>Assets</th>
+                    <th>Pairable</th>
+                    <th class='sa-sep'>Pairs labeled</th>
+                    <th>Groups used</th>
+                    <th>Untapped</th>
+                    <th class='sa-sep'>Support</th>
+                    <th>Precision</th>
+                    <th>Recall</th>
+                    <th>F1</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in terms %}
+                <tr>
+                    <td class='sa-left'>
+                        <div class='sa-term'>{{ row.term }}</div>
+                        <div class='sa-type'>{{ row.categories|join:", " }}</div>
+                    </td>
+                    <td class='sa-left'>
+                        <span class='sa-badge sa-p-{{ row.priority }}'>{{ row.priority }}</span>
+                    </td>
+                    <td class='sa-sep'>{{ row.groups }}</td>
+                    <td>{{ row.assets }}</td>
+                    <td>{{ row.pairable_groups }}</td>
+                    <td class='sa-sep'>{{ row.pairs_selected }}</td>
+                    <td>{{ row.groups_used }}</td>
+                    <td>{{ row.untapped_groups }}</td>
+                    <td class='sa-sep'>{{ row.support }}</td>
+                    <td>
+                        {% if row.precision != None %}
+                        <span {% if row.precision < 0.7 %}class='sa-bad'{% endif %}>{{ row.precision|floatformat:3 }}</span>
+                        {% else %}<span class='sa-muted'>—</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if row.recall != None %}
+                        <span {% if row.recall < 0.7 %}class='sa-bad'{% endif %}>{{ row.recall|floatformat:3 }}</span>
+                        {% else %}<span class='sa-muted'>—</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if row.f1 != None %}
+                        <span {% if row.f1 < 0.7 %}class='sa-bad'{% endif %}>{{ row.f1|floatformat:3 }}</span>
+                        {% else %}<span class='sa-muted'>—</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p class='sa-help'>Showing {{ shown }} of {{ totals.terms }} terms.</p>
+        {% else %}
+        <p class='sa-empty'>No terms match these filters.</p>
+        {% endif %}
+
+    </div>
+</div>
+
+<script>
+/* Every control just rewrites a query param and reloads, matching how the batch
+   labels page handles its filters. */
+(function () {
+    function bind(id, param, event) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener(event, function () {
+            var url = new URL(window.location.href);
+            if (this.value === '' ) {
+                url.searchParams.delete(param);
+            } else {
+                url.searchParams.set(param, this.value);
+            }
+            window.location.href = url.toString();
+        });
+    }
+
+    bind('sa_cv_run', 'cv_run', 'change');
+    bind('sa_category', 'category', 'change');
+    bind('sa_priority', 'priority', 'change');
+    bind('sa_sort_by', 'sort_by', 'change');
+    bind('sa_min_support', 'min_support', 'change');
+
+    // Search on Enter so it doesn't reload on every keystroke.
+    var search = document.getElementById('sa_search');
+    if (search) {
+        search.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter') return;
+            var url = new URL(window.location.href);
+            if (this.value.trim() === '') {
+                url.searchParams.delete('search');
+            } else {
+                url.searchParams.set('search', this.value.trim());
+            }
+            window.location.href = url.toString();
+        });
+    }
+})();
+</script>
+
+{% endblock %}

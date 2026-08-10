@@ -12,6 +12,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Subquery, OuterRef
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
+from django.db import connection
 from rest_framework.decorators import api_view
 
 import requests
@@ -1782,6 +1783,271 @@ def set_pair_label(request: Request) -> JsonResponse:
 
     return JsonResponse(
         {"status": "success", "explanation": f"set pair ({asset_id_1}, {asset_id_2}) to {label}"},
+        safe=False,
+    )
+
+
+# Style analysis: how each style term in label_data.style_groups is doing, so
+# reviewers can spot which terms need more labeled pairs.
+#
+# The three tables link on ids rather than on the term itself:
+#   style_cv_scores.pair_id -> selected_pair_labels.pair_id
+#   selected_pair_labels.group_id -> style_groups.group_id -> term
+# Both pair tables can repeat a pair_id, so every join collapses to one row per
+# pair first; otherwise support counts (and therefore P/R/F1) come out inflated.
+
+# One group per pair and one term per group. group_id maps to exactly one term,
+# so MIN() just guarantees a single row rather than picking between values.
+_PAIR_GROUP_SQL = """
+    SELECT pair_id, MIN(group_id) AS group_id
+    FROM "label_data.selected_pair_labels"
+    WHERE group_id IS NOT NULL
+    GROUP BY pair_id
+"""
+_GROUP_TERM_SQL = 'SELECT DISTINCT group_id, term FROM "label_data.style_groups"'
+
+
+def _style_term_supply():
+    """Per-term catalog supply from label_data.style_groups.
+
+    Scanning ~6.5M rows takes ~10s, and style_groups only changes when groups are
+    rebuilt, so the result is cached.
+
+    Returns:
+        dict: term -> ``{"groups", "assets", "pairable_groups"}``, where
+        ``pairable_groups`` counts groups holding at least 2 assets (the minimum
+        needed to build a pair).
+    """
+    from django.core.cache import cache
+
+    cache_key = "style_term_supply_v1"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with connection.cursor() as c:
+        c.execute(
+            """
+            SELECT term,
+                   COUNT(DISTINCT group_id) AS groups,
+                   COUNT(DISTINCT asset_id) AS assets,
+                   COUNT(DISTINCT CASE WHEN group_size >= 2 THEN group_id END)
+                       AS pairable_groups
+            FROM "label_data.style_groups"
+            GROUP BY term
+            """
+        )
+        supply = {
+            row[0]: {"groups": row[1], "assets": row[2], "pairable_groups": row[3]}
+            for row in c.fetchall()
+        }
+
+    cache.set(cache_key, supply, timeout=60 * 60)
+    return supply
+
+
+def _style_term_coverage():
+    """Per-term counts of pairs already pulled into batches.
+
+    Cached briefly: every filter change on the page is a full reload, and this
+    only moves when new pairs are selected.
+
+    Returns:
+        dict: term -> ``{"pairs_selected", "groups_used"}``.
+    """
+    from django.core.cache import cache
+
+    cache_key = "style_term_coverage_v1"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with connection.cursor() as c:
+        c.execute(
+            f"""
+            WITH pair_group AS ({_PAIR_GROUP_SQL}),
+                 group_term AS ({_GROUP_TERM_SQL})
+            SELECT gt.term,
+                   COUNT(DISTINCT pg.pair_id) AS pairs_selected,
+                   COUNT(DISTINCT pg.group_id) AS groups_used
+            FROM pair_group pg
+            JOIN group_term gt ON gt.group_id = pg.group_id
+            GROUP BY gt.term
+            """
+        )
+        coverage = {
+            row[0]: {"pairs_selected": row[1], "groups_used": row[2]}
+            for row in c.fetchall()
+        }
+
+    cache.set(cache_key, coverage, timeout=10 * 60)
+    return coverage
+
+
+def _style_term_cv_counts(cv_run_id):
+    """Per-term confusion-matrix counts for one scoring run.
+
+    The positive class is the run's own ``y`` (1 = the pair really is the same
+    style), compared against its ``pred``. A finished run never changes, so the
+    result is cached per run.
+
+    Returns:
+        dict: term -> ``{"support", "tp", "fp", "fn", "tn"}``.
+    """
+    if not cv_run_id:
+        return {}
+
+    from django.core.cache import cache
+
+    cache_key = f"style_term_cv_counts_v1::{cv_run_id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with connection.cursor() as c:
+        c.execute(
+            f"""
+            WITH cv AS (
+                SELECT DISTINCT ON (pair_id) pair_id, y, pred
+                FROM "label_data.style_cv_scores"
+                WHERE cv_run_id = %s
+                ORDER BY pair_id
+            ),
+            pair_group AS ({_PAIR_GROUP_SQL}),
+            group_term AS ({_GROUP_TERM_SQL})
+            SELECT gt.term,
+                   COUNT(*) AS support,
+                   SUM(CASE WHEN cv.pred = 1 AND cv.y = 1 THEN 1 ELSE 0 END) AS tp,
+                   SUM(CASE WHEN cv.pred = 1 AND cv.y = 0 THEN 1 ELSE 0 END) AS fp,
+                   SUM(CASE WHEN cv.pred = 0 AND cv.y = 1 THEN 1 ELSE 0 END) AS fn,
+                   SUM(CASE WHEN cv.pred = 0 AND cv.y = 0 THEN 1 ELSE 0 END) AS tn
+            FROM cv
+            JOIN pair_group pg ON pg.pair_id = cv.pair_id
+            JOIN group_term gt ON gt.group_id = pg.group_id
+            GROUP BY gt.term
+            """,
+            [cv_run_id],
+        )
+        counts = {
+            row[0]: {
+                "support": row[1], "tp": row[2], "fp": row[3],
+                "fn": row[4], "tn": row[5],
+            }
+            for row in c.fetchall()
+        }
+
+    cache.set(cache_key, counts, timeout=30 * 60)
+    return counts
+
+
+def _ratio(numerator, denominator):
+    """Safe divide; None when there's nothing to divide by (rather than 0.0)."""
+    return (numerator / denominator) if denominator else None
+
+
+def _style_term_priority(support, f1, untapped, min_support):
+    """Bucket a term by what it needs next.
+
+    ``uncovered``  supply exists but the run never scored it -- label some pairs.
+    ``thin``       scored, but on too few pairs to trust the metrics.
+    ``weak``       enough pairs to trust, and the model is doing badly.
+    ``ok``         enough pairs, model doing well.
+    ``exhausted``  nothing left to pull from, so more labeling isn't an option.
+    """
+    if support == 0:
+        return "uncovered" if untapped > 0 else "exhausted"
+    if support < min_support:
+        return "thin"
+    if f1 is not None and f1 < 0.7:
+        return "weak"
+    return "ok"
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["GET", "POST"])
+def get_style_analysis(request: Request) -> JsonResponse:
+    """Per-term style model performance and labeling coverage.
+
+    Combines catalog supply (``label_data.style_groups``), how many pairs have
+    already been selected (``label_data.selected_pair_labels``) and the model's
+    scores for one run (``label_data.style_cv_scores``) into one row per term.
+
+    Args:
+        request (Request): ``cv_run_id`` (defaults to the most recent run) and
+            ``min_support`` (pairs needed before metrics are treated as
+            trustworthy; default 20).
+
+    Returns:
+        JsonResponse: ``terms``, ``cv_runs``, the resolved ``cv_run_id``,
+        ``min_support`` and the available ``categories``.
+
+    Frontend:
+        ``image_labeler.label_images.views.style_analysis`` -> ``style_analysis.html``.
+    """
+    from label_images.text import STYLE_TERM_CATEGORIES, categories_for_term
+
+    data = request.data if request.method == "POST" else request.GET
+    try:
+        min_support = int(data.get("min_support") or 20)
+    except (TypeError, ValueError):
+        min_support = 20
+
+    cv_runs = _style_cv_runs()
+    run_ids = [r["cv_run_id"] for r in cv_runs]
+    requested = data.get("cv_run_id")
+    selected_run = requested if requested in run_ids else (run_ids[0] if run_ids else None)
+
+    supply = _style_term_supply()
+    coverage = _style_term_coverage()
+    counts = _style_term_cv_counts(selected_run)
+
+    terms = []
+    for term in sorted(set(supply) | set(coverage) | set(counts)):
+        sup = supply.get(term, {})
+        cov = coverage.get(term, {})
+        cnt = counts.get(term, {})
+
+        tp, fp, fn = cnt.get("tp", 0), cnt.get("fp", 0), cnt.get("fn", 0)
+        support = cnt.get("support", 0)
+        precision = _ratio(tp, tp + fp)
+        recall = _ratio(tp, tp + fn)
+        f1 = (
+            _ratio(2 * precision * recall, precision + recall)
+            if precision and recall
+            else (0.0 if support else None)
+        )
+
+        pairable = sup.get("pairable_groups", 0)
+        groups_used = cov.get("groups_used", 0)
+        untapped = max(pairable - groups_used, 0)
+
+        terms.append({
+            "term": term,
+            "categories": categories_for_term(term),
+            "groups": sup.get("groups", 0),
+            "assets": sup.get("assets", 0),
+            "pairable_groups": pairable,
+            "pairs_selected": cov.get("pairs_selected", 0),
+            "groups_used": groups_used,
+            "untapped_groups": untapped,
+            "support": support,
+            "tp": tp, "fp": fp, "fn": fn, "tn": cnt.get("tn", 0),
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "accuracy": _ratio(tp + cnt.get("tn", 0), support),
+            "priority": _style_term_priority(support, f1, untapped, min_support),
+        })
+
+    return JsonResponse(
+        {
+            "terms": terms,
+            "cv_runs": cv_runs,
+            "cv_run_id": selected_run,
+            "min_support": min_support,
+            "categories": sorted(STYLE_TERM_CATEGORIES) + ["UNCATEGORIZED"],
+        },
         safe=False,
     )
 

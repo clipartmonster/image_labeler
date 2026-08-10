@@ -3191,6 +3191,130 @@ def admin_override_label(request):
 # Admin: label comparison tool
 # ---------------------------------------------------------------------------
 
+# Priority buckets in the order they should be worked through: terms with no
+# evaluation at all first, then untrustworthy metrics, then genuinely weak terms.
+STYLE_PRIORITY_ORDER = ["uncovered", "thin", "weak", "ok", "exhausted"]
+
+
+@admin_required
+def style_analysis(request):
+    """Per-term style model performance, to decide which terms to label next.
+
+    Joins the model's CV scores to the style groups behind each selected pair so
+    every term gets precision/recall/F1 plus how much untapped supply it still
+    has. Data comes from ``get_style_analysis``; the ``cv_run`` toggle mirrors the
+    one on the pair batch-labels page.
+    """
+    category = request.GET.get("category", "all")
+    priority = request.GET.get("priority", "all")
+    sort_by = request.GET.get("sort_by", "priority")
+    search = (request.GET.get("search") or "").strip().lower()
+    cv_run = request.GET.get("cv_run") or None
+    min_support = request.GET.get("min_support") or "20"
+
+    header = {
+        "Content-Type": "application/json",
+        "Authorization": settings.API_ACCESS_KEY,
+    }
+    response = requests.get(
+        f"{settings.LABELING_API_BASE_URL}/get_style_analysis/",
+        json={"cv_run_id": cv_run, "min_support": min_support},
+        headers=header,
+    )
+    payload = json.loads(response.content)
+    terms_df = pd.DataFrame(payload.get("terms", []))
+
+    # Totals are taken before filtering so the header always describes the run as
+    # a whole rather than the current slice.
+    if not terms_df.empty:
+        scored = terms_df[terms_df["support"] > 0]
+        totals = {
+            "terms": len(terms_df),
+            "scored_terms": len(scored),
+            "support": int(terms_df["support"].sum()),
+            "untapped_groups": int(terms_df["untapped_groups"].sum()),
+            # Pooled, not averaged: a mean of per-term F1 lets tiny terms
+            # dominate. This is F1 over every scored pair in the run.
+            "f1": _pooled_f1(terms_df),
+        }
+        counts = (
+            terms_df["priority"].value_counts().reindex(STYLE_PRIORITY_ORDER).fillna(0).astype(int)
+        )
+    else:
+        totals = {"terms": 0, "scored_terms": 0, "support": 0, "untapped_groups": 0, "f1": None}
+        counts = pd.Series(0, index=STYLE_PRIORITY_ORDER)
+
+    # A list rather than a dict so the template can loop it without a lookup filter.
+    priority_counts = [{"bucket": b, "count": int(counts[b])} for b in STYLE_PRIORITY_ORDER]
+
+    if not terms_df.empty and category != "all":
+        terms_df = terms_df[terms_df["categories"].apply(lambda c: category in (c or []))]
+    if not terms_df.empty and priority != "all":
+        terms_df = terms_df[terms_df["priority"] == priority]
+    if not terms_df.empty and search:
+        terms_df = terms_df[terms_df["term"].str.lower().str.contains(search, regex=False)]
+
+    if not terms_df.empty:
+        terms_df = _sort_style_terms(terms_df, sort_by)
+        # Unscored terms have null metrics, which pandas stores as NaN. NaN is not
+        # None, so it would slip past the template's empty check and print "nan".
+        terms_df = terms_df.replace({np.nan: None})
+
+    data = {
+        "terms": terms_df.to_dict(orient="records") if not terms_df.empty else [],
+        "totals": totals,
+        "priority_counts": priority_counts,
+        "priority_order": STYLE_PRIORITY_ORDER,
+        "categories": payload.get("categories", []),
+        "cv_runs": payload.get("cv_runs", []),
+        "cv_run_id": payload.get("cv_run_id"),
+        "min_support": payload.get("min_support", 20),
+        "category": category,
+        "priority": priority,
+        "sort_by": sort_by,
+        "search": search,
+        "shown": len(terms_df),
+    }
+    return render(request, "style_analysis.html", data)
+
+
+def _pooled_f1(terms_df):
+    """F1 over every scored pair, rather than a mean of per-term F1s."""
+    tp, fp, fn = (int(terms_df[c].sum()) for c in ("tp", "fp", "fn"))
+    precision = tp / (tp + fp) if (tp + fp) else 0
+    recall = tp / (tp + fn) if (tp + fn) else 0
+    if not precision or not recall:
+        return None
+    return 2 * precision * recall / (precision + recall)
+
+
+def _sort_style_terms(terms_df, sort_by):
+    """Order the term table. Metric sorts push unscored terms to the bottom."""
+    if sort_by == "priority":
+        # The default view: what to label next. Worst bucket first, and inside a
+        # bucket the terms with the most spare groups (cheapest to act on).
+        rank = {b: i for i, b in enumerate(STYLE_PRIORITY_ORDER)}
+        return terms_df.assign(_rank=terms_df["priority"].map(rank)).sort_values(
+            ["_rank", "untapped_groups"], ascending=[True, False]
+        ).drop(columns="_rank")
+
+    metric_sorts = {
+        "f1_asc": ("f1", True),
+        "precision_asc": ("precision", True),
+        "recall_asc": ("recall", True),
+        "support_asc": ("support", True),
+        "support_desc": ("support", False),
+        "untapped_desc": ("untapped_groups", False),
+        "groups_desc": ("groups", False),
+        "assets_desc": ("assets", False),
+        "selected_desc": ("pairs_selected", False),
+    }
+    if sort_by in metric_sorts:
+        col, ascending = metric_sorts[sort_by]
+        return terms_df.sort_values(col, ascending=ascending, na_position="last")
+    return terms_df.sort_values("term")
+
+
 @admin_required
 def admin_label_comparison(request):
     """Render the label comparison page."""
