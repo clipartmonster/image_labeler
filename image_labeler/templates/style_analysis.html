@@ -7,7 +7,12 @@
 /* Style analysis: one row per style term, combining catalog supply, how many
    pairs have been labeled, and how the model scores on them. */
 .sa-layout { display:flex; flex-direction:row; align-items:flex-start; }
-.sa-main { flex:1; padding:10px 14px; min-width:0; }
+/* The shared side panel is 500px wide, which leaves too little room for a
+   12-column table. These controls need nowhere near that. */
+.sa-layout .listing.light.container.side_panel { width:250px; flex:0 0 250px; }
+.sa-layout .side_panel select,
+.sa-layout .side_panel input { width:100%; box-sizing:border-box; }
+.sa-main { flex:1; padding:10px 14px; min-width:0; overflow-x:auto; }
 
 .sa-totals { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
 .sa-stat { background:#16292a; border:1px solid #3a4a4a; border-radius:10px;
@@ -16,17 +21,18 @@
 .sa-stat .sa-stat-lbl { font-size:11px; text-transform:uppercase; letter-spacing:.04em;
     color:#8fa8a8; }
 
-.sa-table { width:100%; border-collapse:collapse; font-family:Roboto, sans-serif;
-    font-size:13px; color:#d6e4e4; }
+/* Fixed layout + wrapping headers so all 12 columns fit without sideways scroll. */
+.sa-table { width:100%; table-layout:fixed; border-collapse:collapse;
+    font-family:Roboto, sans-serif; font-size:12px; color:#d6e4e4; }
 .sa-table th { position:sticky; top:0; background:#16292a; color:#a8c4c4; text-align:right;
-    font-size:11px; text-transform:uppercase; letter-spacing:.04em; padding:8px 6px;
-    border-bottom:2px solid #3a4a4a; white-space:nowrap; z-index:2; }
+    font-size:10px; text-transform:uppercase; letter-spacing:.03em; padding:7px 4px;
+    border-bottom:2px solid #3a4a4a; line-height:1.25; z-index:2; }
 .sa-table th.sa-left, .sa-table td.sa-left { text-align:left; }
-.sa-table td { text-align:right; padding:7px 6px; border-bottom:1px solid #26383a;
-    white-space:nowrap; }
+.sa-table td { text-align:right; padding:6px 4px; border-bottom:1px solid #26383a; }
 .sa-table tbody tr:hover { background:#1b3032; }
-.sa-table .sa-term { font-weight:700; color:#fff; }
-.sa-table .sa-type { font-size:11px; color:#8fa8a8; }
+.sa-table .sa-term { font-weight:700; color:#fff; word-break:break-word; }
+.sa-table .sa-type { font-size:10px; color:#8fa8a8; word-break:break-word;
+    line-height:1.25; }
 /* Group boundaries between supply / coverage / model metrics. */
 .sa-table .sa-sep { border-left:1px solid #3a4a4a; }
 .sa-muted { color:#6f8686; }
@@ -106,9 +112,14 @@
         </div>
 
         <div style='margin:5px; width:100%'>
-            <h1 class='listing_info label'>Trust metrics above</h1>
+            <h1 class='listing_info label'>Min pairs to trust metrics</h1>
             <input id="sa_min_support" class='title_font field_label' type="number" min="1"
-                value="{{ min_support }}" title="Scored pairs a term needs before its metrics count as trustworthy">
+                value="{{ min_support }}">
+            <p class='sa-help'>
+                A term scored on fewer than this many pairs is marked <b>thin</b>
+                instead of ok or weak: its precision and recall are still shown, but
+                there aren't enough pairs to draw a conclusion from them yet.
+            </p>
         </div>
 
         <div style='margin:5px; width:100%'>
@@ -175,20 +186,27 @@
 
         {% if terms %}
         <table class='sa-table'>
+            <colgroup>
+                <col style='width:19%'><col style='width:10%'>
+                <col style='width:7%'><col style='width:7%'><col style='width:7%'>
+                <col style='width:7%'><col style='width:7%'><col style='width:7%'>
+                <col style='width:6%'>
+                <col style='width:8%'><col style='width:7%'><col style='width:8%'>
+            </colgroup>
             <thead>
                 <tr>
                     <th class='sa-left'>Term</th>
                     <th class='sa-left'>Priority</th>
-                    <th class='sa-sep'>Groups</th>
-                    <th>Assets</th>
-                    <th>Pairable</th>
-                    <th class='sa-sep'>Pairs labeled</th>
-                    <th>Groups used</th>
-                    <th>Untapped</th>
-                    <th class='sa-sep'>Support</th>
-                    <th>Precision</th>
-                    <th>Recall</th>
-                    <th>F1</th>
+                    <th class='sa-sep' title='Distinct groups carrying this term'>Groups</th>
+                    <th title='Distinct assets carrying this term'>Assets</th>
+                    <th title='Groups with at least 2 assets, so a pair can be built'>Pairable</th>
+                    <th class='sa-sep' title='Pairs already pulled into batches'>Pairs labeled</th>
+                    <th title='Groups already drawn from'>Groups used</th>
+                    <th title='Pairable groups not yet drawn from'>Untapped</th>
+                    <th class='sa-sep' title='Pairs this run scored for this term'>Support</th>
+                    <th title='Of the pairs the model called same style, how many really were'>Precision</th>
+                    <th title='Of the pairs that really are the same style, how many the model found'>Recall</th>
+                    <th title='Harmonic mean of precision and recall'>F1</th>
                 </tr>
             </thead>
             <tbody>
