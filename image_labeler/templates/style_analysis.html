@@ -204,9 +204,10 @@
 
         <details class='sa-sql' {% if group_sql %}open{% endif %}>
             <summary>
-                SQL to pull these groups
+                SQL to pull assets for these terms
                 {% if group_sql %}
-                — {{ sql_summary.terms }} terms, {{ sql_summary.groups }} groups
+                — {{ sql_summary.terms }} terms, {{ sql_summary.groups }} groups,
+                {{ sql_summary.assets }} assets
                 {% endif %}
             </summary>
 
@@ -214,9 +215,11 @@
             <p class='sa-help'>
                 Every term short of {{ min_support }} scored pairs gets topped up to
                 it; terms already there (all <b>weak</b> and <b>ok</b> ones) get
-                another {{ min_support }} pairs. Only unused groups with 2+ assets
-                are offered. Assumes one pair per group — if you build more, raise
-                <code>pairs_per_group</code> at the top of the query.
+                another {{ min_support }} pairs. Returns
+                <code>group_id, author_id, term, asset_id, group_size</code> like
+                <code>style_groups</code>, two assets per group, skipping used groups
+                and stock-library credits. Assumes one pair per group — if you build
+                more, raise <code>pairs_per_group</code> at the top of the query.
                 {% if sql_summary.no_supply %}
                 {{ sql_summary.no_supply }} term(s) were left out for having no
                 untapped groups left.

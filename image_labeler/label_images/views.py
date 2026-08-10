@@ -3294,23 +3294,39 @@ def _sql_quote(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
+# Stock-library and placeholder credits that shouldn't be labeled. Matched on the
+# trimmed value, since author_id carries stray surrounding whitespace; blank and
+# null authors are dropped by the query's own check rather than listed here.
+STYLE_BAD_AUTHORS = [
+    "Unknown", "None", "rawpixel", "PNGEgg", "Extra", "simpleline",
+    "rawpixel.com", "freepik", "Creators", "CleanPNG",
+]
+
+# Two assets make a pair, so each chosen group hands over that many assets.
+ASSETS_PER_PAIR = 2
+
+
 def _style_group_sql(terms_df, min_support, filter_labels):
-    """Build a query that pulls the groups needed to fill out the filtered terms.
+    """Build a query that pulls the assets needed to fill out the filtered terms.
 
     A term short of ``min_support`` is topped up to it. A term already at or above
     it -- every ``weak`` and ``ok`` term, by definition -- would otherwise ask for
     nothing, so it gets another ``min_support`` pairs instead; picking the weak
     bucket is a request for more data on it, not a request for zero rows.
 
-    Only groups that can actually form a pair (2+ assets) and that no existing pair
-    has drawn from are offered. Terms with no untapped groups are left out, since no
-    query can conjure supply for them.
+    Rows come out shaped like ``label_data.style_groups`` (group_id, author_id,
+    term, asset_id, group_size), two assets per chosen group, so the result drops
+    straight into pair building. Only groups that can form a pair (2+ assets), that
+    no existing pair has drawn from, and that aren't credited to a stock library are
+    offered. Terms with no untapped groups are left out, since no query can conjure
+    supply for them.
 
     Returns:
         tuple[str, dict]: the SQL (empty when there's nothing to pull) and a summary
-        with the term count, estimated rows and how many terms were skipped.
+        with the term count, groups and assets it should return, and how many terms
+        were skipped for lack of supply.
     """
-    empty = {"terms": 0, "groups": 0, "no_supply": 0}
+    empty = {"terms": 0, "groups": 0, "assets": 0, "no_supply": 0}
     if terms_df.empty:
         return "", empty
 
@@ -3325,24 +3341,24 @@ def _style_group_sql(terms_df, min_support, filter_labels):
         return "", {**empty, "no_supply": no_supply}
 
     # With one pair per group, a term can't be filled past its untapped supply.
-    estimated = int(
-        np.minimum(wanted["pairs_needed"], wanted["untapped_groups"]).sum()
-    )
+    groups = int(np.minimum(wanted["pairs_needed"], wanted["untapped_groups"]).sum())
     values = ",\n        ".join(
         f"({_sql_quote(row.term)}, {int(row.pairs_needed)})"
         for row in wanted.itertuples()
     )
+    bad_authors = ", ".join(_sql_quote(a) for a in STYLE_BAD_AUTHORS)
 
-    sql = f"""-- Style groups to label next.
+    sql = f"""-- Style assets to label next, shaped like label_data.style_groups.
 -- Filters: priority = {filter_labels['priority']} | type = {filter_labels['type']} | search = {filter_labels['search']}
 -- Goal: top each term up to {min_support} scored pairs; terms already there get
 --       another {min_support} pairs, capped by whatever supply is left.
--- Offers only groups with 2+ assets that no existing pair has drawn from.
--- Terms: {len(wanted)}. Expected rows: {estimated}.
+-- Offers only unused groups with 2+ assets, skipping stock-library credits.
+-- Terms: {len(wanted)}. Expected: {groups} groups, {groups * ASSETS_PER_PAIR} assets.
 WITH params AS (
-    -- How many labeling pairs you build from a single group. Raise this and the
-    -- query pulls proportionally fewer groups per term.
-    SELECT 1::numeric AS pairs_per_group
+    -- Pairs built from one group, and assets per pair. Their product is how many
+    -- assets come back per group; raise pairs_per_group to spread over fewer groups.
+    SELECT 1::numeric AS pairs_per_group,
+           {ASSETS_PER_PAIR}::numeric AS assets_per_pair
 ),
 used_groups AS (
     SELECT DISTINCT group_id
@@ -3357,26 +3373,57 @@ candidates AS (
     SELECT DISTINCT sg.group_id, sg.term, sg.author_id, sg.group_size
     FROM "label_data.style_groups" sg
     JOIN target_terms tt ON tt.term = sg.term
-    WHERE sg.group_size >= 2
+    CROSS JOIN params p
+    -- Big enough to actually yield every pair asked of it.
+    WHERE sg.group_size >= p.pairs_per_group * p.assets_per_pair
       AND sg.group_id NOT IN (SELECT group_id FROM used_groups)
+      -- author_id carries stray whitespace, so compare the trimmed value.
+      AND sg.author_id IS NOT NULL
+      AND BTRIM(sg.author_id) <> ''
+      AND BTRIM(sg.author_id) NOT IN ({bad_authors})
 ),
-ranked AS (
+picked_groups AS (
     -- Biggest groups first: more assets to choose a pair from.
     SELECT c.group_id, c.term, c.author_id, c.group_size, tt.pairs_needed,
            ROW_NUMBER() OVER (
                PARTITION BY c.term
                ORDER BY c.group_size DESC, c.group_id
-           ) AS rn
+           ) AS group_rank
     FROM candidates c
     JOIN target_terms tt ON tt.term = c.term
+),
+chosen AS (
+    SELECT pg.*
+    FROM picked_groups pg
+    CROSS JOIN params p
+    WHERE pg.group_rank <= CEIL(pg.pairs_needed / p.pairs_per_group)
+),
+group_assets AS (
+    SELECT DISTINCT sg.group_id, sg.asset_id
+    FROM "label_data.style_groups" sg
+    WHERE sg.group_id IN (SELECT group_id FROM chosen)
+),
+ranked_assets AS (
+    SELECT ch.group_id, ch.author_id, ch.term, ga.asset_id, ch.group_size,
+           ch.group_rank,
+           ROW_NUMBER() OVER (
+               PARTITION BY ch.group_id ORDER BY ga.asset_id
+           ) AS asset_rank
+    FROM chosen ch
+    JOIN group_assets ga ON ga.group_id = ch.group_id
 )
-SELECT r.group_id, r.term, r.author_id, r.group_size, r.pairs_needed
-FROM ranked r
+SELECT ra.group_id, ra.author_id, ra.term, ra.asset_id, ra.group_size
+FROM ranked_assets ra
 CROSS JOIN params p
-WHERE r.rn <= CEIL(r.pairs_needed / p.pairs_per_group)
-ORDER BY r.term, r.rn;"""
+WHERE ra.asset_rank <= p.pairs_per_group * p.assets_per_pair
+ORDER BY ra.term, ra.group_rank, ra.asset_rank;"""
 
-    return sql, {"terms": len(wanted), "groups": estimated, "no_supply": no_supply}
+    return sql, {
+        "terms": len(wanted),
+        "groups": groups,
+        "assets": groups * ASSETS_PER_PAIR,
+        "no_supply": no_supply,
+    }
 
 
 def _pooled_f1(terms_df):
