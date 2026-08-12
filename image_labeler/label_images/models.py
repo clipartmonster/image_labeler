@@ -160,6 +160,29 @@ class TrainingLabelResponse(models.Model):
         return f"Training {self.asset_id}: {self.user_answer}"
 
 
+class TrainingExemption(models.Model):
+    """Clears one labeler to work a feature without passing its training batch.
+
+    Whoever writes the rules for a new classifier can't train on it: training sets
+    are sampled from reconciled labels, and none exist until that classifier has
+    been labeled. An exemption unlocks the work batches for that one feature rather
+    than faking a training result, so the training record stays honest.
+    """
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="training_exemptions",
+    )
+    task_type = models.CharField(max_length=100)
+    rule_index = models.IntegerField()
+    reason = models.CharField(max_length=200, blank=True)
+    granted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "task_type", "rule_index")
+
+    def __str__(self):
+        return f"{self.user.username} exempt from {self.task_type}/rule{self.rule_index}"
+
+
 # ---------------------------------------------------------------------------
 # Training batch assets — reconciled assets assigned for labeler training
 # ---------------------------------------------------------------------------

@@ -70,6 +70,8 @@ urlpatterns = [
     path('admin/training/remove/', views.admin_training_remove, name='admin_training_remove'),
     path('admin/training/assets/', views.admin_training_assets, name='admin_training_assets'),
     path('admin/training/remove_asset/', views.admin_training_remove_asset, name='admin_training_remove_asset'),
+    path('admin/training/exempt/', views.admin_training_exempt, name='admin_training_exempt'),
+    path('admin/training/exempt/remove/', views.admin_training_exempt_remove, name='admin_training_exempt_remove'),
 
     # Training completion
     path('complete_training/', views.complete_training, name='complete_training'),

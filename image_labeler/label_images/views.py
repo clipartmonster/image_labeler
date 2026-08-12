@@ -363,7 +363,7 @@ def setup_session(request):
     else:
         now = timezone.now()
         from labeling_api.models import label_data_selected_assets_new, prompt_responses, labelling_rules as LR
-        from .models import TrainingBatchAsset
+        from .models import TrainingBatchAsset, TrainingExemption
 
         rule_titles = {}
         for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
@@ -380,6 +380,11 @@ def setup_session(request):
         # Build set of features with completed training
         completed_training_features = set(
             training_qs.filter(completed_at__isnull=False)
+            .values_list("task_type", "rule_index")
+        )
+        # Features an admin has cleared this labeler to work untrained.
+        exempt_features = set(
+            TrainingExemption.objects.filter(user=request.user)
             .values_list("task_type", "rule_index")
         )
 
@@ -516,6 +521,7 @@ def setup_session(request):
 
             training_required = (
                 (a.task_type, a.rule_index) not in completed_training_features
+                and (a.task_type, a.rule_index) not in exempt_features
                 and not (a.task_type == "line_width_type" and a.rule_index == 2)
             )
             work_assignments.append({
@@ -3316,10 +3322,12 @@ def _style_group_sql(terms_df, min_support, filter_labels):
 
     Rows come out shaped like ``label_data.style_groups`` (group_id, author_id,
     term, asset_id, group_size), two assets per chosen group, so the result drops
-    straight into pair building. Only groups that can form a pair (2+ assets), that
-    no existing pair has drawn from, and that aren't credited to a stock library are
-    offered. Terms with no untapped groups are left out, since no query can conjure
-    supply for them.
+    straight into pair building. Groups already drawn from are skipped, as are stock
+    library credits and any asset that has ever appeared in a selected or labeled
+    pair -- retiring the asset rather than the exact combination is blunter, but it
+    means every pair built from these rows is guaranteed new no matter how the
+    assets are matched up. Terms with no untapped groups are left out, since no
+    query can conjure supply for them.
 
     Returns:
         tuple[str, dict]: the SQL (empty when there's nothing to pull) and a summary
@@ -3352,8 +3360,9 @@ def _style_group_sql(terms_df, min_support, filter_labels):
 -- Filters: priority = {filter_labels['priority']} | type = {filter_labels['type']} | search = {filter_labels['search']}
 -- Goal: top each term up to {min_support} scored pairs; terms already there get
 --       another {min_support} pairs, capped by whatever supply is left.
--- Offers only unused groups with 2+ assets, skipping stock-library credits.
--- Terms: {len(wanted)}. Expected: {groups} groups, {groups * ASSETS_PER_PAIR} assets.
+-- Skips groups already drawn from, stock-library credits, and any asset that has
+-- already been paired, so every pair built from these rows is new.
+-- Terms: {len(wanted)}. Up to {groups} groups and {groups * ASSETS_PER_PAIR} assets.
 WITH params AS (
     -- Pairs built from one group, and assets per pair. Their product is how many
     -- assets come back per group; raise pairs_per_group to spread over fewer groups.
@@ -3365,29 +3374,48 @@ used_groups AS (
     FROM "label_data.selected_pair_labels"
     WHERE group_id IS NOT NULL
 ),
+used_assets AS (
+    -- Every asset already sitting in a selected or labeled pair. Retiring the asset
+    -- outright is what makes a fresh pair certain: neither half can be a repeat.
+    SELECT asset_id_1 AS asset_id FROM "label_data.selected_pair_labels"
+    WHERE asset_id_1 IS NOT NULL
+    UNION
+    SELECT asset_id_2 FROM "label_data.selected_pair_labels"
+    WHERE asset_id_2 IS NOT NULL
+    UNION
+    SELECT asset_id_1 FROM "label_data.style_prompt_responses"
+    WHERE asset_id_1 IS NOT NULL
+    UNION
+    SELECT asset_id_2 FROM "label_data.style_prompt_responses"
+    WHERE asset_id_2 IS NOT NULL
+),
 target_terms (term, pairs_needed) AS (
     VALUES
         {values}
 ),
 candidates AS (
-    SELECT DISTINCT sg.group_id, sg.term, sg.author_id, sg.group_size
+    -- Counted on unpaired assets only, so a group is kept only when it can still
+    -- fill every pair asked of it from assets nobody has labeled yet.
+    SELECT sg.group_id, sg.term, sg.author_id, sg.group_size,
+           COUNT(DISTINCT sg.asset_id) AS fresh_assets
     FROM "label_data.style_groups" sg
     JOIN target_terms tt ON tt.term = sg.term
-    CROSS JOIN params p
-    -- Big enough to actually yield every pair asked of it.
-    WHERE sg.group_size >= p.pairs_per_group * p.assets_per_pair
-      AND sg.group_id NOT IN (SELECT group_id FROM used_groups)
+    WHERE sg.group_id NOT IN (SELECT group_id FROM used_groups)
+      AND sg.asset_id NOT IN (SELECT asset_id FROM used_assets)
       -- author_id carries stray whitespace, so compare the trimmed value.
       AND sg.author_id IS NOT NULL
       AND BTRIM(sg.author_id) <> ''
       AND BTRIM(sg.author_id) NOT IN ({bad_authors})
+    GROUP BY sg.group_id, sg.term, sg.author_id, sg.group_size
+    HAVING COUNT(DISTINCT sg.asset_id)
+           >= (SELECT pairs_per_group * assets_per_pair FROM params)
 ),
 picked_groups AS (
-    -- Biggest groups first: more assets to choose a pair from.
+    -- Most unpaired assets first: more room to choose a pair from.
     SELECT c.group_id, c.term, c.author_id, c.group_size, tt.pairs_needed,
            ROW_NUMBER() OVER (
                PARTITION BY c.term
-               ORDER BY c.group_size DESC, c.group_id
+               ORDER BY c.fresh_assets DESC, c.group_id
            ) AS group_rank
     FROM candidates c
     JOIN target_terms tt ON tt.term = c.term
@@ -3402,6 +3430,7 @@ group_assets AS (
     SELECT DISTINCT sg.group_id, sg.asset_id
     FROM "label_data.style_groups" sg
     WHERE sg.group_id IN (SELECT group_id FROM chosen)
+      AND sg.asset_id NOT IN (SELECT asset_id FROM used_assets)
 ),
 ranked_assets AS (
     SELECT ch.group_id, ch.author_id, ch.term, ga.asset_id, ch.group_size,
@@ -3958,7 +3987,7 @@ def complete_training(request):
 def admin_manage_training(request):
     """Admin page to manage training sets per user."""
     from django.contrib.auth.models import User
-    from .models import BatchAssignment, TrainingBatchAsset
+    from .models import BatchAssignment, TrainingBatchAsset, TrainingExemption
 
     labeler_users = list(
         User.objects.filter(is_superuser=False, is_staff=True)
@@ -3974,6 +4003,18 @@ def admin_manage_training(request):
         ])
         .values("task_type", "rule_index", "title")
         .order_by("task_type", "rule_index")
+    )
+    # Exemptions cover every rule, not just the five that support training sets --
+    # the whole point is features too new to have a training set at all.
+    all_rules = list(
+        LR.objects.exclude(task_type="color_type")
+        .values("task_type", "rule_index", "title")
+        .order_by("task_type", "rule_index")
+    )
+    exemptions = list(
+        TrainingExemption.objects.select_related("user")
+        .values("id", "user__username", "task_type", "rule_index", "reason", "granted_at")
+        .order_by("user__username", "task_type", "rule_index")
     )
 
     training_assignments = list(
@@ -3995,7 +4036,9 @@ def admin_manage_training(request):
     return render(request, "admin_manage_training.html", {
         "labeler_users_json": json.dumps(labeler_users),
         "rules_json": json.dumps(rules, default=str),
+        "all_rules_json": json.dumps(all_rules, default=str),
         "training_assignments_json": json.dumps(training_assignments, default=str),
+        "exemptions_json": json.dumps(exemptions, default=str),
     })
 
 
@@ -4112,6 +4155,67 @@ def admin_training_remove(request):
     assignment.delete()
 
     return JsonResponse({"ok": True, "deleted_assets": asset_count})
+
+
+@admin_required_ajax
+def admin_training_exempt(request):
+    """AJAX: clear a labeler to work a feature without doing its training."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    from django.contrib.auth.models import User
+    from .models import TrainingExemption
+
+    data = json.loads(request.body)
+    username = data.get("username")
+    task_type = data.get("task_type")
+    reason = (data.get("reason") or "").strip()[:200]
+    try:
+        rule_index = int(data.get("rule_index"))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "A rule is required"}, status=400)
+
+    if not username or not task_type:
+        return JsonResponse({"error": "A labeler and task type are required"}, status=400)
+
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return JsonResponse({"error": f"User '{username}' not found"}, status=404)
+
+    exemption, created = TrainingExemption.objects.get_or_create(
+        user=user, task_type=task_type, rule_index=rule_index,
+        defaults={"reason": reason},
+    )
+    if not created and reason and exemption.reason != reason:
+        exemption.reason = reason
+        exemption.save(update_fields=["reason"])
+
+    return JsonResponse({
+        "ok": True,
+        "created": created,
+        "id": exemption.id,
+        "username": username,
+        "task_type": task_type,
+        "rule_index": rule_index,
+        "reason": exemption.reason,
+        "granted_at": exemption.granted_at.strftime("%Y-%m-%d %H:%M"),
+    })
+
+
+@admin_required_ajax
+def admin_training_exempt_remove(request):
+    """AJAX: revoke a training exemption, re-locking the feature for that labeler."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    from .models import TrainingExemption
+
+    data = json.loads(request.body)
+    deleted, _ = TrainingExemption.objects.filter(pk=data.get("exemption_id")).delete()
+    if not deleted:
+        return JsonResponse({"error": "Exemption not found"}, status=404)
+    return JsonResponse({"ok": True})
 
 
 @admin_required_ajax

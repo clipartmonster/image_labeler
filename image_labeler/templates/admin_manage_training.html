@@ -50,6 +50,44 @@
         <p id="createTrainStatus" class="wf-muted" style="min-height:1.4em; margin-top:8px;"></p>
     </div>
 
+    <!-- Skip Training -->
+    <div class="wf-card" style="margin-bottom:20px;">
+        <h2 style="margin-top:0; font-size:1rem;">Skip Training</h2>
+        <p class="wf-muted" style="margin:0 0 12px;">
+            Unlocks a labeler's work batches for one rule without them taking its
+            training. Use it for whoever is writing the rules for a new classifier,
+            since no training set can exist until that classifier has been labeled.
+            Every rule is listed here, not just the five that support training sets.
+        </p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Labeler</label>
+                <select id="exemptLabeler" class="wf-select" style="width:160px;">
+                    <option value="">-- select --</option>
+                </select>
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Task Type</label>
+                <select id="exemptTaskType" class="wf-select" style="width:160px;" onchange="onExemptTaskTypeChange()">
+                    <option value="">-- select --</option>
+                </select>
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Rule</label>
+                <select id="exemptRule" class="wf-select" style="width:200px;">
+                    <option value="">-- select task type first --</option>
+                </select>
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Reason (optional)</label>
+                <input id="exemptReason" type="text" maxlength="200" class="wf-input" style="width:220px;" placeholder="e.g. authoring the rules">
+            </div>
+            <button class="wf-btn wf-btn-primary" onclick="grantExemption()" style="height:36px;">Allow Skip</button>
+        </div>
+        <p id="exemptStatus" class="wf-muted" style="min-height:1.4em; margin-top:8px;"></p>
+        <div id="exemptTable" style="margin-top:8px;"></div>
+    </div>
+
     <!-- Existing Training Sets -->
     <div class="wf-card">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
@@ -78,42 +116,157 @@
 <script>
 var _labelers = {{ labeler_users_json|safe }};
 var _rules = {{ rules_json|safe }};
+var _allRules = {{ all_rules_json|safe }};
 var _trainingSets = {{ training_assignments_json|safe }};
+var _exemptions = {{ exemptions_json|safe }};
 
 function getCsrfToken() { var c = document.cookie.match(/csrftoken=([^;]+)/); return c ? c[1] : ''; }
 
 (function init() {
     var labelerSel = document.getElementById('trainLabeler');
     var filterSel = document.getElementById('filterLabeler');
+    var exemptSel = document.getElementById('exemptLabeler');
     _labelers.forEach(function(u) {
         var o = document.createElement('option'); o.value = u; o.textContent = u;
         labelerSel.appendChild(o);
-        var o2 = o.cloneNode(true);
-        filterSel.appendChild(o2);
+        filterSel.appendChild(o.cloneNode(true));
+        exemptSel.appendChild(o.cloneNode(true));
     });
 
-    var ttSet = new Set(_rules.map(function(r) { return r.task_type; }));
-    var ttSel = document.getElementById('trainTaskType');
-    ttSet.forEach(function(tt) {
-        var o = document.createElement('option'); o.value = tt; o.textContent = tt;
-        ttSel.appendChild(o);
-    });
+    fillTaskTypes('trainTaskType', _rules);
+    fillTaskTypes('exemptTaskType', _allRules);
 
     renderTrainingSets();
+    renderExemptions();
 })();
 
-function onTrainTaskTypeChange() {
-    var tt = document.getElementById('trainTaskType').value;
-    var ruleSel = document.getElementById('trainRule');
-    ruleSel.innerHTML = '<option value="">-- select --</option>';
-    _rules.forEach(function(r) {
-        if (r.task_type === tt) {
-            var o = document.createElement('option');
-            o.value = r.rule_index;
-            o.textContent = 'Rule ' + r.rule_index + (r.title ? ' — ' + r.title : '');
-            ruleSel.appendChild(o);
-        }
+function fillTaskTypes(selectId, rules) {
+    var sel = document.getElementById(selectId);
+    new Set(rules.map(function(r) { return r.task_type; })).forEach(function(tt) {
+        var o = document.createElement('option'); o.value = tt; o.textContent = tt;
+        sel.appendChild(o);
     });
+}
+
+function fillRules(selectId, rules, taskType) {
+    var sel = document.getElementById(selectId);
+    sel.innerHTML = '<option value="">-- select --</option>';
+    rules.forEach(function(r) {
+        if (r.task_type !== taskType) return;
+        var o = document.createElement('option');
+        o.value = r.rule_index;
+        o.textContent = 'Rule ' + r.rule_index + (r.title ? ' \u2014 ' + r.title : '');
+        sel.appendChild(o);
+    });
+}
+
+function ruleTitle(rules, taskType, ruleIndex) {
+    var found = '';
+    rules.forEach(function(r) {
+        if (r.task_type === taskType && r.rule_index == ruleIndex) found = r.title || '';
+    });
+    return found;
+}
+
+function onExemptTaskTypeChange() {
+    fillRules('exemptRule', _allRules, document.getElementById('exemptTaskType').value);
+}
+
+function grantExemption() {
+    var username = document.getElementById('exemptLabeler').value;
+    var taskType = document.getElementById('exemptTaskType').value;
+    var ruleIndex = document.getElementById('exemptRule').value;
+    var reason = document.getElementById('exemptReason').value;
+    var status = document.getElementById('exemptStatus');
+
+    if (!username || !taskType || ruleIndex === '') {
+        status.style.color = '#bd4444';
+        status.textContent = 'Please select a labeler, task type, and rule.';
+        return;
+    }
+
+    status.style.color = '#6f7a7a';
+    status.textContent = 'Saving\u2026';
+
+    fetch('/label_images/admin/training/exempt/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({
+            username: username,
+            task_type: taskType,
+            rule_index: ruleIndex,
+            reason: reason,
+        }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            status.style.color = '#bd4444';
+            status.textContent = data.error;
+            return;
+        }
+        status.style.color = '#5a8a5a';
+        status.textContent = (data.created ? 'Allowed ' : 'Already allowed \u2014 updated ') +
+            data.username + ' to skip training for ' + data.task_type +
+            ' rule ' + data.rule_index + '.';
+        document.getElementById('exemptReason').value = '';
+
+        _exemptions = _exemptions.filter(function(e) { return e.id !== data.id; });
+        _exemptions.push({
+            id: data.id,
+            user__username: data.username,
+            task_type: data.task_type,
+            rule_index: data.rule_index,
+            reason: data.reason,
+            granted_at: data.granted_at,
+        });
+        renderExemptions();
+    });
+}
+
+function renderExemptions() {
+    var target = document.getElementById('exemptTable');
+    if (!_exemptions.length) {
+        target.innerHTML = '<p class="wf-muted" style="padding:8px 0;">Nobody is skipping training right now.</p>';
+        return;
+    }
+
+    var html = '<table class="wf-table"><thead><tr>' +
+        '<th>Labeler</th><th>Task Type</th><th>Rule</th><th>Reason</th><th>Granted</th><th>Actions</th>' +
+        '</tr></thead><tbody>';
+    _exemptions.forEach(function(e) {
+        var title = ruleTitle(_allRules, e.task_type, e.rule_index);
+        html += '<tr>' +
+            '<td>' + e.user__username + '</td>' +
+            '<td>' + e.task_type + '</td>' +
+            '<td>Rule ' + e.rule_index + (title ? ' \u2014 ' + title : '') + '</td>' +
+            '<td class="wf-muted">' + (e.reason || '\u2014') + '</td>' +
+            '<td class="wf-muted">' + (e.granted_at || '').slice(0, 16) + '</td>' +
+            '<td><button class="wf-btn wf-btn-sm wf-btn-danger" onclick="revokeExemption(' + e.id + ', this)">Revoke</button></td>' +
+            '</tr>';
+    });
+    target.innerHTML = html + '</tbody></table>';
+}
+
+function revokeExemption(exemptionId, btn) {
+    if (!confirm('Require training again for this labeler and rule?')) return;
+    btn.disabled = true;
+
+    fetch('/label_images/admin/training/exempt/remove/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({exemption_id: exemptionId}),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { alert(data.error); btn.disabled = false; return; }
+        _exemptions = _exemptions.filter(function(e) { return e.id !== exemptionId; });
+        renderExemptions();
+    });
+}
+
+function onTrainTaskTypeChange() {
+    fillRules('trainRule', _rules, document.getElementById('trainTaskType').value);
 }
 
 function createTraining() {
@@ -187,10 +340,7 @@ function renderTrainingSets() {
         var status = a.completed_at
             ? '<span class="wf-badge wf-badge-green">Done</span>'
             : '<span class="wf-badge wf-badge-gray">Pending</span>';
-        var ruleName = '';
-        _rules.forEach(function(r) {
-            if (r.task_type === a.task_type && r.rule_index == a.rule_index) ruleName = r.title || '';
-        });
+        var ruleName = ruleTitle(_rules, a.task_type, a.rule_index);
 
         html += '<tr>' +
             '<td>' + a.user__username + '</td>' +
