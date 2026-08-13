@@ -944,6 +944,37 @@ def reconcile_labels(request):
     )
 
 
+def _pair_category_counts(pairs_df):
+    """Pairs per style type, biggest first, for the batch-labels filter.
+
+    Every type from ``text.py`` is listed even at zero, so a type stays selectable
+    (and visibly empty) instead of vanishing from the dropdown once it's filtered
+    down to nothing. Pairs with no term at all get their own ``none`` entry, since
+    otherwise a good chunk of the batch would be unreachable by any choice and the
+    counts would silently fail to add up.
+
+    Returns:
+        list[dict]: filter ``name``, display ``label`` and ``count``, ordered by
+        count then name.
+    """
+    from collections import Counter
+
+    from .text import STYLE_TERM_CATEGORIES
+
+    counts, untyped = Counter(), 0
+    if not pairs_df.empty and "categories" in pairs_df.columns:
+        for cats in pairs_df["categories"]:
+            if cats:
+                counts.update(cats)
+            else:
+                untyped += 1
+
+    names = sorted(set(STYLE_TERM_CATEGORIES) | set(counts))
+    rows = [{"name": n, "label": n, "count": counts.get(n, 0)} for n in names]
+    rows.append({"name": "none", "label": "no style type", "count": untyped})
+    return sorted(rows, key=lambda c: (-c["count"], c["label"]))
+
+
 def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by):
     """Batch-labels page for pair-comparison tasks (same_style rule 2).
 
@@ -953,6 +984,7 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
     switches persist via ``set_pair_label``.
     """
     flag_filter = request.GET.get("flag_filter", "all")
+    category = request.GET.get("category", "all")
     # No cv_run in the URL means "use the most recent run"; the API resolves it.
     cv_run = request.GET.get("cv_run") or None
 
@@ -986,6 +1018,18 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
             pairs_df = pairs_df[pairs_df["cv_prob"].isna()]
         else:
             pairs_df = pairs_df[pairs_df.get("cv_flag") == flag_filter]
+
+    # Counted after the model-flag filter but before the style filter, so the
+    # dropdown reads as "how many of these does each style type account for" --
+    # with flag_filter=disagree that ranks the types the model struggles with.
+    category_counts = _pair_category_counts(pairs_df)
+    if not pairs_df.empty and category != "all":
+        pairs_df = pairs_df[
+            pairs_df["categories"].apply(
+                (lambda cats: not cats) if category == "none"
+                else (lambda cats: category in (cats or []))
+            )
+        ]
 
     if not pairs_df.empty:
         # Model-score sorts put unscored pairs last.
@@ -1040,6 +1084,8 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
             "all", "disagree", "ok", "uncertain", "suspect_fp", "suspect_fn",
             "scored", "unscored",
         ],
+        "category": category,
+        "category_counts": category_counts,
         "pair_choices": ["same", "similar", "different", "duplicate"],
         "cv_runs": cv_runs,
         "cv_run_id": cv_run_id,

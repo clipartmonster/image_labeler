@@ -1564,6 +1564,44 @@ def _style_cv_runs():
     return runs
 
 
+def _pair_terms():
+    """Style terms behind each pair, keyed by pair_id.
+
+    A pair is drawn from a style group and the group carries the term, so joining
+    through ``group_id`` is the only link from a pair back to what it's a pair of.
+    A few hundred pairs sit in more than one group, hence a list per pair.
+
+    Cached: this only moves when new pairs are selected, and every filter change on
+    the batch-labels page is a full reload.
+
+    Returns:
+        dict: pair_id -> sorted list of terms.
+    """
+    from django.core.cache import cache
+
+    cache_key = "style_pair_terms_v1"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with connection.cursor() as c:
+        c.execute(
+            """
+            SELECT DISTINCT s.pair_id, g.term
+            FROM "label_data.selected_pair_labels" s
+            JOIN "label_data.style_groups" g ON g.group_id = s.group_id
+            WHERE s.group_id IS NOT NULL
+            """
+        )
+        terms = {}
+        for pair_id, term in c.fetchall():
+            terms.setdefault(str(pair_id), []).append(term)
+
+    terms = {pair_id: sorted(v) for pair_id, v in terms.items()}
+    cache.set(cache_key, terms, timeout=60 * 60)
+    return terms
+
+
 def _pair_batch_for_viewing(task_type, rule_index, batch_index, cv_run_id=None):
     """Build the batch-labels rows for a pair task (same_style rule 2).
 
@@ -1580,8 +1618,9 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index, cv_run_id=None):
     Returns:
         dict: ``assets_w_labels`` (one record per labeled pair with ``pair_id``,
         ``asset_id_1``, ``asset_id_2``, ``image_link_1``, ``image_link_2``,
-        ``label``, ``agree_status``, ``samples``, ``date_labeled`` and the ``cv_*``
-        score fields), plus ``cv_runs`` and the resolved ``cv_run_id``.
+        ``label``, ``agree_status``, ``samples``, ``date_labeled``, the ``cv_*``
+        score fields, and the ``terms``/``categories`` the pair came from), plus
+        ``cv_runs`` and the resolved ``cv_run_id``.
     """
     key = ["asset_id_1", "asset_id_2"]
 
@@ -1648,6 +1687,7 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index, cv_run_id=None):
     # join doesn't multiply rows.
     meta = meta.drop_duplicates(subset=key)
     labels = labels.merge(meta, on=key, how="inner")
+    labels["pair_id"] = labels["pair_id"].astype(str)
 
     # Model scores (joined on pair_id) so reviewers can sort by confidence and
     # spot model/human disagreements. Scoped to one run, since a pair can be
@@ -1676,7 +1716,6 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index, cv_run_id=None):
             }
         )
         cv["pair_id"] = cv["pair_id"].astype(str)
-        labels["pair_id"] = labels["pair_id"].astype(str)
         labels = labels.merge(cv, on="pair_id", how="left")
     else:
         for col in ["cv_prob", "cv_pred", "cv_correct", "cv_suspicion", "cv_flag",
@@ -1722,6 +1761,16 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index, cv_run_id=None):
 
     labels = labels.replace({np.nan: None})
 
+    # What each pair is a pair *of*, so the page can be narrowed to one style type.
+    # Added after the NaN scrub, which would otherwise have to reason about lists.
+    from label_images.text import categories_for_term
+
+    pair_terms = _pair_terms()
+    labels["terms"] = labels["pair_id"].map(lambda p: pair_terms.get(p, []))
+    labels["categories"] = labels["terms"].map(
+        lambda terms: sorted({c for t in terms for c in categories_for_term(t)})
+    )
+
     return payload(
         labels[
             [
@@ -1729,6 +1778,7 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index, cv_run_id=None):
                 "label", "agree_status", "samples", "date_labeled",
                 "cv_prob", "cv_pred", "cv_model_label", "cv_flag", "cv_correct",
                 "cv_suspicion", "cv_scored_label", "cv_disagrees", "cv_stale",
+                "terms", "categories",
             ]
         ].to_dict(orient="records")
     )

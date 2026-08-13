@@ -33,6 +33,10 @@
 .cv-flag-suspect_fp, .cv-flag-suspect_fn { color:#e0a0a0; border-color:#8a4a4a; background:rgba(200,100,100,0.12); }
 .cv-disagree { color:#ffd0d0; border-color:#a45a5a; background:rgba(200,80,80,0.2); }
 .cv-stale { color:#d8c0e8; border-color:#6a4a8a; background:rgba(150,100,200,0.15); }
+.term-badge { font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px;
+    color:#9fd6e8; border:1px solid #3f6a7a; background:rgba(80,160,200,0.14); }
+.pair-help { color:#8fa8a8; font-size:11px; font-family:Roboto, sans-serif;
+    line-height:1.45; margin:6px 0 0; }
 .cv-unscored { color:#8a9a9a; }
 </style>
 
@@ -85,6 +89,22 @@
             </select>
         </div>
 
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Style Type</h1>
+            <select id="category_select" class='title_font field_label'>
+                <option value="all" {% if category == "all" %}selected{% endif %}>all types</option>
+                {% for row in category_counts %}
+                <option value="{{ row.name }}" {% if category == row.name %}selected{% endif %}>
+                    {{ row.label }} ({{ row.count }})
+                </option>
+                {% endfor %}
+            </select>
+            <p class='pair-help'>
+                Counts follow the Model Flag filter, so setting it to
+                <b>disagree</b> ranks the types the model gets wrong most.
+            </p>
+        </div>
+
         <div style='display:flex; gap:10px; flex-wrap:wrap'>
             <h2 id=image_count class='label_option label'>total: {{total_pairs}} </h2>
             {% for label_count in label_counts %}
@@ -109,6 +129,9 @@
 
             <div class='pair-meta'>
                 <span class='pair-id'>pair: {{pair.pair_id}}</span>
+                {% for term in pair.terms %}
+                <span class='term-badge'>{{ term }}</span>
+                {% endfor %}
                 <span>agreement: {{pair.agree_status}}</span>
                 <span>votes: {{pair.samples}}</span>
                 {% if pair.cv_prob != None %}
