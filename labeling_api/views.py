@@ -1994,6 +1994,125 @@ def _style_term_cv_counts(cv_run_id):
     return counts
 
 
+def _style_pair_scores(cv_run_id):
+    """Per-term ``(prob, y)`` for every pair one run scored.
+
+    AUC can't be pooled from per-term AUCs, so the raw scores are needed to answer
+    it for an arbitrary group of terms. Only ~10k pairs per run, and a finished run
+    never changes, so the whole thing is cached per run.
+
+    Returns:
+        dict: term -> list of ``[prob, y]``, skipping pairs missing either value.
+    """
+    if not cv_run_id:
+        return {}
+
+    from django.core.cache import cache
+
+    cache_key = f"style_pair_scores_v1::{cv_run_id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with connection.cursor() as c:
+        c.execute(
+            f"""
+            WITH cv AS (
+                SELECT DISTINCT ON (pair_id) pair_id, prob, y
+                FROM "label_data.style_cv_scores"
+                WHERE cv_run_id = %s AND prob IS NOT NULL AND y IS NOT NULL
+                ORDER BY pair_id
+            ),
+            pair_group AS ({_PAIR_GROUP_SQL}),
+            group_term AS ({_GROUP_TERM_SQL})
+            SELECT gt.term, cv.prob, cv.y
+            FROM cv
+            JOIN pair_group pg ON pg.pair_id = cv.pair_id
+            JOIN group_term gt ON gt.group_id = pg.group_id
+            """,
+            [cv_run_id],
+        )
+        scores = {}
+        for term, prob, y in c.fetchall():
+            scores.setdefault(term, []).append([float(prob), int(y)])
+
+    cache.set(cache_key, scores, timeout=30 * 60)
+    return scores
+
+
+def _auc(scores):
+    """Area under the ROC curve, by rank (Mann-Whitney U), ties averaged.
+
+    Args:
+        scores: iterable of ``(prob, y)`` where y is 1 for the positive class.
+
+    Returns:
+        float or None: None when either class is absent, since a ranking of one
+        class against nothing has no meaning.
+    """
+    positives = sum(1 for _, y in scores if y == 1)
+    negatives = len(scores) - positives
+    if not positives or not negatives:
+        return None
+
+    values = sorted(prob for prob, _ in scores)
+    # Tied scores all take the mean of the ranks they span, otherwise an
+    # uninformative model that outputs one constant would score 0 or 1.
+    average_rank, i = {}, 0
+    while i < len(values):
+        j = i
+        while j + 1 < len(values) and values[j + 1] == values[i]:
+            j += 1
+        average_rank[values[i]] = (i + j) / 2 + 1
+        i = j + 1
+
+    rank_sum = sum(average_rank[prob] for prob, y in scores if y == 1)
+    return (rank_sum - positives * (positives + 1) / 2) / (positives * negatives)
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["GET", "POST"])
+def get_style_auc(request: Request) -> JsonResponse:
+    """AUC for one scoring run over an explicit set of terms.
+
+    Kept separate from ``get_style_analysis`` because the page decides which terms
+    are in scope (type, priority bucket, search) and AUC has to be recomputed from
+    the underlying pair scores for whatever that scope turns out to be.
+
+    Args:
+        request (Request): ``cv_run_id`` and ``terms`` (list; omitted or empty
+            means every term the run scored).
+
+    Returns:
+        JsonResponse: ``auc`` (null when a class is missing), plus the ``pairs``,
+        ``positives`` and ``negatives`` it was measured on.
+
+    Frontend:
+        ``image_labeler.label_images.views.style_analysis`` -> ``style_analysis.html``.
+    """
+    data = request.data or request.GET
+    cv_run_id = data.get("cv_run_id")
+    terms = data.get("terms")
+    if isinstance(terms, str):
+        terms = [terms]
+
+    by_term = _style_pair_scores(cv_run_id)
+    wanted = by_term if not terms else {t: by_term.get(t, []) for t in set(terms)}
+
+    # A pair maps to exactly one term here (pair_group collapses to one group per
+    # pair), so pooling across terms counts every pair once.
+    scores = [pair for pairs in wanted.values() for pair in pairs]
+    positives = sum(1 for _, y in scores if y == 1)
+
+    return JsonResponse({
+        "auc": _auc(scores),
+        "pairs": len(scores),
+        "positives": positives,
+        "negatives": len(scores) - positives,
+    })
+
+
 def _ratio(numerator, denominator):
     """Safe divide; None when there's nothing to divide by (rather than 0.0)."""
     return (numerator / denominator) if denominator else None

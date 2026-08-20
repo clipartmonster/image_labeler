@@ -174,7 +174,7 @@
         <div class='sa-totals'>
             <div class='sa-stat'>
                 <span class='sa-stat-val'>{{ totals.terms }}</span>
-                <span class='sa-stat-lbl'>terms</span>
+                <span class='sa-stat-lbl'>terms in view</span>
             </div>
             <div class='sa-stat'>
                 <span class='sa-stat-val'>{{ totals.scored_terms }}</span>
@@ -184,11 +184,29 @@
                 <span class='sa-stat-val'>{{ totals.support }}</span>
                 <span class='sa-stat-lbl'>scored pairs</span>
             </div>
-            <div class='sa-stat'>
+            <div class='sa-stat' title="Of the pairs the model called 'same style', the share that really were. Pooled over every scored pair in view.">
+                <span class='sa-stat-val'>
+                    {% if totals.precision != None %}{{ totals.precision|floatformat:3 }}{% else %}—{% endif %}
+                </span>
+                <span class='sa-stat-lbl'>pooled precision</span>
+            </div>
+            <div class='sa-stat' title="Of the pairs that really are the same style, the share the model found. Pooled over every scored pair in view.">
+                <span class='sa-stat-val'>
+                    {% if totals.recall != None %}{{ totals.recall|floatformat:3 }}{% else %}—{% endif %}
+                </span>
+                <span class='sa-stat-lbl'>pooled recall</span>
+            </div>
+            <div class='sa-stat' title="Harmonic mean of the pooled precision and recall.">
                 <span class='sa-stat-val'>
                     {% if totals.f1 != None %}{{ totals.f1|floatformat:3 }}{% else %}—{% endif %}
                 </span>
                 <span class='sa-stat-lbl'>pooled F1</span>
+            </div>
+            <div class='sa-stat' title="How well the model's probability ranks a matching pair above a non-matching one, independent of any threshold. 0.5 is a coin flip. Measured on {{ totals.auc_pairs }} pairs ({{ totals.positives }} same / {{ totals.negatives }} different).">
+                <span class='sa-stat-val'>
+                    {% if totals.auc != None %}{{ totals.auc|floatformat:3 }}{% else %}—{% endif %}
+                </span>
+                <span class='sa-stat-lbl'>AUC</span>
             </div>
             <div class='sa-stat'>
                 <span class='sa-stat-val'>{{ totals.untapped_groups }}</span>
@@ -301,7 +319,7 @@
                 {% endfor %}
             </tbody>
         </table>
-        <p class='sa-help'>Showing {{ shown }} of {{ totals.terms }} terms.</p>
+        <p class='sa-help'>Showing {{ shown }} of {{ total_terms }} terms.</p>
         {% else %}
         <p class='sa-empty'>No terms match these filters.</p>
         {% endif %}

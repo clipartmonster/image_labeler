@@ -3278,35 +3278,31 @@ def style_analysis(request):
     payload = json.loads(response.content)
     terms_df = pd.DataFrame(payload.get("terms", []))
 
-    # Totals are taken before filtering so the header always describes the run as
-    # a whole rather than the current slice.
+    total_terms = len(terms_df)
+
+    if not terms_df.empty and category != "all":
+        terms_df = terms_df[terms_df["categories"].apply(lambda c: category in (c or []))]
+    if not terms_df.empty and search:
+        terms_df = terms_df[terms_df["term"].str.lower().str.contains(search, regex=False)]
+
+    # Bucket counts come from everything the type/search filters left, before the
+    # bucket filter itself -- otherwise ticking one bucket would zero out the rest
+    # and there'd be no way to see what else is there.
     if not terms_df.empty:
-        scored = terms_df[terms_df["support"] > 0]
-        totals = {
-            "terms": len(terms_df),
-            "scored_terms": len(scored),
-            "support": int(terms_df["support"].sum()),
-            "untapped_groups": int(terms_df["untapped_groups"].sum()),
-            # Pooled, not averaged: a mean of per-term F1 lets tiny terms
-            # dominate. This is F1 over every scored pair in the run.
-            "f1": _pooled_f1(terms_df),
-        }
         counts = (
             terms_df["priority"].value_counts().reindex(STYLE_PRIORITY_ORDER).fillna(0).astype(int)
         )
     else:
-        totals = {"terms": 0, "scored_terms": 0, "support": 0, "untapped_groups": 0, "f1": None}
         counts = pd.Series(0, index=STYLE_PRIORITY_ORDER)
-
     # A list rather than a dict so the template can loop it without a lookup filter.
     priority_counts = [{"bucket": b, "count": int(counts[b])} for b in STYLE_PRIORITY_ORDER]
 
-    if not terms_df.empty and category != "all":
-        terms_df = terms_df[terms_df["categories"].apply(lambda c: category in (c or []))]
     if not terms_df.empty and priorities:
         terms_df = terms_df[terms_df["priority"].isin(priorities)]
-    if not terms_df.empty and search:
-        terms_df = terms_df[terms_df["term"].str.lower().str.contains(search, regex=False)]
+
+    # Totals describe the rows actually on screen, so narrowing to one art type
+    # re-measures the model on just that type.
+    totals = _style_totals(terms_df, payload.get("cv_run_id"), header)
 
     # Built before the NaN scrub below, which turns the numeric columns into
     # objects and would break the arithmetic.
@@ -3324,6 +3320,7 @@ def style_analysis(request):
     data = {
         "terms": terms_df.to_dict(orient="records") if not terms_df.empty else [],
         "totals": totals,
+        "total_terms": total_terms,
         "priority_counts": priority_counts,
         "priority_order": STYLE_PRIORITY_ORDER,
         "categories": payload.get("categories", []),
@@ -3501,14 +3498,54 @@ ORDER BY ra.term, ra.group_rank, ra.asset_rank;"""
     }
 
 
-def _pooled_f1(terms_df):
-    """F1 over every scored pair, rather than a mean of per-term F1s."""
+def _style_totals(terms_df, cv_run_id, header):
+    """Headline numbers for whichever terms are currently in scope.
+
+    Precision, recall and F1 are pooled over every scored pair rather than averaged
+    across terms: a mean of per-term scores lets a term with three pairs count as
+    much as one with three hundred. AUC needs the underlying pair scores, so it
+    comes from ``get_style_auc``; if that call fails the rest of the header still
+    renders and AUC alone shows as unavailable.
+    """
+    if terms_df.empty:
+        return {
+            "terms": 0, "scored_terms": 0, "support": 0, "untapped_groups": 0,
+            "precision": None, "recall": None, "f1": None, "auc": None,
+            "auc_pairs": 0, "positives": 0, "negatives": 0,
+        }
+
     tp, fp, fn = (int(terms_df[c].sum()) for c in ("tp", "fp", "fn"))
-    precision = tp / (tp + fp) if (tp + fp) else 0
-    recall = tp / (tp + fn) if (tp + fn) else 0
-    if not precision or not recall:
-        return None
-    return 2 * precision * recall / (precision + recall)
+    precision = tp / (tp + fp) if (tp + fp) else None
+    recall = tp / (tp + fn) if (tp + fn) else None
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if precision and recall else None
+    )
+
+    auc = {}
+    try:
+        auc_response = requests.get(
+            f"{settings.LABELING_API_BASE_URL}/get_style_auc/",
+            json={"cv_run_id": cv_run_id, "terms": terms_df["term"].tolist()},
+            headers=header,
+        )
+        auc = json.loads(auc_response.content)
+    except (requests.RequestException, ValueError):
+        pass
+
+    return {
+        "terms": len(terms_df),
+        "scored_terms": int((terms_df["support"] > 0).sum()),
+        "support": int(terms_df["support"].sum()),
+        "untapped_groups": int(terms_df["untapped_groups"].sum()),
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "auc": auc.get("auc"),
+        "auc_pairs": auc.get("pairs", 0),
+        "positives": auc.get("positives", 0),
+        "negatives": auc.get("negatives", 0),
+    }
 
 
 def _sort_style_terms(terms_df, sort_by):
