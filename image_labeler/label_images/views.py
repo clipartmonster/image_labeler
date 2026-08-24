@@ -3338,6 +3338,120 @@ def style_analysis(request):
     return render(request, "style_analysis.html", data)
 
 
+COVERAGE_STATUSES = ("done", "nearly", "partial", "none", "unknown", "pending")
+
+
+def _coverage_status(model):
+    """Bucket a model by how much of its stage it has run on.
+
+    ``missing`` rather than the percentage decides ``done``, so a model with a
+    handful of assets outstanding out of millions doesn't round up to finished.
+    ``pending`` means the count hasn't been taken yet, ``unknown`` that the stage has
+    no eligible population to measure against.
+    """
+    if model["covered"] is None:
+        return "pending"
+    if model["missing"] is None:
+        return "unknown"
+    if not model["covered"]:
+        return "none"
+    if model["missing"] == 0:
+        return "done"
+    if (model["percent"] or 0) >= 99:
+        return "nearly"
+    return "partial"
+
+
+@admin_required
+def model_coverage(request):
+    """Prediction coverage per model, walking down the pipeline.
+
+    Shows, for every model active in ``model_results_prod``, how many of the assets
+    that reached its stage it has actually predicted -- so a downstream model that
+    never ran over what its upstream models cleared is visible as a gap rather than
+    something you have to go looking for.
+
+    Counts run against a 113M-row table, so each is cached separately and a normal
+    load only computes what it can inside a short budget; anything left over is
+    reported as pending and the page reloads itself to pick up the rest. ``?refresh=1``
+    discards the cached counts and takes as long as it needs, including the slow
+    count of every asset in S3.
+    """
+    refresh = bool(request.GET.get("refresh"))
+    # Counting every asset in S3 takes about two and a half minutes, so it happens
+    # only when asked for, either alongside a full recount or on its own.
+    count_assets = bool(request.GET.get("count_assets"))
+    header = {
+        "Content-Type": "application/json",
+        "Authorization": settings.API_ACCESS_KEY,
+    }
+    response = requests.get(
+        f"{settings.LABELING_API_BASE_URL}/get_model_coverage/",
+        json={
+            "refresh": "1" if refresh else "",
+            # A recount is an explicit request to wait; a page load is not. Counts
+            # are cached as each one lands, so a recount that gets cut short by a
+            # proxy timeout still keeps everything it finished.
+            "budget_seconds": 1200 if refresh or count_assets else 20,
+        },
+        headers=header,
+    )
+    payload = json.loads(response.content)
+
+    raw_stages = payload.get("stages", [])
+    # Indent each stage by how far down the pipeline it sits, so the shape of the
+    # dependency chain is visible without reading the labels.
+    parents = {s["key"]: s.get("parent") for s in raw_stages}
+
+    def depth(key):
+        steps, seen = 0, set()
+        while parents.get(key) and key not in seen:
+            seen.add(key)
+            key = parents[key]
+            steps += 1
+        return steps
+
+    stages = []
+    tally = dict.fromkeys(COVERAGE_STATUSES, 0)
+    worst = None
+    for stage in raw_stages:
+        # Grouped by task type so the rule indexes of one feature read as a set,
+        # which is how the models are actually trained and deployed.
+        groups = {}
+        for model in stage["models"]:
+            model["status"] = _coverage_status(model)
+            tally[model["status"]] += 1
+            if model["missing"] and (worst is None or model["missing"] > worst["missing"]):
+                worst = {
+                    **model,
+                    "stage": stage["label"],
+                    "stage_eligible": stage["eligible"],
+                }
+            groups.setdefault(model["task_type"], []).append(model)
+
+        stages.append({
+            **stage,
+            "depth": depth(stage["key"]),
+            "groups": [
+                {"task_type": task_type, "models": sorted(m, key=lambda x: x["rule_index"])}
+                for task_type, m in sorted(groups.items())
+            ],
+        })
+
+    data = {
+        "stages": stages,
+        "root_assets": payload.get("root_assets"),
+        "generated_at": payload.get("generated_at"),
+        "took_seconds": payload.get("took_seconds"),
+        "tally": tally,
+        "model_count": sum(tally.values()),
+        "worst": worst,
+        "pending": payload.get("pending", 0),
+        "root_pending": payload.get("root_pending", False),
+    }
+    return render(request, "model_coverage.html", data)
+
+
 def _sql_quote(value):
     """Quote a string for inline SQL, doubling any embedded single quotes."""
     return "'" + str(value).replace("'", "''") + "'"

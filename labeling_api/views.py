@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from django.views.decorators.csrf import csrf_exempt
 
@@ -2225,6 +2226,329 @@ def get_style_analysis(request: Request) -> JsonResponse:
         },
         safe=False,
     )
+
+
+# Coverage counting depends on this index existing in prod:
+#
+#   CREATE INDEX CONCURRENTLY ix_rule_labels_version_asset
+#       ON model_predictions.rule_labels (model_version, asset_id);
+#
+# The table's other indexes lead with asset_id or task_type, so filtering by
+# model_version means walking all 113M entries -- 80 to 300 seconds per model instead
+# of a few. Leading with model_version gives a range scan already ordered by asset_id,
+# which merge-joins straight against a stage view. Roughly 3.5GB.
+
+# The prediction pipeline, as the stage_* materialized views in prod already define
+# it. Each stage names the view holding the assets that reached it; a stage's view is
+# built from the thresholded output of the stage above, so "eligible" here means the
+# same thing it means to the pipeline. The root has no view: every asset is a
+# candidate for asset_type.
+MODEL_STAGES = (
+    {"key": "asset_type", "label": "All assets", "gate": None, "parent": None},
+    {"key": "clip_art", "label": "Clip art", "gate": "stage_clip_art",
+     "parent": "asset_type"},
+    {"key": "mono_color", "label": "Mono-color clip art", "gate": "stage_mono_color",
+     "parent": "clip_art"},
+    {"key": "multi_color", "label": "Multi-color clip art", "gate": "stage_multi_color",
+     "parent": "clip_art"},
+)
+
+# Which stage each task type's models run at. Taken from the view definitions rather
+# than assumed: dark_ratio_score sits under mono_color and roughness_score under
+# multi_color because their output covers exactly those populations.
+TASK_TYPE_STAGES = {
+    "asset_type": "asset_type",
+    "clip_art_type": "clip_art",
+    "select_primary_colors": "clip_art",
+    "color_fill_type": "clip_art",
+    "line_width_type": "clip_art",
+    "mono_color_type": "mono_color",
+    "dark_ratio_score": "mono_color",
+    "multi_color_type": "multi_color",
+    "roughness_score": "multi_color",
+}
+
+# Four active models write nothing to rule_labels; their predictions land in a table
+# of their own. Counting them from rule_labels would report every one as 0% run.
+TASK_TYPE_TABLES = {
+    "select_primary_colors": "primary_colors",
+    "dark_ratio_score": "dark_ratio_scores",
+    "roughness_score": "roughness",
+    "line_width_type": "line_width",
+}
+
+
+def _rule_index_from_version(version_id):
+    """Rule index encoded in the version id (``LW2_0.02`` -> 2).
+
+    ``model_results_prod.rule_index`` is wrong for at least one active model
+    (``LW2_0.02`` is stored as rule 1, whose title is Dynamic Line Width, while
+    ``model_predictions.line_width`` holds the numeric widths of rule 2). The
+    version string is the name the pipeline actually ran under, so it wins when
+    the two disagree.
+    """
+    import re
+
+    match = re.match(r"^[A-Z]+(\d+)_", version_id or "")
+    return int(match.group(1)) if match else None
+
+
+def _gate_for_task(task_type):
+    """The materialized view holding the assets a task type's models should cover.
+
+    None both for the root stage, where the population is every asset, and for a
+    task type that isn't mapped to a stage yet.
+    """
+    stage_key = TASK_TYPE_STAGES.get(task_type)
+    for stage in MODEL_STAGES:
+        if stage["key"] == stage_key:
+            return stage["gate"]
+    return None
+
+
+def _prod_cursor():
+    """Cursor on the prod database, which is where every prediction table lives."""
+    from django.db import connections
+
+    db = "prod" if "prod" in settings.DATABASES else "default"
+    return connections[db].cursor()
+
+
+ROOT_ASSETS_KEY = "model_coverage_root_assets_v1"
+
+# Time to allow before attempting the root asset count, which takes ~2.5 minutes.
+# A page load asks for far less than this and simply leaves it uncounted.
+ROOT_COUNT_SECONDS = 180
+
+
+def _root_asset_count(compute=True):
+    """Assets the pipeline could run on at all: everything with an image in S3.
+
+    Roughly 2.5 minutes -- 21M rows out of a 25GB table, and Postgres prefers a
+    parallel sequential scan over the partial index. The number barely moves day to
+    day, so it is cached for a week and, with ``compute=False``, skipped entirely
+    rather than made a page load wait for it.
+    """
+    from django.core.cache import cache
+
+    cached = cache.get(ROOT_ASSETS_KEY)
+    if cached is not None or not compute:
+        return cached
+
+    with _prod_cursor() as c:
+        c.execute("SET statement_timeout = '600s'")
+        c.execute('SELECT COUNT(*) FROM "content"."assets" WHERE s3')
+        count = c.fetchone()[0]
+
+    cache.set(ROOT_ASSETS_KEY, count, timeout=7 * 24 * 60 * 60)
+    return count
+
+
+def _stage_sizes():
+    """How many assets reached each stage, straight off the materialized views."""
+    sizes = {}
+    with _prod_cursor() as c:
+        for stage in MODEL_STAGES:
+            if not stage["gate"]:
+                continue
+            c.execute(f'SELECT COUNT(*) FROM "model_predictions"."{stage["gate"]}"')
+            sizes[stage["key"]] = c.fetchone()[0]
+    return sizes
+
+
+def _model_coverage_counts(version_id, task_type, gate):
+    """Assets this model has predicted, both overall and within its stage.
+
+    ``gate`` is the stage's materialized view, or None at the root where there is
+    nothing to intersect with and the overall count is the answer.
+
+    The in-stage count is a semi-join driven off the gate. For rule_labels that is
+    two index-only scans merged on asset_id, which is why the index leading with
+    model_version matters -- without it Postgres walks all 113M index entries.
+
+    Cached per version: a few seconds each, and they only change when the pipeline
+    runs again.
+
+    Returns:
+        tuple[int, int]: (predicted overall, predicted within the stage).
+    """
+    from django.core.cache import cache
+
+    cache_key = f"model_coverage_counts_v1::{version_id}::{gate}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return tuple(cached)
+
+    table = TASK_TYPE_TABLES.get(task_type)
+    with _prod_cursor() as c:
+        c.execute("SET statement_timeout = '300s'")
+        if table:
+            c.execute(
+                f'SELECT COUNT(DISTINCT asset_id) FROM "model_predictions"."{table}" '
+                f"WHERE model_version = %s",
+                [version_id],
+            )
+        else:
+            c.execute(
+                'SELECT COUNT(*) FROM "model_predictions"."rule_labels" '
+                "WHERE model_version = %s",
+                [version_id],
+            )
+        total = c.fetchone()[0]
+
+        if gate:
+            source = f'"model_predictions"."{table}"' if table \
+                else '"model_predictions"."rule_labels"'
+            c.execute(
+                f"""
+                SELECT COUNT(*) FROM "model_predictions"."{gate}" g
+                WHERE EXISTS (
+                    SELECT 1 FROM {source} s
+                    WHERE s.model_version = %s AND s.asset_id = g.asset_id
+                )
+                """,
+                [version_id],
+            )
+            covered = c.fetchone()[0]
+        else:
+            covered = total
+
+    cache.set(cache_key, (total, covered), timeout=6 * 60 * 60)
+    return total, covered
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["GET", "POST"])
+def get_model_coverage(request: Request) -> JsonResponse:
+    """Per-model prediction coverage across the pipeline, and what's missing.
+
+    For every model marked active in ``models.model_results_prod``, counts the assets
+    its version has predicted and compares that to the assets that reached its stage,
+    so a downstream model that hasn't run over everything its upstream models cleared
+    shows up as a gap.
+
+    Each count is cached on its own and the request stops starting new ones once
+    ``budget_seconds`` is spent, so no single call has to sit through all of them.
+    Whatever is unfinished comes back in ``pending`` for the caller to ask again.
+
+    Args:
+        request (Request): ``refresh`` (truthy discards the cached counts and starts
+            over) and ``budget_seconds`` (default 20).
+
+    Returns:
+        JsonResponse: ``stages`` (each with its eligible count and models),
+        ``root_assets``, ``pending``, ``root_pending``, ``generated_at`` and
+        ``took_seconds``.
+
+    Frontend:
+        ``image_labeler.label_images.views.model_coverage`` -> ``model_coverage.html``.
+    """
+    from django.core.cache import cache
+
+    data = request.data or request.GET
+    refresh = str(data.get("refresh") or "").lower() in ("1", "true", "yes")
+    try:
+        budget = float(data.get("budget_seconds") or 20)
+    except (TypeError, ValueError):
+        budget = 20.0
+
+    started = time.time()
+
+    rule_titles = {}
+    for rule in labelling_rules.objects.values("task_type", "rule_index", "title"):
+        rule_titles[(rule["task_type"], rule["rule_index"])] = rule["title"]
+
+    with _prod_cursor() as c:
+        c.execute(
+            """
+            SELECT version_id, task_type, rule_index
+            FROM "models"."model_results_prod"
+            WHERE active
+            ORDER BY task_type, rule_index
+            """
+        )
+        active = c.fetchall()
+
+    if refresh:
+        cache.delete(ROOT_ASSETS_KEY)
+        cache.delete_many([
+            f"model_coverage_counts_v1::{version_id}::{_gate_for_task(task_type)}"
+            for version_id, task_type, _ in active
+        ])
+
+    # The root count alone takes ~2.5 minutes, so it only runs when the caller has
+    # allowed enough time for it to finish. Until then the root stage has no
+    # denominator and its models show a prediction count without a percentage.
+    root_assets = _root_asset_count(compute=budget >= ROOT_COUNT_SECONDS)
+    stage_sizes = _stage_sizes()
+
+    stages = {}
+    for stage in MODEL_STAGES:
+        stages[stage["key"]] = {
+            **stage,
+            "eligible": stage_sizes.get(stage["key"], root_assets),
+            "models": [],
+        }
+    # Anything whose task type we haven't placed still has to be visible, or a newly
+    # added model would silently vanish from the page.
+    unplaced = {
+        "key": "unplaced", "label": "Not yet placed in the pipeline",
+        "gate": None, "parent": None, "eligible": None, "models": [],
+    }
+
+    # Kept apart from `pending`: the model counts finish on their own across a few
+    # requests, whereas the root count needs someone to ask for it, so only the
+    # former should make the page keep reloading.
+    root_pending = root_assets is None
+
+    pending = 0
+    for version_id, task_type, rule_index in active:
+        stage_key = TASK_TYPE_STAGES.get(task_type)
+        stage = stages.get(stage_key) or unplaced
+        gate = stage.get("gate")
+
+        counts_key = f"model_coverage_counts_v1::{version_id}::{gate}"
+        counts = cache.get(counts_key)
+        if counts is None and time.time() - started < budget:
+            counts = _model_coverage_counts(version_id, task_type, gate)
+        if counts is None:
+            pending += 1
+
+        total, covered = counts if counts else (None, None)
+        eligible = stage["eligible"]
+        measurable = covered is not None and eligible
+        display_ri = _rule_index_from_version(version_id) or rule_index
+        stage["models"].append({
+            "task_type": task_type,
+            "rule_index": display_ri,
+            "title": (
+                rule_titles.get((task_type, display_ri))
+                or rule_titles.get((task_type, rule_index), "")
+            ),
+            "version_id": version_id,
+            "source": TASK_TYPE_TABLES.get(task_type) or "rule_labels",
+            "total": total,
+            "covered": covered,
+            "missing": max(eligible - covered, 0) if measurable else None,
+            "percent": round(100 * covered / eligible, 1) if measurable else None,
+            # Predictions for assets that no longer reach this stage, i.e. work the
+            # model did before the upstream thresholds moved.
+            "stale": max(total - covered, 0) if covered is not None else None,
+        })
+
+    ordered = [stages[s["key"]] for s in MODEL_STAGES]
+    if unplaced["models"]:
+        ordered.append(unplaced)
+
+    return JsonResponse({
+        "stages": ordered,
+        "root_assets": root_assets,
+        "pending": pending,
+        "root_pending": root_pending,
+        "generated_at": timezone.now().isoformat(),
+        "took_seconds": round(time.time() - started, 1),
+    })
 
 
 def _is_pair_task(task_type, rule_index):
