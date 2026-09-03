@@ -1,4 +1,7 @@
 
+// Phones and tablets (no hover, coarse pointer) plus narrow desktop windows.
+// Must stay identical to the media query in css/label_mobile.css.
+var MOBILE_LABELING_QUERY = '(hover: none) and (pointer: coarse), (max-width: 900px)'
 
 function expand_image(event){
 
@@ -314,12 +317,22 @@ function activate_listing_container(listing_container) {
     }
     // === END OPTIMIZATION ===
 
-    if (window.matchMedia('(max-width: 768px)').matches) {
+    // The keypad only replaces the 1/2 hotkeys, so it belongs to the yes/no
+    // switch alone. The depth control (color_fill_type rule 5) and the pair
+    // control (same_style rule 2) give 1 and 2 different meanings and are
+    // already made of tappable buttons, so the keypad stays hidden for them.
+    if (window.matchMedia(MOBILE_LABELING_QUERY).matches) {
         mobile_keyboard = document.querySelector('#mobile_keyboard')
-        mobile_keyboard.style.display = 'flex'
-
         prompt_container = listing_container.querySelector('.label_option.prompt.container')
-        prompt_container.append(mobile_keyboard)    
+
+        if (mobile_keyboard && prompt_container) {
+            if (prompt_container.querySelector('.switch3')) {
+                mobile_keyboard.style.display = 'flex'
+                prompt_container.append(mobile_keyboard)
+            } else {
+                mobile_keyboard.style.display = 'none'
+            }
+        }
     }
 
     listing_container.className = 'listing light container active'

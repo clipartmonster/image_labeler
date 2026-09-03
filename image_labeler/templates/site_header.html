@@ -30,11 +30,13 @@
       <link rel="stylesheet", href = "{% static 'css/setup_session.css' %}">
       <link rel="stylesheet", href = "{% static 'css/label_sidebar.css' %}">
       <link rel="stylesheet" href="{% static 'css/workforce.css' %}">
+      <!-- Loaded last so its media query can override the desktop rules above. -->
+      <link rel="stylesheet" href="{% static 'css/label_mobile.css' %}?v=1">
 
       <script defer type="text/javascript" src = "{% static 'js/setup_session.js'%}?v=7"></script>  
       <script defer type="text/javascript" src = "{% static 'js/view_mturk_response.js'%}"></script>
       <script defer type="text/javascript" src = "{% static 'js/show_images.js'%}"></script>   
-      <script defer type="text/javascript" src = "{% static 'js/label_tools.js'%}?v=60"></script>   
+      <script defer type="text/javascript" src = "{% static 'js/label_tools.js'%}?v=61"></script>   
       <script defer type="text/javascript" src = "{% static 'js/label_primary_colors.js'%}"></script> 
       <script defer type="text/javascript" src = "{% static 'js/flood_fill_tool.js'%}"></script>   
       <script defer type="text/javascript" src = "{% static 'js/full_fill_tool.js'%}"></script>  
@@ -61,7 +63,7 @@
  
   <body>
 
-    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 10px 0 10px;">
+    <div class="site-topbar" style="display:flex; justify-content:space-between; align-items:center; padding:10px 10px 0 10px;">
       <button onclick="window.location.href='/label_images/front_page/'" style="
           padding: 10px 20px;
           font-size: 16px;

@@ -102,15 +102,20 @@
         <!-- Main labeling content -->
         <div class="labeling-main">
 
+        <!-- Stand-in for the 1/2 hotkeys on touch devices, which have no
+             keyboard. Hidden by default; label_tools.js moves it into the
+             active prompt and shows it only for the yes/no control. -->
         <div id = 'mobile_keyboard' class = 'listing light container mobile_keyboard'>
 
             <div style = 'display:flex; gap: 35px;'>
-                <div class = 'button mobile_keyboard' key_stroke = 1>
+                <div class = 'button mobile_keyboard key-yes' key_stroke = 1>
                     <h1 class = 'button text mobile_keyboard' example>1</h1>
+                    <span class = 'mobile-key-name'>Yes</span>
                 </div>
 
-                <div class = 'button mobile_keyboard' key_stroke = 2>
+                <div class = 'button mobile_keyboard key-no' key_stroke = 2>
                     <h1 class = 'button text mobile_keyboard' example>2</h1>
+                    <span class = 'mobile-key-name'>No</span>
                 </div>
             </div>
 
@@ -189,7 +194,7 @@
         <div style="position:relative; max-width:90vw; max-height:90vh;" onclick="event.stopPropagation()">
             <img id="lightboxImg" src="" style="max-width:90vw; max-height:85vh; border-radius:8px; box-shadow:0 4px 30px rgba(0,0,0,0.5); cursor:grab;" draggable="false">
             <div id="lightboxCaption" style="text-align:center; color:#e0e0e0; font-size:13px; margin-top:8px; font-family:Roboto,sans-serif;"></div>
-            <button onclick="closeImageLightbox()" style="position:absolute; top:-12px; right:-12px; background:#444; color:#fff; border:none; border-radius:50%; width:30px; height:30px; font-size:18px; cursor:pointer; line-height:1;">&times;</button>
+            <button class="lightbox-close" onclick="closeImageLightbox()" style="position:absolute; top:-12px; right:-12px; background:#444; color:#fff; border:none; border-radius:50%; width:30px; height:30px; font-size:18px; cursor:pointer; line-height:1;">&times;</button>
         </div>
     </div>
 
@@ -204,12 +209,27 @@
         var lb = document.getElementById('imageLightbox');
         var img = document.getElementById('lightboxImg');
         var cap = document.getElementById('lightboxCaption');
+        resetLightboxZoom();
         img.src = src;
         cap.textContent = caption || '';
         lb.style.display = 'flex';
     }
     function closeImageLightbox() {
         document.getElementById('imageLightbox').style.display = 'none';
+        resetLightboxZoom();
+    }
+    /* Back to fit-the-screen. Values match the element's own inline styles, so
+       this is a no-op unless the touch zoom below has enlarged the image. */
+    function resetLightboxZoom() {
+        var lb = document.getElementById('imageLightbox');
+        var img = document.getElementById('lightboxImg');
+        img.style.maxWidth = '90vw';
+        img.style.maxHeight = '85vh';
+        img.style.width = '';
+        img.dataset.zoomed = '0';
+        lb.style.alignItems = 'center';
+        lb.scrollTop = 0;
+        lb.scrollLeft = 0;
     }
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') closeImageLightbox();
@@ -242,6 +262,47 @@
                 lens.style.backgroundSize = (rect.width * zoomLevel) + 'px ' + (rect.height * zoomLevel) + 'px';
                 lens.style.backgroundPosition = (-percX * rect.width * zoomLevel + 90) + 'px ' + (-percY * rect.height * zoomLevel + 90) + 'px';
             });
+        });
+    })();
+
+    /* Touch devices have no hover, so the lens above can never fire. Tapping a
+       labeling image (or its Zoom button) opens it in the lightbox instead,
+       where another tap toggles a 2.5x view that pans by scrolling. */
+    (function() {
+        // Same condition as MOBILE_LABELING_QUERY in label_tools.js and the
+        // media query in css/label_mobile.css; keep the three in sync.
+        if (!window.matchMedia('(hover: none) and (pointer: coarse), (max-width: 900px)').matches) return;
+
+        var lightbox = document.getElementById('imageLightbox');
+        var lightboxImg = document.getElementById('lightboxImg');
+        lightbox.style.overflow = 'auto';
+
+        lightboxImg.addEventListener('click', function() {
+            if (lightboxImg.dataset.zoomed === '1') {
+                resetLightboxZoom();
+                return;
+            }
+            lightboxImg.style.maxWidth = 'none';
+            lightboxImg.style.maxHeight = 'none';
+            lightboxImg.style.width = Math.round(window.innerWidth * 2.5) + 'px';
+            // Centring would push the top of an oversized image out of reach.
+            lightbox.style.alignItems = 'flex-start';
+            lightboxImg.dataset.zoomed = '1';
+        });
+
+        document.querySelectorAll('.design.dark.container img.design').forEach(function(img) {
+            function open() { openImageLightbox(img.currentSrc || img.src, ''); }
+
+            // The line width measure tool lays a canvas over the image, so it
+            // keeps receiving taps while active; this only sees bare images.
+            img.addEventListener('click', open);
+
+            var zoomBtn = document.createElement('button');
+            zoomBtn.type = 'button';
+            zoomBtn.className = 'touch-zoom-btn';
+            zoomBtn.textContent = 'Zoom';
+            zoomBtn.addEventListener('click', open);
+            img.insertAdjacentElement('afterend', zoomBtn);
         });
     })();
 
