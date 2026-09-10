@@ -1011,14 +1011,14 @@ def collect_prompt(request: Request) -> JsonResponse:
 @api_authorization
 @api_view(["POST"])
 def remove_prompt_responses(request: Request) -> JsonResponse:
-    """Delete the most recent Internal ``prompt_responses`` row for an asset/rule.
+    """Delete this labeler's ``prompt_responses`` rows for an asset/rule.
 
     Args:
         request (Request): POST body. ``asset_id``, ``labeler_id``, ``rule_index``, ``task_type``;
         ``labeler_source`` (default ``Internal``).
 
     Returns:
-        JsonResponse: ``status`` and ``explanation`` (success or missing entry).
+        JsonResponse: ``status`` and ``explanation`` (how many rows went, or missing entry).
 
     Frontend:
         ``image_labeler.static.js.api_calls.js`` (undo/remove last prompt), ``label_content.html``.
@@ -1030,7 +1030,9 @@ def remove_prompt_responses(request: Request) -> JsonResponse:
     rule_index = request.data.get("rule_index")
     task_type = request.data.get("task_type")
 
-    if labeler_source == "Internal":
+    # ``reconcile_label`` rows are written to this same table by
+    # ``collect_prompt_internal_source``, so they are cleared the same way.
+    if labeler_source in ("Internal", "reconcile_label"):
 
         entries = prompt_responses.objects.filter(
             asset_id=asset_id,
@@ -1039,14 +1041,20 @@ def remove_prompt_responses(request: Request) -> JsonResponse:
             task_type=task_type,
         )
 
-        most_recent_entry = entries.order_by("-datetime_created").first()
+        # Every row for this labeler goes, not just the newest. Admins and
+        # reconcile labelers are exempt from the duplicate guard in
+        # ``collect_prompt_internal_source``, so they can hold several rows for
+        # one asset and rule; deleting one at a time left the old answer in
+        # place and made Clear Responses look like it did nothing. The filter is
+        # scoped to this labeler, so other labelers' answers are untouched.
+        removed, _ = entries.delete()
 
-        if most_recent_entry:
-            most_recent_entry.delete()
-
+        if removed:
             result = {
                 "status": "success",
-                "explanation": "removed prompt response from rule "
+                "explanation": "removed "
+                + str(removed)
+                + " prompt response(s) from rule "
                 + str(rule_index)
                 + " for asset "
                 + str(asset_id)
@@ -1056,7 +1064,13 @@ def remove_prompt_responses(request: Request) -> JsonResponse:
         else:
             result = {"status": "failure", "explanation": "Entry does not exist."}
 
-    # else:
+    else:
+        result = {
+            "status": "failure",
+            "explanation": "unsupported labeler_source " + str(labeler_source),
+        }
+
+    # Previous MTurk handling, kept for reference:
 
     #     if rule_index == None:
 

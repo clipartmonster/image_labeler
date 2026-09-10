@@ -416,12 +416,13 @@ function submit_depth(el, value) {
     advance_after_prompt(rv)
 }
 
-// Skip the current asset (color_fill_type rule 5) without recording an answer,
-// mirroring the line-width Skip: just advance to the next asset.
+// Skip the current asset (color_fill_type rule 5). The skip is recorded so the
+// asset counts as handled and stops being served again; reconcile drops it
+// because "skip" is not a depth value, so it never becomes a label.
 function skip_depth(el) {
     var rv = el.closest('.label_option.rule_validator')
     if (!rv) return
-    advance_after_prompt(rv)
+    submit_depth(rv, 'skip')
 }
 
 // Keyboard shortcuts for the depth control (color_fill_type rule 5): digits 0-5
