@@ -1780,19 +1780,24 @@ def view_model_results(request):
             return 0.0
 
     for row in all_results:
-        for f in ("val_recall", "val_precision", "val_auc", "val_loss", "val_mae", "learning_rate"):
-            row[f] = round(_float(row.get(f)), 3)
-        # Left as None when never recorded so the table shows a dash instead of a
-        # convincing-looking 0.000. Every row predates the val_macro_f1 column.
-        for f in ("val_accuracy", "val_macro_f1"):
-            row[f] = round(float(row[f]), 3) if row.get(f) is not None else None
         row["is_regressor"] = row.get("outcome_type") == "regressor"
         row["is_scale"] = (row["task_type"], row["rule_index"]) in SCALE_FEATURES
         row["title"] = rule_titles.get((row["task_type"], row["rule_index"]), "")
+
+        # Metrics left as None when unrecorded, so the table shows a dash rather
+        # than a convincing-looking 0.000. Scale features include MAE, because a
+        # graded run that recorded none would otherwise read as a perfect 0; the
+        # other kinds have always coerced to 0 and the arithmetic below needs it.
+        optional = ("val_accuracy", "val_f1", "val_mae") if row["is_scale"] else ("val_accuracy", "val_f1")
+        for f in ("val_recall", "val_precision", "val_auc", "val_loss", "val_mae",
+                  "learning_rate", "val_accuracy", "val_f1"):
+            value = row.get(f)
+            row[f] = None if (value is None and f in optional) else round(_float(value), 3)
+
         if row["is_scale"]:
             # Ranks the history table only; macro F1 is the headline number for a
             # graded target, with accuracy as the stand-in until it is recorded.
-            row["score"] = row["val_macro_f1"]
+            row["score"] = row["val_f1"]
             if row["score"] is None:
                 row["score"] = row["val_accuracy"] or 0
         elif row["is_regressor"]:
@@ -1851,8 +1856,13 @@ def view_model_results(request):
                 if p.get("is_scale"):
                     # Depth is counted in layers, so MAE reads directly: within
                     # half a layer is good. A starting point, worth retuning once
-                    # there are trained models to compare.
-                    feat["perf"] = "yes" if p["val_mae"] <= 0.5 else ("close" if p["val_mae"] <= 1.0 else "no")
+                    # there are trained models to compare. Stays grey when the run
+                    # recorded no MAE, rather than reading absence as perfect.
+                    mae = p["val_mae"]
+                    if mae is None:
+                        feat["perf"] = "none"
+                    else:
+                        feat["perf"] = "yes" if mae <= 0.5 else ("close" if mae <= 1.0 else "no")
                 elif is_reg:
                     feat["perf"] = "yes" if p["val_mae"] <= 0.1 else ("close" if p["val_mae"] <= 0.2 else "no")
                 else:

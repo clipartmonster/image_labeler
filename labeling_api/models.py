@@ -780,7 +780,7 @@ class model_results_table(models.Model):
     # Macro-averaged F1, for graded/ordinal targets where a single precision and
     # recall pair says little. NULL on every row trained before the column
     # existed; added by the add_macro_f1_column management command.
-    val_macro_f1 = models.FloatField(null=True, blank=True)
+    val_f1 = models.FloatField(null=True, blank=True)
 
     class Meta:
         managed = False

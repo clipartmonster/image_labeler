@@ -179,7 +179,9 @@ function maeCls(v) { return v <= 0.1 ? 'mr-good' : v <= 0.2 ? 'mr-warn' : 'mr-ba
 // different thing than it is for a 0-1 score. Matches the sidebar dot in
 // label_images.views.view_model_results. Accuracy and macro F1 are left
 // uncoloured because a good value for a 7-way target is not 0.9.
-function depthMaeCls(v) { return v <= 0.5 ? 'mr-good' : v <= 1.0 ? 'mr-warn' : 'mr-bad'; }
+// No colour when unrecorded: null <= 0.5 is true in JS, which would paint a
+// missing MAE green.
+function depthMaeCls(v) { return v == null ? '' : (v <= 0.5 ? 'mr-good' : v <= 1.0 ? 'mr-warn' : 'mr-bad'); }
 function fmt(v) { return (v != null && !isNaN(v)) ? v.toFixed(3) : '\u2014'; }
 
 function selectFeature(btn, taskType, ruleIndex) {
@@ -220,7 +222,7 @@ function selectFeature(btn, taskType, ruleIndex) {
                 baseHtml = '<div class="mr-metrics">'
                     + metricCard('Accuracy', prod.val_accuracy)
                     + metricCard('Val MAE', prod.val_mae, depthMaeCls(prod.val_mae))
-                    + metricCard('MacroF1', prod.val_macro_f1)
+                    + metricCard('MacroF1', prod.val_f1)
                     + metricCard('Val Samples', prod.val_samples)
                     + '</div>';
             } else if (isReg) {
@@ -297,7 +299,7 @@ var HISTORY_COLS = {
         { label: '#', key: 'rank', type: 'num' },
         { label: 'Accuracy', key: 'val_accuracy', type: 'num' },
         { label: 'MAE', key: 'val_mae', type: 'num' },
-        { label: 'MacroF1', key: 'val_macro_f1', type: 'num' },
+        { label: 'MacroF1', key: 'val_f1', type: 'num' },
         { label: 'Samples', key: 'total_samples', type: 'num' },
         { label: 'Model', key: 'model_type', type: 'str' },
         { label: 'Date', key: 'date', type: 'date' }
@@ -360,7 +362,7 @@ function renderHistory() {
             tr.innerHTML = '<td>' + m.rank + '</td>'
                 + '<td><strong>' + fmt(m.val_accuracy) + '</strong></td>'
                 + '<td class="' + depthMaeCls(m.val_mae) + '">' + fmt(m.val_mae) + '</td>'
-                + '<td><strong>' + fmt(m.val_macro_f1) + '</strong></td>'
+                + '<td><strong>' + fmt(m.val_f1) + '</strong></td>'
                 + '<td>' + m.total_samples + '</td>'
                 + '<td>' + m.model_type + '</td>'
                 + '<td style="color:#7a8a8a;">' + m.date + '</td>'
