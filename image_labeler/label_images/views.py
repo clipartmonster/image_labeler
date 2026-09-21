@@ -1703,6 +1703,12 @@ def view_model_results(request):
 
     _db = "prod" if "prod" in settings.DATABASES else "default"
 
+    # Features whose target is a graded scale rather than yes/no or a continuous
+    # score. Precision and recall say little about a 0-5 depth count, so these
+    # show Accuracy, MAE and Macro F1. Keyed on the feature because the training
+    # pipeline does not distinguish these in outcome_type.
+    SCALE_FEATURES = {("color_fill_type", 5)}
+
     rule_titles = {}
     for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
         rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
@@ -1776,9 +1782,20 @@ def view_model_results(request):
     for row in all_results:
         for f in ("val_recall", "val_precision", "val_auc", "val_loss", "val_mae", "learning_rate"):
             row[f] = round(_float(row.get(f)), 3)
+        # Left as None when never recorded so the table shows a dash instead of a
+        # convincing-looking 0.000. Every row predates the val_macro_f1 column.
+        for f in ("val_accuracy", "val_macro_f1"):
+            row[f] = round(float(row[f]), 3) if row.get(f) is not None else None
         row["is_regressor"] = row.get("outcome_type") == "regressor"
+        row["is_scale"] = (row["task_type"], row["rule_index"]) in SCALE_FEATURES
         row["title"] = rule_titles.get((row["task_type"], row["rule_index"]), "")
-        if row["is_regressor"]:
+        if row["is_scale"]:
+            # Ranks the history table only; macro F1 is the headline number for a
+            # graded target, with accuracy as the stand-in until it is recorded.
+            row["score"] = row["val_macro_f1"]
+            if row["score"] is None:
+                row["score"] = row["val_accuracy"] or 0
+        elif row["is_regressor"]:
             row["score"] = round(-row["val_mae"], 3) if row["val_mae"] else 0
         else:
             row["score"] = round((row["val_precision"] + row["val_recall"]) - abs(row["val_precision"] - row["val_recall"]), 3)
@@ -1804,6 +1821,18 @@ def view_model_results(request):
             features[key]["prod_model"] = row
         features[key]["models"].append(row)
 
+    # Graded features stay listed before their first model is trained, so the
+    # feature is visible as tracked-but-empty rather than missing entirely.
+    for key in SCALE_FEATURES:
+        if key not in features:
+            features[key] = {
+                "task_type": key[0],
+                "rule_index": key[1],
+                "title": rule_titles.get(key, ""),
+                "prod_model": None,
+                "models": [],
+            }
+
     for feat in features.values():
         feat["models"].sort(key=lambda m: m["score"], reverse=True)
         feat["models"] = feat["models"][:20]
@@ -1819,7 +1848,12 @@ def view_model_results(request):
             p = feat["prod_model"]
             if p:
                 is_reg = p.get("is_regressor")
-                if is_reg:
+                if p.get("is_scale"):
+                    # Depth is counted in layers, so MAE reads directly: within
+                    # half a layer is good. A starting point, worth retuning once
+                    # there are trained models to compare.
+                    feat["perf"] = "yes" if p["val_mae"] <= 0.5 else ("close" if p["val_mae"] <= 1.0 else "no")
+                elif is_reg:
                     feat["perf"] = "yes" if p["val_mae"] <= 0.1 else ("close" if p["val_mae"] <= 0.2 else "no")
                 else:
                     feat["perf"] = "yes" if p["val_recall"] > 0.9 and p["val_precision"] > 0.9 else (
@@ -1850,6 +1884,7 @@ def view_model_results(request):
             "prod_version": f.get("prod_version", ""),
             "prod_threshold": f.get("prod_threshold"),
             "is_regressor": is_reg,
+            "is_scale": (f["task_type"], f["rule_index"]) in SCALE_FEATURES,
         }
 
     data = {

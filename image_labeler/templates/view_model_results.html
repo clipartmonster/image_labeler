@@ -175,6 +175,11 @@ var _featureData = {{ features_json|safe }};
 
 function accCls(v) { return v >= 0.9 ? 'mr-good' : v >= 0.88 ? 'mr-warn' : 'mr-bad'; }
 function maeCls(v) { return v <= 0.1 ? 'mr-good' : v <= 0.2 ? 'mr-warn' : 'mr-bad'; }
+// Scale features count in whole units (depth layers), so being out by 0.1 is a
+// different thing than it is for a 0-1 score. Matches the sidebar dot in
+// label_images.views.view_model_results. Accuracy and macro F1 are left
+// uncoloured because a good value for a 7-way target is not 0.9.
+function depthMaeCls(v) { return v <= 0.5 ? 'mr-good' : v <= 1.0 ? 'mr-warn' : 'mr-bad'; }
 function fmt(v) { return (v != null && !isNaN(v)) ? v.toFixed(3) : '\u2014'; }
 
 function selectFeature(btn, taskType, ruleIndex) {
@@ -192,11 +197,12 @@ function selectFeature(btn, taskType, ruleIndex) {
     var prodEl = document.getElementById('mrProd');
 
     var isReg = data.is_regressor;
+    var isScale = data.is_scale;
 
     if (data.has_prod) {
         var t = data.prod_threshold;
         var threshHtml = '';
-        if (t && !isReg) {
+        if (t && !isReg && !isScale) {
             threshHtml = '<div style="margin-top:14px; padding-top:12px; border-top:1px solid #dde4e4;">'
                 + '<p style="font-size:11px; font-weight:700; color:#5d6d6d; text-transform:uppercase; letter-spacing:.4px; margin:0 0 8px;">After Thresholding</p>'
                 + '<div class="mr-metrics">'
@@ -210,7 +216,14 @@ function selectFeature(btn, taskType, ruleIndex) {
 
         var baseHtml = '';
         if (prod) {
-            if (isReg) {
+            if (isScale) {
+                baseHtml = '<div class="mr-metrics">'
+                    + metricCard('Accuracy', prod.val_accuracy)
+                    + metricCard('Val MAE', prod.val_mae, depthMaeCls(prod.val_mae))
+                    + metricCard('MacroF1', prod.val_macro_f1)
+                    + metricCard('Val Samples', prod.val_samples)
+                    + '</div>';
+            } else if (isReg) {
                 baseHtml = '<div class="mr-metrics">'
                     + metricCard('Val MAE', prod.val_mae, maeCls(prod.val_mae))
                     + metricCard('Val Loss', prod.val_loss)
@@ -254,6 +267,7 @@ function selectFeature(btn, taskType, ruleIndex) {
     // Store current table state and render (default: by rank ascending)
     _curModels = models.slice();
     _curIsReg = isReg;
+    _curIsScale = isScale;
     _sortKey = 'rank';
     _sortDir = 1;
     renderHistory();
@@ -278,11 +292,21 @@ var HISTORY_COLS = {
         { label: 'Samples', key: 'total_samples', type: 'num' },
         { label: 'Model', key: 'model_type', type: 'str' },
         { label: 'Date', key: 'date', type: 'date' }
+    ],
+    scale: [
+        { label: '#', key: 'rank', type: 'num' },
+        { label: 'Accuracy', key: 'val_accuracy', type: 'num' },
+        { label: 'MAE', key: 'val_mae', type: 'num' },
+        { label: 'MacroF1', key: 'val_macro_f1', type: 'num' },
+        { label: 'Samples', key: 'total_samples', type: 'num' },
+        { label: 'Model', key: 'model_type', type: 'str' },
+        { label: 'Date', key: 'date', type: 'date' }
     ]
 };
 
 var _curModels = [];
 var _curIsReg = false;
+var _curIsScale = false;
 var _sortKey = 'rank';
 var _sortDir = 1;
 
@@ -310,7 +334,8 @@ function _sortVal(m, col) {
 }
 
 function renderHistory() {
-    var cols = _curIsReg ? HISTORY_COLS.regressor : HISTORY_COLS.classifier;
+    var cols = _curIsScale ? HISTORY_COLS.scale
+        : (_curIsReg ? HISTORY_COLS.regressor : HISTORY_COLS.classifier);
 
     var thead = document.querySelector('.mr-tbl thead tr');
     thead.innerHTML = cols.map(function(c) {
@@ -331,7 +356,16 @@ function renderHistory() {
     rows.forEach(function(m) {
         var tr = document.createElement('tr');
         if (m.is_prod) tr.className = 'mr-prod-row';
-        if (_curIsReg) {
+        if (_curIsScale) {
+            tr.innerHTML = '<td>' + m.rank + '</td>'
+                + '<td><strong>' + fmt(m.val_accuracy) + '</strong></td>'
+                + '<td class="' + depthMaeCls(m.val_mae) + '">' + fmt(m.val_mae) + '</td>'
+                + '<td><strong>' + fmt(m.val_macro_f1) + '</strong></td>'
+                + '<td>' + m.total_samples + '</td>'
+                + '<td>' + m.model_type + '</td>'
+                + '<td style="color:#7a8a8a;">' + m.date + '</td>'
+                + '<td>' + (m.is_prod ? '<span class="mr-prod-badge" style="font-size:9px;">PROD</span>' : '') + '</td>';
+        } else if (_curIsReg) {
             tr.innerHTML = '<td>' + m.rank + '</td>'
                 + '<td class="' + maeCls(m.val_mae) + '"><strong>' + fmt(m.val_mae) + '</strong></td>'
                 + '<td>' + fmt(m.val_loss) + '</td>'
