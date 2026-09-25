@@ -1125,9 +1125,13 @@ def _view_batch_cv_labels(request, task_type, rule_index, sort_by):
 
     rule_entry, all_rules = _batch_label_rules(task_type, rule_index, header)
 
+    from django.contrib.auth.models import User
+    labeler_id_options = list(User.objects.filter(is_staff=True).values_list("username", flat=True))
+
     data = {
         "rule_entry": rule_entry,
         "all_rules": all_rules,
+        "labeler_id_options": labeler_id_options,
         "label_counts": payload.get("label_counts", []),
         "flag_counts": payload.get("flag_counts", []),
         "bucket_counts": payload.get("bucket_counts", []),

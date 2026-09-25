@@ -1704,6 +1704,39 @@ def _rule_cv_for_viewing(
         )
         scores = scores.merge(current, on="asset_id", how="left")
 
+    # Same override the batch-labels slider writes: a later
+    # ``modified_prompt_response`` wins over the reconciled label, so a flip
+    # made here (or on the labels page) shows up without waiting for reconcile.
+    # The slider stores 0/1; the prediction-labels page stores yes/no.
+    corrected = pd.DataFrame(
+        list(
+            modified_prompt_table.objects.filter(
+                task_type=task_type, rule_index=rule_index
+            ).values("asset_id", "modified_prompt_response", "date_time_created")
+        )
+    )
+    if not corrected.empty:
+        corrected["asset_id"] = corrected["asset_id"].astype(str)
+        corrected = (
+            corrected.sort_values("date_time_created")
+            .drop_duplicates(subset=["asset_id"], keep="last")
+        )
+        yes_vals = {"1", "yes", "1.0"}
+        no_vals = {"0", "no", "0.0"}
+        raw = corrected["modified_prompt_response"].astype(str).str.lower()
+        corrected["current_label_raw"] = np.where(
+            raw.isin(yes_vals), 1, np.where(raw.isin(no_vals), 0, np.nan)
+        )
+        corrected = corrected.dropna(subset=["current_label_raw"])[["asset_id", "current_label_raw"]]
+        if not corrected.empty:
+            scores = scores.merge(
+                corrected, on="asset_id", how="left", suffixes=("", "_mod")
+            )
+            scores["current_label_raw"] = scores["current_label_raw_mod"].combine_first(
+                scores["current_label_raw"]
+            )
+            scores = scores.drop(columns=["current_label_raw_mod"])
+
     scores["disagrees"] = scores["correct"] == False  # noqa: E712
     scores["stale"] = (
         scores["current_label_raw"].notna()
