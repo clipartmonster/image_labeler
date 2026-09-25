@@ -484,6 +484,44 @@ class label_data_style_cv_scores(models.Model):
         db_table = "label_data.style_cv_scores"
 
 
+class label_data_cv_scores(models.Model):
+    """Cross-validated model scores for single-asset rules (the yes/no rules).
+
+    **Table:** ``label_data.cv_scores``
+
+    The per-asset counterpart of :class:`label_data_style_cv_scores`: one row per
+    ``asset_id`` per run, keyed on ``task_type`` + ``rule_index`` because a run
+    scores one rule. ``prob``/``pred`` are the model's output, ``label`` is the
+    human label it was scored against, ``correct`` flags agreement, and ``flag``
+    buckets the row as ``ok``, ``uncertain``, ``suspect_fp`` or ``suspect_fn``.
+    ``bucket`` is the finer-grained band the scoring script assigned (for example
+    ``high_conf_FN``) and ``threshold`` is the decision threshold that run used.
+
+    Written by the cross-validation script (pandas ``to_sql``), which is why
+    ``asset_id`` is text and every column is nullable. Queried only via
+    ``.values(...)`` (the table has no primary key).
+    """
+
+    asset_id = models.CharField()
+    task_type = models.CharField()
+    rule_index = models.BigIntegerField(null=True)
+    label = models.BigIntegerField(null=True)
+    prob = models.FloatField(null=True)
+    pred = models.BigIntegerField(null=True)
+    correct = models.BooleanField(null=True)
+    suspicion = models.FloatField(null=True)
+    flag = models.CharField(null=True)
+    bucket = models.CharField(null=True)
+    threshold = models.FloatField(null=True)
+    fold = models.BigIntegerField(null=True)
+    cv_run_id = models.CharField(null=True)
+    date_scored = models.CharField(null=True)
+
+    class Meta:
+        managed = False
+        db_table = "label_data.cv_scores"
+
+
 class search_term_table(models.Model):
     """Search-topic terms and selection state for asset discovery.
 

@@ -1,0 +1,257 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+<style>
+/* Cross-validation review layout for the single-asset (yes/no) rules. Mirrors
+   view_batch_pair_labels.html, one asset per row instead of a pair. */
+.cv-row { display:flex; flex-direction:row; gap:14px; align-items:flex-start; margin:10px;
+    padding:12px; border:1px solid #3a4a4a; border-radius:10px; background:#16292a; }
+.cv-row .cv-meta { display:flex; flex-direction:column; gap:6px; flex:1; min-width:0;
+    color:#c0d8d8; font-size:13px; font-family:Roboto, sans-serif; }
+.cv-row .cv-badges { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.cv-row .cv-asset-id { font-weight:700; color:#e8f0f0; }
+.cv-row img { width:220px; height:auto; border-radius:6px; border:1px solid #4a5a5a;
+    background:#fff; cursor:crosshair; }
+/* Hover magnifier, matching the lens on the pair page. White background so
+   transparent clipart stays readable over the dark page. */
+#cvMagnifyLens { display:none; position:fixed; width:180px; height:180px; border-radius:50%;
+    border:3px solid #409393; box-shadow:0 4px 20px rgba(0,0,0,0.4); pointer-events:none;
+    z-index:1500; background-repeat:no-repeat; background-color:#fff; }
+/* Model CV score badges, same palette as the pair page. */
+.cv-badge { font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px;
+    background:#22383a; border:1px solid #3f5a5a; color:#c0d8d8; }
+.cv-flag-ok { color:#a0e0a0; border-color:#4a8a4a; background:rgba(100,200,100,0.12); }
+.cv-flag-uncertain { color:#e8d79a; border-color:#8a7a4a; background:rgba(220,190,90,0.12); }
+.cv-flag-suspect_fp, .cv-flag-suspect_fn { color:#e0a0a0; border-color:#8a4a4a; background:rgba(200,100,100,0.12); }
+.cv-disagree { color:#ffd0d0; border-color:#a45a5a; background:rgba(200,80,80,0.2); }
+.cv-stale { color:#d8c0e8; border-color:#6a4a8a; background:rgba(150,100,200,0.15); }
+.cv-bucket { color:#9fd6e8; border-color:#3f6a7a; background:rgba(80,160,200,0.14); }
+.cv-label-yes { color:#a0e0a0; border-color:#4a8a4a; }
+.cv-label-no { color:#e0b0a0; border-color:#8a5a4a; }
+.cv-help { color:#8fa8a8; font-size:11px; font-family:Roboto, sans-serif;
+    line-height:1.45; margin:6px 0 0; }
+.cv-empty { color:#a0b8b8; font-family:Roboto, sans-serif; margin:20px; }
+</style>
+
+<div style='display:flex; flex-direction: row;'>
+
+    <div class='listing light container side_panel'>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Task Type</h1>
+            <select id="task_type_select" class='title_font field_label'>
+                {% for rule in all_rules %}
+                <option value="{{ rule.task_type }}" data-rule-index="{{ rule.rule_index }}"
+                    {% if rule.task_type == rule_entry.task_type and rule.rule_index == rule_entry.rule_index %}selected{% endif %}>
+                    {{ rule.task_type }} — {{ rule.title }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Back to the plain label view of the same rule, dropping this page's
+             sort and filters since none of them exist there. -->
+        <div style='margin:5px; width:100%'>
+            <a class='label_option label' style='display:inline-block; text-decoration:none'
+                href="?task_type={{rule_entry.task_type}}&rule_index={{rule_entry.rule_index}}">
+                ← Labels
+            </a>
+        </div>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Sort</h1>
+            <select id="sort_by_select" class='title_font field_label'>
+                <option value="suspicion_desc" {% if sort_by == "suspicion_desc" %}selected{% endif %}>Most suspicious first</option>
+                <option value="label_desc" {% if sort_by == "label_desc" %}selected{% endif %}>Label: yes → no</option>
+                <option value="label_asc" {% if sort_by == "label_asc" %}selected{% endif %}>Label: no → yes</option>
+                <option value="pred_desc" {% if sort_by == "pred_desc" %}selected{% endif %}>Model pred: yes → no</option>
+                <option value="pred_asc" {% if sort_by == "pred_asc" %}selected{% endif %}>Model pred: no → yes</option>
+                <option value="prob_desc" {% if sort_by == "prob_desc" %}selected{% endif %}>Model prob: high → low</option>
+                <option value="prob_asc" {% if sort_by == "prob_asc" %}selected{% endif %}>Model prob: low → high</option>
+            </select>
+            <p class='cv-help'>
+                The label sorts group the two labels together and put the most
+                suspicious of each first.
+            </p>
+        </div>
+
+        {% if cv_runs %}
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Model Run</h1>
+            <select id="cv_run_select" class='title_font field_label'>
+                {% for run in cv_runs %}
+                <option value="{{ run.cv_run_id }}" {% if run.cv_run_id == cv_run_id %}selected{% endif %}>
+                    {{ run.last_scored }} — {{ run.cv_run_id }} ({{ run.assets }} assets){% if forloop.first %} — latest{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Model Flag</h1>
+            <select id="flag_filter_select" class='title_font field_label'>
+                {% for option in flag_filter_options %}
+                <option value="{{ option }}" {% if flag_filter == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Bucket</h1>
+            <select id="bucket_filter_select" class='title_font field_label'>
+                <option value="all" {% if bucket_filter == "all" %}selected{% endif %}>all buckets</option>
+                {% for row in bucket_counts %}
+                <option value="{{ row.bucket }}" {% if bucket_filter == row.bucket %}selected{% endif %}>
+                    {{ row.bucket }} ({{ row.count }})
+                </option>
+                {% endfor %}
+            </select>
+            <p class='cv-help'>Counts are for the whole run, before the filters above.</p>
+        </div>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Label</h1>
+            <select id="cv_label_filter_select" class='title_font field_label'>
+                {% for option in label_filter_options %}
+                <option value="{{ option }}" {% if label_filter == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div style='display:flex; gap:10px; flex-wrap:wrap'>
+            <h2 id=image_count class='label_option label'>showing: {{total_assets}} of {{matched_total}} matched</h2>
+            <h2 class='label_option label'>scored: {{scored_total}}</h2>
+            {% for label_count in label_counts %}
+            <h2 class="label_option label">label {{ label_count.label }}: {{ label_count.count }}</h2>
+            {% endfor %}
+        </div>
+
+        {% if matched_total > total_assets %}
+        <p class='cv-help'>
+            Capped at {{page_limit}} rows. Narrow the filters, or change the sort,
+            to see the rest.
+        </p>
+        {% endif %}
+
+        <div style='display:flex; gap:10px; flex-wrap:wrap'>
+            {% for flag_count in flag_counts %}
+            <h2 class="label_option label"> {{ flag_count.flag }}: {{ flag_count.count }} </h2>
+            {% endfor %}
+        </div>
+
+        <div>
+            <h1 class='label_option intro'>{{rule_entry.title}}</h1>
+            <h3 class='title view_batch'>{{rule_entry.prompt}}</h3>
+            <p class='cv-help'>
+                Cross-validation review. Every row is an asset the model scored
+                while held out, so the probability is an honest opinion about a
+                label it never trained on.
+            </p>
+        </div>
+
+    </div>
+
+    <div id='cv_list' class='listing light container' style='display:flex; flex-direction:column; flex:1'>
+
+        {% if not batch_of_assets %}
+        <p class='cv-empty'>
+            {% if not cv_runs %}
+            No cross-validation run has been uploaded for this rule yet.
+            {% else %}
+            No assets in this run match the current filters.
+            {% endif %}
+        </p>
+        {% endif %}
+
+        {% for asset in batch_of_assets %}
+
+        <div class='cv-row' asset_id="{{asset.asset_id}}" task_type="{{rule_entry.task_type}}"
+            rule_index="{{rule_entry.rule_index}}">
+
+            <!-- No crossOrigin here: nothing on this page reads the pixels back, and
+                 hosts that omit CORS headers reject the request outright. -->
+            <img src="{{ asset.image_link }}" loading="lazy">
+
+            <div class='cv-meta'>
+                <div class='cv-badges'>
+                    <span class='cv-asset-id'>asset: {{asset.asset_id}}</span>
+                    <span class='cv-badge cv-label-{{asset.cv_scored_label}}'>label: {{asset.cv_scored_label}}</span>
+                    {% if asset.cv_prob != None %}
+                    <span class='cv-badge'>model: {{asset.cv_model_label}} ({{asset.cv_prob|floatformat:3}})</span>
+                    <span class='cv-badge cv-flag-{{asset.cv_flag}}'>{{asset.cv_flag}}</span>
+                    <span class='cv-badge cv-bucket'>{{asset.cv_bucket}}</span>
+                    {% endif %}
+                    {% if asset.cv_disagrees %}
+                    <span class='cv-badge cv-disagree'>disagrees</span>
+                    {% endif %}
+                    {% if asset.cv_stale %}
+                    <span class='cv-badge cv-stale'>label now {{asset.current_label}}</span>
+                    {% endif %}
+                </div>
+                <div class='cv-badges'>
+                    <span>suspicion: {{asset.cv_suspicion|floatformat:3}}</span>
+                    <span>threshold: {{asset.cv_threshold}}</span>
+                    <span>fold: {{asset.cv_fold}}</span>
+                    <span>batch: {{asset.batch_id}}</span>
+                    <span>scored: {{asset.cv_date_scored}}</span>
+                </div>
+            </div>
+
+        </div>
+
+        {% endfor %}
+
+    </div>
+</div>
+
+<div id='cvMagnifyLens'></div>
+
+<script>
+/* Hover magnifier for the thumbnails. Delegated from the list rather than bound
+   per image, since a run can hold thousands of assets. Same behaviour as the lens
+   on the pair page. */
+(function () {
+    var lens = document.getElementById('cvMagnifyLens');
+    var list = document.getElementById('cv_list');
+    if (!lens || !list) return;
+
+    var ZOOM = 2.5;
+    var HALF = 90;  // half of the lens size set in CSS
+
+    list.addEventListener('mousemove', function (e) {
+        var img = e.target.closest('.cv-row img');
+        if (!img) {
+            lens.style.display = 'none';
+            return;
+        }
+
+        // A failed image collapses to a thin box, so its rendered height can't be
+        // trusted; size the lens from the source's own aspect ratio instead.
+        if (!img.naturalWidth || !img.naturalHeight) {
+            lens.style.display = 'none';
+            return;
+        }
+
+        var rect = img.getBoundingClientRect();
+        var bgW = rect.width * ZOOM;
+        var bgH = bgW * (img.naturalHeight / img.naturalWidth);
+        var percX = (e.clientX - rect.left) / rect.width;
+        var percY = (e.clientY - rect.top) / rect.height;
+
+        lens.style.display = 'block';
+        lens.style.left = (e.clientX - HALF) + 'px';
+        lens.style.top = (e.clientY - HALF) + 'px';
+        lens.style.backgroundImage = 'url(' + img.src + ')';
+        lens.style.backgroundSize = bgW + 'px ' + bgH + 'px';
+        lens.style.backgroundPosition =
+            (-percX * bgW + HALF) + 'px ' + (-percY * bgH + HALF) + 'px';
+    });
+
+    list.addEventListener('mouseleave', function () { lens.style.display = 'none'; });
+})();
+</script>
+
+{% endblock %}

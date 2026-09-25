@@ -66,6 +66,26 @@ if (window.location.pathname === '/label_images/view_batch_labels/') {
             });
         }
 
+        // Cross-validation review (view=cv): bucket and label are selects here,
+        // not the yes/no buttons the default page uses.
+        const bucket_filter_select = document.getElementById('bucket_filter_select');
+        if (bucket_filter_select) {
+            bucket_filter_select.addEventListener('change', function () {
+                const url = new URL(window.location.href);
+                url.searchParams.set('bucket_filter', this.value);
+                window.location.href = url.toString();
+            });
+        }
+
+        const cv_label_filter_select = document.getElementById('cv_label_filter_select');
+        if (cv_label_filter_select) {
+            cv_label_filter_select.addEventListener('change', function () {
+                const url = new URL(window.location.href);
+                url.searchParams.set('label_filter', this.value);
+                window.location.href = url.toString();
+            });
+        }
+
         const category_select = document.getElementById('category_select');
         if (category_select) {
             category_select.addEventListener('change', function () {

@@ -1054,24 +1054,7 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
         label_counts = []
 
     # Rules (for title/prompt and the task_type dropdown).
-    rules_response = requests.get(
-        f"{settings.LABELING_API_BASE_URL}/get_labelling_rules/", json={}, headers=header
-    )
-    labelling_rules = dict(json.loads(rules_response.content))
-    rule_entry, all_rules = [], []
-    if "labelling_rules" in labelling_rules:
-        rules_df = pd.DataFrame(labelling_rules["labelling_rules"])
-        if not rules_df.empty and {"task_type", "rule_index"}.issubset(rules_df.columns):
-            rule_entry = (
-                rules_df.query("task_type == @task_type")
-                .query("rule_index == @rule_index")
-                .to_dict(orient="records")
-            )
-            all_rules = rules_df[["task_type", "rule_index", "title"]].to_dict(orient="records")
-
-    rule_entry = rule_entry[0] if rule_entry else {
-        "title": "No Rule Found", "prompt": "", "task_type": task_type, "rule_index": rule_index,
-    }
+    rule_entry, all_rules = _batch_label_rules(task_type, rule_index, header)
 
     data = {
         "rule_entry": rule_entry,
@@ -1095,6 +1078,102 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
     return render(request, "view_batch_pair_labels.html", data)
 
 
+# Rows shown per cross-validation page. Every row loads an image, so this is a
+# ceiling on browser work as much as on payload size; the sorts are built to put
+# what matters at the top.
+CV_PAGE_LIMIT = 300
+
+
+def _view_batch_cv_labels(request, task_type, rule_index, sort_by):
+    """Cross-validation review for a single-asset (yes/no) rule.
+
+    The per-asset counterpart of :func:`_view_batch_pair_labels`: one row per
+    scored asset from ``label_data.cv_scores``, showing the label it was scored
+    against, the model's prediction and probability, and the run's flag/bucket, so
+    suspected mislabels can be sorted to the top. Data comes from
+    ``get_cv_scores_for_viewing``.
+    """
+    flag_filter = request.GET.get("flag_filter", "all")
+    bucket_filter = request.GET.get("bucket_filter", "all")
+    label_filter = request.GET.get("label_filter", "all")
+    # No cv_run in the URL means "use the most recent run"; the API resolves it.
+    cv_run = request.GET.get("cv_run") or None
+
+    header = {
+        "Content-Type": "application/json",
+        "Authorization": settings.API_ACCESS_KEY,
+    }
+
+    # The API filters, sorts and caps; a run holds thousands of assets and no
+    # reviewer wants them all on one page.
+    response = requests.get(
+        f"{settings.LABELING_API_BASE_URL}/get_cv_scores_for_viewing/",
+        json={
+            "task_type": task_type,
+            "rule_index": rule_index,
+            "cv_run_id": cv_run,
+            "flag_filter": flag_filter,
+            "bucket_filter": bucket_filter,
+            "label_filter": label_filter,
+            "sort_by": sort_by,
+            "limit": CV_PAGE_LIMIT,
+        },
+        headers=header,
+    )
+    payload = json.loads(response.content)
+    assets = payload.get("assets_w_cv", [])
+
+    rule_entry, all_rules = _batch_label_rules(task_type, rule_index, header)
+
+    data = {
+        "rule_entry": rule_entry,
+        "all_rules": all_rules,
+        "label_counts": payload.get("label_counts", []),
+        "flag_counts": payload.get("flag_counts", []),
+        "bucket_counts": payload.get("bucket_counts", []),
+        "total_assets": len(assets),
+        "matched_total": payload.get("matched_total", 0),
+        "scored_total": payload.get("scored_total", 0),
+        "page_limit": CV_PAGE_LIMIT,
+        "sort_by": sort_by,
+        "flag_filter": flag_filter,
+        "flag_filter_options": [
+            "all", "disagree", "stale", "ok", "uncertain", "suspect_fp", "suspect_fn",
+        ],
+        "bucket_filter": bucket_filter,
+        "label_filter": label_filter,
+        "label_filter_options": ["all", "only_yes", "only_no"],
+        "cv_runs": payload.get("cv_runs", []),
+        "cv_run_id": payload.get("cv_run_id"),
+        "batch_of_assets": assets,
+    }
+
+    return render(request, "view_batch_cv_labels.html", data)
+
+
+def _batch_label_rules(task_type, rule_index, header):
+    """Rule title/prompt for the current rule, plus every rule for the dropdown."""
+    rules_response = requests.get(
+        f"{settings.LABELING_API_BASE_URL}/get_labelling_rules/", json={}, headers=header
+    )
+    labelling_rules = dict(json.loads(rules_response.content))
+    rule_entry, all_rules = [], []
+    if "labelling_rules" in labelling_rules:
+        rules_df = pd.DataFrame(labelling_rules["labelling_rules"])
+        if not rules_df.empty and {"task_type", "rule_index"}.issubset(rules_df.columns):
+            rule_entry = (
+                rules_df.query("task_type == @task_type")
+                .query("rule_index == @rule_index")
+                .to_dict(orient="records")
+            )
+            all_rules = rules_df[["task_type", "rule_index", "title"]].to_dict(orient="records")
+
+    rule_entry = rule_entry[0] if rule_entry else {
+        "title": "No Rule Found", "prompt": "", "task_type": task_type, "rule_index": rule_index,
+    }
+    return rule_entry, all_rules
+
+
 @login_required
 def view_batch_labels(request):
 
@@ -1110,6 +1189,15 @@ def view_batch_labels(request):
     # categorical label, so they use a dedicated view + template.
     if task_type == "same_style" and rule_index == 2:
         return _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by)
+
+    # Cross-validation review of the same yes/no labels, opt-in via the URL so the
+    # default page is untouched. Its own default sort, since "newest first" means
+    # nothing here -- a run scores everything on one day.
+    if request.GET.get("view") == "cv":
+        return _view_batch_cv_labels(
+            request, task_type, rule_index,
+            request.GET.get("sort_by", "suspicion_desc"),
+        )
 
     ###############################
     # get batches assets

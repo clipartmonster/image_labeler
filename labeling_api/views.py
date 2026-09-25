@@ -1579,6 +1579,291 @@ def _style_cv_runs():
     return runs
 
 
+def _rule_cv_runs(task_type, rule_index):
+    """Available scoring runs in label_data.cv_scores for one rule, newest first.
+
+    Same shape as :func:`_style_cv_runs` but scoped to a rule, because that table
+    holds runs for every yes/no rule. ``date_scored`` only records the day, so
+    ``cv_run_id`` (``cv_YYYYMMDD_HHMM``) breaks same-day ties.
+
+    Returns:
+        list[dict]: ``cv_run_id``, ``last_scored``, ``assets`` per run.
+    """
+    runs = list(
+        label_data_cv_scores.objects.filter(
+            task_type=task_type, rule_index=rule_index
+        )
+        .values("cv_run_id")
+        .annotate(
+            last_scored=Max("date_scored"),
+            assets=Count("asset_id", distinct=True),
+        )
+    )
+    runs.sort(
+        key=lambda r: (r["last_scored"] or "", r["cv_run_id"] or ""), reverse=True
+    )
+    return runs
+
+
+def _rule_cv_for_viewing(
+    task_type,
+    rule_index,
+    cv_run_id=None,
+    flag_filter="all",
+    bucket_filter="all",
+    label_filter="all",
+    sort_by="suspicion_desc",
+    limit=300,
+):
+    """Build the cross-validation review rows for a single-asset (yes/no) rule.
+
+    Reads one scoring run from ``label_data.cv_scores``, attaches each asset's
+    image, and compares the label the model was scored against with the label that
+    stands now in ``label_data.asset_type.rule.labels`` -- so a label edited since
+    scoring shows up as stale rather than silently making the model look wrong.
+
+    Labels and predictions are stored as 0/1; they are surfaced as ``yes``/``no``
+    to match the rest of the labeling UI.
+
+    Filtering, sorting and the row cap all happen here rather than in the page
+    view: a run holds thousands of assets, and shipping the whole thing as JSON on
+    every page load is enough to exhaust the server's memory.
+
+    Args:
+        task_type: Task the run scored.
+        rule_index: Rule the run scored.
+        cv_run_id: Which run to read. Unknown or omitted uses the most recent.
+        flag_filter: A ``flag`` value, or ``disagree``/``stale``, or ``all``.
+        bucket_filter: A ``bucket`` value, or ``all``.
+        label_filter: ``only_yes``/``only_no`` on the scored label, or ``all``.
+        sort_by: One of ``suspicion_desc``, ``label_desc``/``label_asc``,
+            ``pred_desc``/``pred_asc``, ``prob_desc``/``prob_asc``.
+        limit: Most rows to return. The counts describe the full match, so the
+            page can say how much it is not showing.
+
+    Returns:
+        dict: ``assets_w_cv`` (at most ``limit`` records), ``cv_runs``, the
+        resolved ``cv_run_id``, ``bucket_counts`` and ``flag_counts`` for the whole
+        run, ``label_counts`` for the match, ``scored_total`` and
+        ``matched_total``.
+    """
+    cv_runs = _rule_cv_runs(task_type, rule_index)
+    run_ids = [r["cv_run_id"] for r in cv_runs]
+    selected_run = cv_run_id if cv_run_id in run_ids else (run_ids[0] if run_ids else None)
+
+    def payload(rows, **counts):
+        out = {
+            "assets_w_cv": rows,
+            "cv_runs": cv_runs,
+            "cv_run_id": selected_run,
+            "bucket_counts": [],
+            "flag_counts": [],
+            "label_counts": [],
+            "scored_total": 0,
+            "matched_total": len(rows),
+        }
+        out.update(counts)
+        return out
+
+    if selected_run is None:
+        return payload([])
+
+    scores = pd.DataFrame(
+        list(
+            label_data_cv_scores.objects.filter(
+                task_type=task_type, rule_index=rule_index, cv_run_id=selected_run
+            ).values(
+                "asset_id", "label", "prob", "pred", "correct", "suspicion",
+                "flag", "bucket", "threshold", "fold", "date_scored",
+            )
+        )
+    )
+    if scores.empty:
+        return payload([])
+
+    # asset_id is text in cv_scores but bigint everywhere else, so every join here
+    # goes through strings.
+    scores["asset_id"] = scores["asset_id"].astype(str)
+    scores = scores.drop_duplicates(subset=["asset_id"])
+
+    # The label that stands now, to catch scores made against a since-corrected
+    # label. Left join: an asset can be scored before it is reconciled.
+    current = pd.DataFrame(
+        list(
+            assets_w_rule_labels.objects.filter(
+                task_type=task_type, rule_index=rule_index
+            ).values("asset_id", "label")
+        )
+    )
+    if current.empty:
+        scores["current_label_raw"] = None
+    else:
+        current["asset_id"] = current["asset_id"].astype(str)
+        current = current.drop_duplicates(subset=["asset_id"]).rename(
+            columns={"label": "current_label_raw"}
+        )
+        scores = scores.merge(current, on="asset_id", how="left")
+
+    scores["disagrees"] = scores["correct"] == False  # noqa: E712
+    scores["stale"] = (
+        scores["current_label_raw"].notna()
+        & scores["label"].notna()
+        & (scores["current_label_raw"] != scores["label"])
+    )
+
+    scored_total = len(scores)
+    # Counted before filtering, so the dropdowns show what is available rather
+    # than only what the current filters left.
+    bucket_counts = (
+        scores.groupby("bucket").agg(count=("asset_id", "count")).reset_index()
+        .sort_values("count", ascending=False).to_dict(orient="records")
+    )
+    flag_counts = (
+        scores.groupby("flag").agg(count=("asset_id", "count")).reset_index()
+        .sort_values("count", ascending=False).to_dict(orient="records")
+    )
+
+    if flag_filter == "disagree":
+        scores = scores[scores["disagrees"]]
+    elif flag_filter == "stale":
+        scores = scores[scores["stale"]]
+    elif flag_filter != "all":
+        scores = scores[scores["flag"] == flag_filter]
+
+    if bucket_filter != "all":
+        scores = scores[scores["bucket"] == bucket_filter]
+
+    # Filters on the label the model was scored against, which is what a reviewer
+    # is judging -- not on the model's own prediction.
+    if label_filter in ("only_yes", "only_no"):
+        scores = scores[scores["label"] == (1 if label_filter == "only_yes" else 0)]
+
+    label_counts = (
+        scores.groupby("label").agg(count=("asset_id", "count")).reset_index()
+        .to_dict(orient="records")
+    ) if not scores.empty else []
+
+    if not scores.empty:
+        if sort_by in ("prob_desc", "prob_asc"):
+            scores = scores.sort_values(
+                "prob", ascending=(sort_by == "prob_asc"), na_position="last"
+            )
+        elif sort_by in ("label_desc", "label_asc"):
+            # Groups the two labels together, most suspicious first inside each,
+            # which is how you review one label's mistakes at a time.
+            scores = scores.sort_values(
+                ["label", "suspicion"],
+                ascending=[sort_by == "label_asc", False], na_position="last",
+            )
+        elif sort_by in ("pred_desc", "pred_asc"):
+            scores = scores.sort_values(
+                ["pred", "suspicion"],
+                ascending=[sort_by == "pred_asc", False], na_position="last",
+            )
+        else:
+            scores = scores.sort_values("suspicion", ascending=False, na_position="last")
+
+    matched_total = len(scores)
+    counts = {
+        "bucket_counts": bucket_counts,
+        "flag_counts": flag_counts,
+        "label_counts": label_counts,
+        "scored_total": scored_total,
+        "matched_total": matched_total,
+    }
+    if scores.empty:
+        return payload([], **counts)
+
+    # Images are fetched after the cap, so a run of thousands costs one small
+    # lookup instead of a full-table join.
+    scores = scores.head(int(limit))
+    images = pd.DataFrame(
+        list(
+            label_data_selected_assets_new.objects.filter(
+                asset_id__in=[int(a) for a in scores["asset_id"] if a.isdigit()]
+            ).values("asset_id", "image_link", "batch_id")
+        )
+    )
+    if images.empty:
+        scores["image_link"] = None
+        scores["batch_id"] = None
+    else:
+        images["asset_id"] = images["asset_id"].astype(str)
+        images = images.drop_duplicates(subset=["asset_id"])
+        scores = scores.merge(images, on="asset_id", how="left")
+
+    def as_yes_no(series):
+        return np.where(series.isna(), None, np.where(series == 1, "yes", "no"))
+
+    scores["scored_label"] = as_yes_no(scores["label"])
+    scores["model_label"] = as_yes_no(scores["pred"])
+    scores["current_label"] = as_yes_no(scores["current_label_raw"])
+
+    scores = scores.rename(
+        columns={
+            "prob": "cv_prob", "pred": "cv_pred", "correct": "cv_correct",
+            "suspicion": "cv_suspicion", "flag": "cv_flag", "bucket": "cv_bucket",
+            "threshold": "cv_threshold", "fold": "cv_fold",
+            "date_scored": "cv_date_scored", "scored_label": "cv_scored_label",
+            "model_label": "cv_model_label", "disagrees": "cv_disagrees",
+            "stale": "cv_stale",
+        }
+    )
+    scores = scores.replace({np.nan: None})
+
+    return payload(
+        scores[
+            [
+                "asset_id", "image_link", "batch_id",
+                "current_label", "cv_scored_label", "cv_model_label",
+                "cv_prob", "cv_pred", "cv_correct", "cv_suspicion",
+                "cv_flag", "cv_bucket", "cv_threshold", "cv_fold",
+                "cv_date_scored", "cv_disagrees", "cv_stale",
+            ]
+        ].to_dict(orient="records"),
+        **counts,
+    )
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["GET"])
+def get_cv_scores_for_viewing(request: Request) -> JsonResponse:
+    """Return one page of a cross-validation run for a yes/no rule.
+
+    Args:
+        request (Request): GET body/data. ``task_type`` and ``rule_index`` are
+        required. Optional ``cv_run_id`` (omitted uses the most recent run for
+        that rule), ``flag_filter``, ``bucket_filter``, ``label_filter``,
+        ``sort_by`` and ``limit``.
+
+    Returns:
+        JsonResponse: ``assets_w_cv``, ``cv_runs``, resolved ``cv_run_id``,
+        ``bucket_counts``, ``flag_counts``, ``label_counts``, ``scored_total``,
+        ``matched_total``.
+
+    Frontend:
+        ``image_labeler.label_images.views.view_batch_labels`` with ``view=cv``
+        → ``view_batch_cv_labels.html``.
+    """
+    task_type = request.data.get("task_type", None)
+    rule_index = int(request.data.get("rule_index", None))
+
+    return JsonResponse(
+        _rule_cv_for_viewing(
+            task_type,
+            rule_index,
+            cv_run_id=request.data.get("cv_run_id"),
+            flag_filter=request.data.get("flag_filter", "all"),
+            bucket_filter=request.data.get("bucket_filter", "all"),
+            label_filter=request.data.get("label_filter", "all"),
+            sort_by=request.data.get("sort_by", "suspicion_desc"),
+            limit=request.data.get("limit", 300),
+        ),
+        safe=False,
+    )
+
+
 def _pair_terms():
     """Style terms behind each pair, keyed by pair_id.
 

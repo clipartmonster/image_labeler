@@ -66,6 +66,11 @@ urlpatterns = [
         views.get_batch_for_viewing,
         name="get_batch_for_viewing",
     ),
+    path(
+        "get_cv_scores_for_viewing/",
+        views.get_cv_scores_for_viewing,
+        name="get_cv_scores_for_viewing",
+    ),
     path("set_pair_label/", views.set_pair_label, name="set_pair_label"),
     path("get_style_analysis/", views.get_style_analysis, name="get_style_analysis"),
     path("get_style_auc/", views.get_style_auc, name="get_style_auc"),
