@@ -3562,7 +3562,7 @@ def model_coverage(request):
                 worst = {
                     **model,
                     "stage": stage["label"],
-                    "stage_eligible": stage["eligible"],
+                    "stage_eligible": model.get("eligible", stage["eligible"]),
                 }
             groups.setdefault(model["task_type"], []).append(model)
 

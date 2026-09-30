@@ -2593,21 +2593,62 @@ TASK_TYPE_STAGES = {
     "clip_art_type": "clip_art",
     "select_primary_colors": "clip_art",
     "color_fill_type": "clip_art",
+    # Grouped with clip art on the page. Its denominator is not that stage:
+    # see LINE_WIDTH_GATES.
     "line_width_type": "clip_art",
     "mono_color_type": "mono_color",
     "dark_ratio_score": "mono_color",
+    "color_complexity": "mono_color",
     "multi_color_type": "multi_color",
     "roughness_score": "multi_color",
+    "color_richness": "multi_color",
+    "color_pixel_density": "clip_art",
 }
 
-# Four active models write nothing to rule_labels; their predictions land in a table
-# of their own. Counting them from rule_labels would report every one as 0% run.
+# Continuous scores write nothing to rule_labels; their predictions land in a
+# table of their own. Counting them from rule_labels would report every one as
+# 0% run. The last three are not rows in model_results_prod — coverage picks
+# their versions up from the prediction table.
 TASK_TYPE_TABLES = {
     "select_primary_colors": "primary_colors",
     "dark_ratio_score": "dark_ratio_scores",
     "roughness_score": "roughness",
     "line_width_type": "line_width",
+    "color_pixel_density": "color_pixel_density",
+    "color_richness": "color_richness",
+    "color_complexity": "color_complexity",
 }
+
+# These scores are continuous. A row in rule_index_thresholds does not mean
+# the model was thresholded.
+NO_THRESHOLD_TASKS = frozenset({
+    "select_primary_colors",
+    "dark_ratio_score",
+    "roughness_score",
+    "line_width_type",
+    "color_pixel_density",
+    "color_richness",
+    "color_complexity",
+})
+
+# Not registered in model_results_prod. One row per distinct model_version
+# in the prediction table, placed on the stage named here.
+EXTRA_CONTINUOUS = (
+    {"task_type": "color_pixel_density", "title": "Color pixel density"},
+    {"task_type": "color_richness", "title": "Color richness"},
+    {"task_type": "color_complexity", "title": "Color complexity"},
+)
+CONTINUOUS_TITLES = {spec["task_type"]: spec["title"] for spec in EXTRA_CONTINUOUS}
+
+# color_complexity.asset_id is text; the stage views are bigint.
+TEXT_ASSET_ID_TABLES = frozenset({"color_complexity"})
+
+# Line width is scored against both line-segmentation populations. The
+# denominator is the sum of the two view counts, not stage_clip_art.
+LINE_WIDTH_GATES = (
+    "stage_mono_line_segmentation",
+    "stage_multi_line_segmentation",
+)
 
 
 def _rule_index_from_version(version_id):
@@ -2629,13 +2670,32 @@ def _gate_for_task(task_type):
     """The materialized view holding the assets a task type's models should cover.
 
     None both for the root stage, where the population is every asset, and for a
-    task type that isn't mapped to a stage yet.
+    task type that isn't mapped to a stage yet. Line width is the exception: it
+    is grouped under clip art, but its denominator is ``LINE_WIDTH_GATES``.
     """
     stage_key = TASK_TYPE_STAGES.get(task_type)
     for stage in MODEL_STAGES:
         if stage["key"] == stage_key:
             return stage["gate"]
     return None
+
+
+def _coverage_gates(task_type):
+    """Views whose rows make up this task's coverage denominator.
+
+    Line width sums the two line-segmentation stages. Every other task uses the
+    single stage view it sits under, or none at the root.
+    """
+    if task_type == "line_width_type":
+        return LINE_WIDTH_GATES
+    gate = _gate_for_task(task_type)
+    return (gate,) if gate else ()
+
+
+def _coverage_counts_key(version_id, task_type):
+    gates = _coverage_gates(task_type)
+    cache_gate = "+".join(gates) if gates else None
+    return f"model_coverage_counts_v1::{version_id}::{cache_gate}"
 
 
 def _prod_cursor():
@@ -2688,15 +2748,48 @@ def _stage_sizes():
     return sizes
 
 
-def _model_coverage_counts(version_id, task_type, gate):
+def _extra_continuous_models():
+    """Versions of continuous scores that are not in ``model_results_prod``.
+
+    Returns:
+        list[tuple]: ``(version_id, task_type, rule_index)``. Rule index is left
+        empty; the version string (``CD1_0.01``) carries it.
+    """
+    found = []
+    with _prod_cursor() as c:
+        c.execute("SET statement_timeout = '120s'")
+        for spec in EXTRA_CONTINUOUS:
+            table = TASK_TYPE_TABLES[spec["task_type"]]
+            c.execute(
+                f'SELECT DISTINCT model_version FROM "model_predictions"."{table}" '
+                "WHERE model_version IS NOT NULL"
+            )
+            for (version_id,) in c.fetchall():
+                found.append((version_id, spec["task_type"], None))
+    return found
+
+
+def _sum_view_counts(views):
+    """Sum of ``COUNT(*)`` over materialized views in ``model_predictions``."""
+    total = 0
+    with _prod_cursor() as c:
+        for view in views:
+            c.execute(f'SELECT COUNT(*) FROM "model_predictions"."{view}"')
+            total += c.fetchone()[0]
+    return total
+
+
+def _model_coverage_counts(version_id, task_type):
     """Assets this model has predicted, both overall and within its stage.
 
-    ``gate`` is the stage's materialized view, or None at the root where there is
-    nothing to intersect with and the overall count is the answer.
+    The in-stage count is a semi-join driven off the stage view. For rule_labels
+    that is two index-only scans merged on asset_id, which is why the index
+    leading with model_version matters -- without it Postgres walks all 113M
+    index entries. Line width sums that count across both line-segmentation
+    views, matching a denominator that is the sum of those two view sizes.
 
-    The in-stage count is a semi-join driven off the gate. For rule_labels that is
-    two index-only scans merged on asset_id, which is why the index leading with
-    model_version matters -- without it Postgres walks all 113M index entries.
+    At the root there is nothing to intersect with, so the overall count is the
+    answer.
 
     Cached per version: a few seconds each, and they only change when the pipeline
     runs again.
@@ -2706,12 +2799,22 @@ def _model_coverage_counts(version_id, task_type, gate):
     """
     from django.core.cache import cache
 
-    cache_key = f"model_coverage_counts_v1::{version_id}::{gate}"
+    gates = _coverage_gates(task_type)
+    cache_key = _coverage_counts_key(version_id, task_type)
     cached = cache.get(cache_key)
     if cached is not None:
         return tuple(cached)
 
     table = TASK_TYPE_TABLES.get(task_type)
+    source = (
+        f'"model_predictions"."{table}"' if table
+        else '"model_predictions"."rule_labels"'
+    )
+    asset_match = (
+        "s.asset_id::bigint = g.asset_id"
+        if table in TEXT_ASSET_ID_TABLES
+        else "s.asset_id = g.asset_id"
+    )
     with _prod_cursor() as c:
         c.execute("SET statement_timeout = '300s'")
         if table:
@@ -2728,19 +2831,33 @@ def _model_coverage_counts(version_id, task_type, gate):
             )
         total = c.fetchone()[0]
 
-        if gate:
-            source = f'"model_predictions"."{table}"' if table \
-                else '"model_predictions"."rule_labels"'
+        if len(gates) == 1:
             c.execute(
                 f"""
-                SELECT COUNT(*) FROM "model_predictions"."{gate}" g
+                SELECT COUNT(*) FROM "model_predictions"."{gates[0]}" g
                 WHERE EXISTS (
                     SELECT 1 FROM {source} s
-                    WHERE s.model_version = %s AND s.asset_id = g.asset_id
+                    WHERE s.model_version = %s AND {asset_match}
                 )
                 """,
                 [version_id],
             )
+            covered = c.fetchone()[0]
+        elif gates:
+            # Same population as the denominator: a hit in each view counts once
+            # per view, then the two counts are added.
+            parts = []
+            params = []
+            for gate in gates:
+                parts.append(
+                    f"""(SELECT COUNT(*) FROM "model_predictions"."{gate}" g
+                         WHERE EXISTS (
+                             SELECT 1 FROM {source} s
+                             WHERE s.model_version = %s AND {asset_match}
+                         ))"""
+                )
+                params.append(version_id)
+            c.execute("SELECT " + " + ".join(parts), params)
             covered = c.fetchone()[0]
         else:
             covered = total
@@ -2758,7 +2875,13 @@ def get_model_coverage(request: Request) -> JsonResponse:
     For every model marked active in ``models.model_results_prod``, counts the assets
     its version has predicted and compares that to the assets that reached its stage,
     so a downstream model that hasn't run over everything its upstream models cleared
-    shows up as a gap.
+    shows up as a gap. Line width uses the sum of
+    ``stage_mono_line_segmentation`` and ``stage_multi_line_segmentation`` as that
+    denominator. Color pixel density, color richness, and color complexity are
+    read from their own prediction tables, since they are not in
+    ``model_results_prod``. ``has_threshold`` is true when ``version_id`` appears
+    in ``models.rule_index_thresholds``, except for the continuous scores, which
+    never have a threshold.
 
     Each count is cached on its own and the request stops starting new ones once
     ``budget_seconds`` is spent, so no single call has to sit through all of them.
@@ -2801,11 +2924,21 @@ def get_model_coverage(request: Request) -> JsonResponse:
             """
         )
         active = c.fetchall()
+        c.execute(
+            'SELECT model_version FROM "models"."rule_index_thresholds"'
+        )
+        thresholded_versions = {row[0] for row in c.fetchall()}
+
+    registered = {(version_id, task_type) for version_id, task_type, _ in active}
+    active = list(active)
+    for row in _extra_continuous_models():
+        if (row[0], row[1]) not in registered:
+            active.append(row)
 
     if refresh:
         cache.delete(ROOT_ASSETS_KEY)
         cache.delete_many([
-            f"model_coverage_counts_v1::{version_id}::{_gate_for_task(task_type)}"
+            _coverage_counts_key(version_id, task_type)
             for version_id, task_type, _ in active
         ])
 
@@ -2814,6 +2947,11 @@ def get_model_coverage(request: Request) -> JsonResponse:
     # denominator and its models show a prediction count without a percentage.
     root_assets = _root_asset_count(compute=budget >= ROOT_COUNT_SECONDS)
     stage_sizes = _stage_sizes()
+    line_width_eligible = (
+        _sum_view_counts(LINE_WIDTH_GATES)
+        if any(task_type == "line_width_type" for _, task_type, _ in active)
+        else None
+    )
 
     stages = {}
     for stage in MODEL_STAGES:
@@ -2838,17 +2976,21 @@ def get_model_coverage(request: Request) -> JsonResponse:
     for version_id, task_type, rule_index in active:
         stage_key = TASK_TYPE_STAGES.get(task_type)
         stage = stages.get(stage_key) or unplaced
-        gate = stage.get("gate")
 
-        counts_key = f"model_coverage_counts_v1::{version_id}::{gate}"
+        counts_key = _coverage_counts_key(version_id, task_type)
         counts = cache.get(counts_key)
         if counts is None and time.time() - started < budget:
-            counts = _model_coverage_counts(version_id, task_type, gate)
+            counts = _model_coverage_counts(version_id, task_type)
         if counts is None:
             pending += 1
 
         total, covered = counts if counts else (None, None)
-        eligible = stage["eligible"]
+        # Line width's population is the two segmentation views added together,
+        # not the clip-art stage it is grouped under on the page.
+        eligible = (
+            line_width_eligible if task_type == "line_width_type"
+            else stage["eligible"]
+        )
         measurable = covered is not None and eligible
         display_ri = _rule_index_from_version(version_id) or rule_index
         stage["models"].append({
@@ -2857,9 +2999,15 @@ def get_model_coverage(request: Request) -> JsonResponse:
             "title": (
                 rule_titles.get((task_type, display_ri))
                 or rule_titles.get((task_type, rule_index), "")
+                or CONTINUOUS_TITLES.get(task_type, "")
             ),
             "version_id": version_id,
             "source": TASK_TYPE_TABLES.get(task_type) or "rule_labels",
+            "has_threshold": (
+                False if task_type in NO_THRESHOLD_TASKS
+                else version_id in thresholded_versions
+            ),
+            "eligible": eligible,
             "total": total,
             "covered": covered,
             "missing": max(eligible - covered, 0) if measurable else None,

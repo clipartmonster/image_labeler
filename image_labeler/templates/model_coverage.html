@@ -50,6 +50,10 @@
 .mc-missing-yes { color:#ff8f8f; font-weight:700; }
 .mc-missing-no { color:#7d9494; }
 .mc-stale { color:#8fa8a8; }
+.mc-denom { display:block; margin-top:2px; font-size:10px; font-weight:400;
+    font-family:monospace; color:#7d9494; text-transform:none; letter-spacing:0; }
+.mc-thresh-yes { color:#7fd6a1; font-weight:700; }
+.mc-thresh-no { color:#7d9494; }
 
 /* A bar makes "how far along is this model" readable at a glance. */
 .mc-bar { display:flex; align-items:center; gap:8px; justify-content:flex-end; }
@@ -81,7 +85,13 @@
         assets that reached its stage of the pipeline. Eligible counts come from the
         <code>stage_*</code> materialized views, which apply the same prod thresholds the
         pipeline itself uses, so "missing" means the upstream models cleared an asset and
-        this one has not predicted it.
+        this one has not predicted it. Line width is the exception: its denominator is
+        the number of assets in <code>stage_mono_line_segmentation</code> plus
+        <code>stage_multi_line_segmentation</code>. Color pixel density uses clip art,
+        color richness uses multi-color, and color complexity uses mono-color.
+        Threshold is yes when that model version is in <code>models.rule_index_thresholds</code>.
+        Primary colors, dark ratio, roughness, line width, color pixel density,
+        color richness, and color complexity never have a threshold.
     </p>
 
     <div class='mc-totals'>
@@ -168,16 +178,17 @@
 
         <table class='mc-table'>
             <tr>
-                <th class='mc-left' style='width:26%'>Model</th>
+                <th class='mc-left' style='width:24%'>Model</th>
                 <th style='width:12%'>Version</th>
-                <th style='width:14%'>Predicted<br>in stage</th>
-                <th style='width:13%'>Missing</th>
-                <th style='width:20%'>Coverage</th>
-                <th style='width:15%' title='Predictions for assets that no longer reach this stage, usually work done before the upstream thresholds moved.'>Stale</th>
+                <th style='width:8%' title='Yes when this model version is in models.rule_index_thresholds.'>Threshold</th>
+                <th style='width:13%'>Predicted<br>in stage</th>
+                <th style='width:12%'>Missing</th>
+                <th style='width:18%'>Coverage</th>
+                <th style='width:13%' title='Predictions for assets that no longer reach this stage, usually work done before the upstream thresholds moved.'>Stale</th>
             </tr>
             {% for group in stage.groups %}
             <tr class='mc-task'>
-                <td class='mc-left' colspan='6'>{{ group.task_type }}</td>
+                <td class='mc-left' colspan='7'>{{ group.task_type }}</td>
             </tr>
             {% for m in group.models %}
             <tr>
@@ -187,8 +198,14 @@
                     {% if m.source != 'rule_labels' %}
                     <span class='mc-tag mc-tag-side' title='This model writes to its own table, not model_predictions.rule_labels.'>{{ m.source }}</span>
                     {% endif %}
+                    {% if m.task_type == "line_width_type" and m.eligible != None %}
+                    <span class='mc-denom' title='stage_mono_line_segmentation + stage_multi_line_segmentation'>denom {{ m.eligible|intcomma }}</span>
+                    {% endif %}
                 </td>
                 <td class='mc-version'>{{ m.version_id }}</td>
+                <td class='{% if m.has_threshold %}mc-thresh-yes{% else %}mc-thresh-no{% endif %}'>
+                    {% if m.has_threshold %}Yes{% else %}No{% endif %}
+                </td>
                 {% if m.covered == None %}
                 <td class='mc-waiting' colspan='4'>counting&hellip;</td>
                 {% else %}
