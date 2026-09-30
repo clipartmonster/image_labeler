@@ -87,8 +87,8 @@
         pipeline itself uses, so "missing" means the upstream models cleared an asset and
         this one has not predicted it. Line width is the exception: its denominator is
         the number of assets in <code>stage_mono_line_segmentation</code> plus
-        <code>stage_multi_line_segmentation</code>. Color pixel density uses clip art,
-        color richness uses multi-color, and color complexity uses mono-color.
+        <code>stage_multi_line_segmentation</code>.         Color pixel density uses clip art. Color richness, paint fill, color depth,
+        watercolor, and gradient use multi-color. Color complexity uses mono-color.
         Threshold is yes when that model version is in <code>models.rule_index_thresholds</code>.
         Primary colors, dark ratio, roughness, line width, color pixel density,
         color richness, and color complexity never have a threshold.

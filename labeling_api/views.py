@@ -2605,6 +2605,11 @@ TASK_TYPE_STAGES = {
     "color_pixel_density": "clip_art",
 }
 
+# color_fill_type is clip art, except these rules, which run on multi-color
+# assets: Paint Fill (1), Color Depth (2), Color Depth scale (5),
+# Watercolor (6), Gradient (8).
+MULTI_COLOR_FILL_RULES = frozenset({1, 2, 5, 6, 8})
+
 # Continuous scores write nothing to rule_labels; their predictions land in a
 # table of their own. Counting them from rule_labels would report every one as
 # 0% run. The last three are not rows in model_results_prod — coverage picks
@@ -2666,21 +2671,18 @@ def _rule_index_from_version(version_id):
     return int(match.group(1)) if match else None
 
 
-def _gate_for_task(task_type):
-    """The materialized view holding the assets a task type's models should cover.
+def _stage_key_for(task_type, rule_index):
+    """Pipeline stage a model is scored against.
 
-    None both for the root stage, where the population is every asset, and for a
-    task type that isn't mapped to a stage yet. Line width is the exception: it
-    is grouped under clip art, but its denominator is ``LINE_WIDTH_GATES``.
+    Paint fill, color depth, watercolor, and gradient use the multi-color population.
+    Everything else uses the stage mapped for its task type.
     """
-    stage_key = TASK_TYPE_STAGES.get(task_type)
-    for stage in MODEL_STAGES:
-        if stage["key"] == stage_key:
-            return stage["gate"]
-    return None
+    if task_type == "color_fill_type" and rule_index in MULTI_COLOR_FILL_RULES:
+        return "multi_color"
+    return TASK_TYPE_STAGES.get(task_type)
 
 
-def _coverage_gates(task_type):
+def _coverage_gates(task_type, rule_index=None):
     """Views whose rows make up this task's coverage denominator.
 
     Line width sums the two line-segmentation stages. Every other task uses the
@@ -2688,12 +2690,16 @@ def _coverage_gates(task_type):
     """
     if task_type == "line_width_type":
         return LINE_WIDTH_GATES
-    gate = _gate_for_task(task_type)
-    return (gate,) if gate else ()
+    stage_key = _stage_key_for(task_type, rule_index)
+    for stage in MODEL_STAGES:
+        if stage["key"] == stage_key:
+            return (stage["gate"],) if stage["gate"] else ()
+    return ()
 
 
-def _coverage_counts_key(version_id, task_type):
-    gates = _coverage_gates(task_type)
+def _coverage_counts_key(version_id, task_type, rule_index=None):
+    rule_index = _rule_index_from_version(version_id) or rule_index
+    gates = _coverage_gates(task_type, rule_index)
     cache_gate = "+".join(gates) if gates else None
     return f"model_coverage_counts_v1::{version_id}::{cache_gate}"
 
@@ -2779,7 +2785,7 @@ def _sum_view_counts(views):
     return total
 
 
-def _model_coverage_counts(version_id, task_type):
+def _model_coverage_counts(version_id, task_type, rule_index=None):
     """Assets this model has predicted, both overall and within its stage.
 
     The in-stage count is a semi-join driven off the stage view. For rule_labels
@@ -2799,8 +2805,9 @@ def _model_coverage_counts(version_id, task_type):
     """
     from django.core.cache import cache
 
-    gates = _coverage_gates(task_type)
-    cache_key = _coverage_counts_key(version_id, task_type)
+    rule_index = _rule_index_from_version(version_id) or rule_index
+    gates = _coverage_gates(task_type, rule_index)
+    cache_key = _coverage_counts_key(version_id, task_type, rule_index)
     cached = cache.get(cache_key)
     if cached is not None:
         return tuple(cached)
@@ -2938,8 +2945,8 @@ def get_model_coverage(request: Request) -> JsonResponse:
     if refresh:
         cache.delete(ROOT_ASSETS_KEY)
         cache.delete_many([
-            _coverage_counts_key(version_id, task_type)
-            for version_id, task_type, _ in active
+            _coverage_counts_key(version_id, task_type, rule_index)
+            for version_id, task_type, rule_index in active
         ])
 
     # The root count alone takes ~2.5 minutes, so it only runs when the caller has
@@ -2974,13 +2981,14 @@ def get_model_coverage(request: Request) -> JsonResponse:
 
     pending = 0
     for version_id, task_type, rule_index in active:
-        stage_key = TASK_TYPE_STAGES.get(task_type)
+        display_ri = _rule_index_from_version(version_id) or rule_index
+        stage_key = _stage_key_for(task_type, display_ri)
         stage = stages.get(stage_key) or unplaced
 
-        counts_key = _coverage_counts_key(version_id, task_type)
+        counts_key = _coverage_counts_key(version_id, task_type, display_ri)
         counts = cache.get(counts_key)
         if counts is None and time.time() - started < budget:
-            counts = _model_coverage_counts(version_id, task_type)
+            counts = _model_coverage_counts(version_id, task_type, display_ri)
         if counts is None:
             pending += 1
 
@@ -2992,7 +3000,6 @@ def get_model_coverage(request: Request) -> JsonResponse:
             else stage["eligible"]
         )
         measurable = covered is not None and eligible
-        display_ri = _rule_index_from_version(version_id) or rule_index
         stage["models"].append({
             "task_type": task_type,
             "rule_index": display_ri,
