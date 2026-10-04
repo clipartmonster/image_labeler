@@ -2655,6 +2655,10 @@ LINE_WIDTH_GATES = (
     "stage_multi_line_segmentation",
 )
 
+# Not a model. Coverage asks whether every clip-art asset has a listing row.
+LISTING_DATA_TABLE = "model_generated_listing_data"
+LISTING_COVERAGE_KEY = "model_coverage_listing_data_v1"
+
 
 def _rule_index_from_version(version_id):
     """Rule index encoded in the version id (``LW2_0.02`` -> 2).
@@ -2873,6 +2877,43 @@ def _model_coverage_counts(version_id, task_type, rule_index=None):
     return total, covered
 
 
+def _listing_coverage_counts():
+    """Clip-art assets that have a generated listing, and listings overall.
+
+    The listing table is one row per asset. Covered is the clip-art assets
+    present in it. The overall count is every listing row, so the difference
+    is listings for assets that are no longer clip art.
+
+    Returns:
+        tuple[int, int]: (listing rows, clip-art assets with a listing).
+    """
+    from django.core.cache import cache
+
+    cached = cache.get(LISTING_COVERAGE_KEY)
+    if cached is not None:
+        return tuple(cached)
+
+    with _prod_cursor() as c:
+        c.execute("SET statement_timeout = '300s'")
+        c.execute(
+            f'SELECT COUNT(*) FROM "model_predictions"."{LISTING_DATA_TABLE}"'
+        )
+        total = c.fetchone()[0]
+        c.execute(
+            f"""
+            SELECT COUNT(*) FROM "model_predictions"."stage_clip_art" g
+            WHERE EXISTS (
+                SELECT 1 FROM "model_predictions"."{LISTING_DATA_TABLE}" s
+                WHERE s.asset_id = g.asset_id
+            )
+            """
+        )
+        covered = c.fetchone()[0]
+
+    cache.set(LISTING_COVERAGE_KEY, (total, covered), timeout=6 * 60 * 60)
+    return total, covered
+
+
 @csrf_exempt
 @api_authorization
 @api_view(["GET", "POST"])
@@ -2888,7 +2929,9 @@ def get_model_coverage(request: Request) -> JsonResponse:
     read from their own prediction tables, since they are not in
     ``model_results_prod``. ``has_threshold`` is true when ``version_id`` appears
     in ``models.rule_index_thresholds``, except for the continuous scores, which
-    never have a threshold.
+    never have a threshold. Generated listing data is not a model: the clip-art
+    stage also reports how many of its assets have a row in
+    ``model_predictions.model_generated_listing_data``.
 
     Each count is cached on its own and the request stops starting new ones once
     ``budget_seconds`` is spent, so no single call has to sit through all of them.
@@ -2944,6 +2987,7 @@ def get_model_coverage(request: Request) -> JsonResponse:
 
     if refresh:
         cache.delete(ROOT_ASSETS_KEY)
+        cache.delete(LISTING_COVERAGE_KEY)
         cache.delete_many([
             _coverage_counts_key(version_id, task_type, rule_index)
             for version_id, task_type, rule_index in active
@@ -3023,6 +3067,39 @@ def get_model_coverage(request: Request) -> JsonResponse:
             # model did before the upstream thresholds moved.
             "stale": max(total - covered, 0) if covered is not None else None,
         })
+
+    listing_counts = cache.get(LISTING_COVERAGE_KEY)
+    if listing_counts is None and time.time() - started < budget:
+        listing_counts = _listing_coverage_counts()
+    if listing_counts is None:
+        pending += 1
+    listing_total, listing_covered = listing_counts if listing_counts else (None, None)
+    clip_art = stages["clip_art"]
+    listing_eligible = clip_art["eligible"]
+    listing_measurable = listing_covered is not None and listing_eligible
+    clip_art["models"].append({
+        "task_type": "listing data",
+        "rule_index": None,
+        "title": "Generated listing data",
+        "version_id": None,
+        "source": LISTING_DATA_TABLE,
+        "is_model": False,
+        "has_threshold": None,
+        "eligible": listing_eligible,
+        "total": listing_total,
+        "covered": listing_covered,
+        "missing": (
+            max(listing_eligible - listing_covered, 0) if listing_measurable else None
+        ),
+        "percent": (
+            round(100 * listing_covered / listing_eligible, 1)
+            if listing_measurable else None
+        ),
+        "stale": (
+            max(listing_total - listing_covered, 0)
+            if listing_covered is not None and listing_total is not None else None
+        ),
+    })
 
     ordered = [stages[s["key"]] for s in MODEL_STAGES]
     if unplaced["models"]:

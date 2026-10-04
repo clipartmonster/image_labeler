@@ -92,6 +92,9 @@
         Threshold is yes when that model version is in <code>models.rule_index_thresholds</code>.
         Primary colors, dark ratio, roughness, line width, color pixel density,
         color richness, and color complexity never have a threshold.
+        Generated listing data is not a model: it checks that every asset in
+        <code>stage_clip_art</code> has a row in
+        <code>model_generated_listing_data</code>.
     </p>
 
     <div class='mc-totals'>
@@ -148,9 +151,10 @@
 
     {% if worst %}
     <div class='mc-callout'>
-        Biggest gap: <strong>{{ worst.task_type }}</strong> rule {{ worst.rule_index }}
+        Biggest gap: <strong>{{ worst.task_type }}</strong>
+        {% if worst.rule_index != None %}rule {{ worst.rule_index }}{% endif %}
         {% if worst.title %}({{ worst.title }}){% endif %}
-        has not predicted <strong>{{ worst.missing|intcomma }}</strong> of the
+        is missing from <strong>{{ worst.missing|intcomma }}</strong> of the
         {{ worst.stage_eligible|intcomma }} assets eligible for it.
     </div>
     {% endif %}
@@ -193,7 +197,9 @@
             {% for m in group.models %}
             <tr>
                 <td class='mc-left'>
+                    {% if m.rule_index != None %}
                     <span class='mc-rule'>rule {{ m.rule_index }}</span>
+                    {% endif %}
                     {{ m.title }}
                     {% if m.source != 'rule_labels' %}
                     <span class='mc-tag mc-tag-side' title='This model writes to its own table, not model_predictions.rule_labels.'>{{ m.source }}</span>
@@ -202,10 +208,16 @@
                     <span class='mc-denom' title='stage_mono_line_segmentation + stage_multi_line_segmentation'>denom {{ m.eligible|intcomma }}</span>
                     {% endif %}
                 </td>
-                <td class='mc-version'>{{ m.version_id }}</td>
+                <td class='mc-version'>
+                    {% if m.version_id %}{{ m.version_id }}{% else %}&mdash;{% endif %}
+                </td>
+                {% if m.has_threshold == None %}
+                <td class='mc-thresh-no'>&mdash;</td>
+                {% else %}
                 <td class='{% if m.has_threshold %}mc-thresh-yes{% else %}mc-thresh-no{% endif %}'>
                     {% if m.has_threshold %}Yes{% else %}No{% endif %}
                 </td>
+                {% endif %}
                 {% if m.covered == None %}
                 <td class='mc-waiting' colspan='4'>counting&hellip;</td>
                 {% else %}

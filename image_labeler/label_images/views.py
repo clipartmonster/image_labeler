@@ -3570,7 +3570,12 @@ def model_coverage(request):
             **stage,
             "depth": depth(stage["key"]),
             "groups": [
-                {"task_type": task_type, "models": sorted(m, key=lambda x: x["rule_index"])}
+                {
+                    "task_type": task_type,
+                    "models": sorted(
+                        m, key=lambda x: (x["rule_index"] is None, x["rule_index"] or 0)
+                    ),
+                }
                 for task_type, m in sorted(groups.items())
             ],
         })
@@ -3581,7 +3586,13 @@ def model_coverage(request):
         "generated_at": payload.get("generated_at"),
         "took_seconds": payload.get("took_seconds"),
         "tally": tally,
-        "model_count": sum(tally.values()),
+        "model_count": sum(
+            1
+            for stage in stages
+            for group in stage["groups"]
+            for model in group["models"]
+            if model.get("is_model", True)
+        ),
         "worst": worst,
         "pending": payload.get("pending", 0),
         "root_pending": payload.get("root_pending", False),
