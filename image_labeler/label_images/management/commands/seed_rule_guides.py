@@ -188,6 +188,21 @@ RULES = [
             "A line segment forming a boundary does not have to conform to the underlying color fill.",
         ],
     },
+    {
+        "task_type": "select_content",
+        "rule_index": 1,
+        "category": "Content Selection",
+        "title": "Select Best/Worst",
+        "description": (
+            "Choose whether an image is one of the best choices or one of the "
+            "worst choices for publishing to social media."
+        ),
+        "directives": [
+            "Choose Best for an especially strong, clear, appealing image suitable for publishing.",
+            "Choose Worst for an especially weak, confusing, defective, or unsuitable image.",
+            "Judge the image itself; do not infer a campaign, audience, or platform that is not provided.",
+        ],
+    },
 ]
 
 

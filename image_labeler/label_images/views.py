@@ -9,6 +9,7 @@ from django.db.models.functions import Concat
 from django.conf import settings
 from django.http import FileResponse, Http404
 
+import logging
 import os
 import random
 import string
@@ -20,12 +21,46 @@ import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
+logger = logging.getLogger(__name__)
+
 
 def is_admin(request):
     """Return True if the logged-in user is a superuser (admin)."""
     if not request.user.is_authenticated:
         return False
     return request.user.is_superuser
+
+
+def _asset_model_for_task(task_type):
+    from labeling_api.models import task_asset_model
+
+    return task_asset_model(task_type)
+
+
+def _all_asset_sub_batches():
+    from django.db.utils import OperationalError, ProgrammingError
+    from labeling_api.models import (
+        label_data_selected_assets_new,
+        select_content_assets,
+    )
+
+    fields = ("task_type", "rule_index", "batch_id", "large_sub_batch")
+    rows = list(
+        label_data_selected_assets_new.objects.values(*fields).distinct()
+    )
+    try:
+        rows.extend(select_content_assets.objects.values(*fields).distinct())
+    except (OperationalError, ProgrammingError):
+        pass
+    return sorted(
+        rows,
+        key=lambda row: (
+            row["task_type"],
+            row["rule_index"],
+            row["batch_id"],
+            row["large_sub_batch"],
+        ),
+    )
 
 
 @login_required
@@ -304,6 +339,14 @@ def show_images(request):
     )
 
 
+def _training_exempt(task_type, rule_index):
+    """Features whose work batches never require a completed training set."""
+    return (
+        (task_type == "line_width_type" and int(rule_index) == 2)
+        or task_type == "select_content"
+    )
+
+
 @login_required
 def setup_session(request):
     from labeling_api.views import _build_session_options
@@ -328,17 +371,14 @@ def setup_session(request):
             )
 
         from django.contrib.auth.models import User
-        from labeling_api.models import labelling_rules, label_data_selected_assets_new
+        from labeling_api.models import labelling_rules
         labeler_users = User.objects.filter(is_staff=True, is_superuser=False).values_list("username", flat=True)
 
         all_rules = list(labelling_rules.objects.exclude(task_type="color_type")
                          .values("task_type", "rule_index", "title")
                          .order_by("task_type", "rule_index"))
 
-        all_sub_batches = list(label_data_selected_assets_new.objects
-                               .values("task_type", "rule_index", "batch_id", "large_sub_batch")
-                               .distinct()
-                               .order_by("task_type", "rule_index", "batch_id", "large_sub_batch"))
+        all_sub_batches = _all_asset_sub_batches()
 
         selected_options = {
             "labeler_id": labeler_id,
@@ -470,8 +510,9 @@ def setup_session(request):
                 })
                 continue
 
+            asset_model = _asset_model_for_task(a.task_type)
             batch_asset_ids = set(
-                label_data_selected_assets_new.objects.filter(
+                asset_model.objects.filter(
                     task_type=a.task_type,
                     rule_index=a.rule_index,
                     batch_id=a.batch_id,
@@ -522,7 +563,7 @@ def setup_session(request):
             training_required = (
                 (a.task_type, a.rule_index) not in completed_training_features
                 and (a.task_type, a.rule_index) not in exempt_features
-                and not (a.task_type == "line_width_type" and a.rule_index == 2)
+                and not _training_exempt(a.task_type, a.rule_index)
             )
             work_assignments.append({
                 "id": a.id,
@@ -603,6 +644,127 @@ def internal(request):
 
     response = requests.get(api_url, json=data, headers=header)
     assets_to_label = json.loads(response.content)
+
+
+LABEL_HISTORY_SIZE = 90
+
+
+def _label_history_enabled(task_type, rule_index, labeler_source):
+    """Recent-label strips only apply to binary yes/no rules."""
+    if labeler_source == "reconcile_label":
+        return False
+    if task_type == "select_content":
+        return False
+    if task_type == "color_fill_type" and rule_index == 5:
+        return False
+    if task_type == "same_style" and rule_index == 2:
+        return False
+    return True
+
+
+def _label_history(task_type, rule_index, labeler_id, exclude_ids):
+    """Recent Yes/No reference images for the one-image labeling layout.
+
+    Each label is filled in priority order: unanimous consensus from
+    ``assets_w_rule_labels``, then this labeler's own responses, then other
+    labelers' responses. Within a tier, assets are ordered by their most recent
+    response. Lower tiers are only queried when higher tiers leave slots empty.
+
+    Returns:
+        dict: ``{"yes": {"consensus": [...], "own": [...], "others": [...]},
+        "no": {...}}`` where each entry is ``{"asset_id", "image_link"}``.
+    """
+    from django.db.models import Max
+    from labeling_api.models import (
+        assets_w_rule_labels,
+        content_asset_table,
+        label_data_selected_assets_new,
+        label_issues_table,
+        prompt_responses,
+    )
+
+    size = LABEL_HISTORY_SIZE
+    fetch_n = size * 5
+
+    base = (
+        prompt_responses.objects.filter(task_type=task_type, rule_index=rule_index)
+        .exclude(asset_id__in=list(exclude_ids))
+        .exclude(asset_id__in=label_issues_table.objects.values("asset_id"))
+    )
+    rule_labels = assets_w_rule_labels.objects.filter(
+        task_type=task_type, rule_index=rule_index
+    )
+
+    def most_recent(qs):
+        rows = (
+            qs.values("asset_id")
+            .annotate(last=Max("datetime_created"))
+            .order_by("-last")[:fetch_n]
+        )
+        return [r["asset_id"] for r in rows]
+
+    used = set()
+    tier_ids = {}
+    for response, label_value in (("yes", 1), ("no", 0)):
+        consensus_ids = rule_labels.filter(
+            label=label_value, label_strength="strong"
+        ).values("asset_id")
+        opposite_ids = rule_labels.filter(label=1 - label_value).values("asset_id")
+
+        tiers = {"consensus": [], "own": [], "others": []}
+        tiers["consensus"] = most_recent(base.filter(asset_id__in=consensus_ids))
+
+        if len(tiers["consensus"]) < size and labeler_id:
+            tiers["own"] = most_recent(
+                base.filter(labeler_id=labeler_id, prompt_response=response)
+                .exclude(asset_id__in=opposite_ids)
+            )
+
+        if len(tiers["consensus"]) + len(tiers["own"]) < size:
+            others = base.filter(prompt_response=response).exclude(
+                asset_id__in=opposite_ids
+            )
+            if labeler_id:
+                others = others.exclude(labeler_id=labeler_id)
+            tiers["others"] = most_recent(others)
+
+        for name in ("consensus", "own", "others"):
+            unique = []
+            for aid in tiers[name]:
+                if aid not in used:
+                    used.add(aid)
+                    unique.append(aid)
+            tiers[name] = unique
+        tier_ids[response] = tiers
+
+    links = dict(
+        label_data_selected_assets_new.objects.filter(asset_id__in=used)
+        .exclude(image_link__isnull=True)
+        .exclude(image_link="")
+        .values_list("asset_id", "image_link")
+    )
+    missing = used - links.keys()
+    if missing:
+        prod_db = "prod" if "prod" in settings.DATABASES else "default"
+        links.update(
+            content_asset_table.objects.using(prod_db)
+            .filter(asset_id__in=missing)
+            .exclude(image_link__isnull=True)
+            .exclude(image_link="")
+            .values_list("asset_id", "image_link")
+        )
+
+    return {
+        response: {
+            name: [
+                {"asset_id": aid, "image_link": links[aid]}
+                for aid in ids
+                if aid in links
+            ][:size]
+            for name, ids in tiers.items()
+        }
+        for response, tiers in tier_ids.items()
+    }
 
 
 @login_required
@@ -751,12 +913,27 @@ def mturk_redirect(request):
         .prefetch_related("directives", "reference_images")
     )
 
+    single_image_mode = _label_history_enabled(task_type, rule_index, labeler_source)
+    label_history = None
+    if single_image_mode:
+        page_asset_ids = {int(a["asset_id"]) for a in assets_to_label}
+        try:
+            label_history = _label_history(
+                task_type, rule_index, labeler_id, page_asset_ids
+            )
+        except Exception:
+            logger.exception(
+                "label history failed for %s/rule %s", task_type, rule_index
+            )
+
     return render(
         request,
         "label_content.html",
         {
             "task_type": task_type,
             "label": label_type,
+            "single_image_mode": single_image_mode,
+            "label_history": label_history,
             "assets_to_label": assets_to_label,
             "labelling_rules": labelling_rules,
             "collection_data": collection_data,
@@ -1336,6 +1513,127 @@ def view_batch_labels(request):
 
         traceback.print_exc()
         raise e
+
+
+@login_required
+def manage_select_content(request):
+    """Browse select_content labels with Best / Worst filters."""
+    from collections import Counter
+    from labeling_api.models import (
+        prompt_responses,
+        select_content_assets,
+        labelling_rules as LR,
+    )
+
+    label_filter = request.GET.get("label_filter", "all")
+    batch_id = request.GET.get("batch_id", "")
+    sort_by = request.GET.get("sort_by", "date_desc")
+
+    rule_entry = (
+        LR.objects.filter(task_type="select_content", rule_index=1)
+        .values("task_type", "rule_index", "title", "prompt")
+        .first()
+    ) or {
+        "task_type": "select_content",
+        "rule_index": 1,
+        "title": "Select Best/Worst",
+        "prompt": "Select Best or Worst.",
+    }
+
+    assets_qs = select_content_assets.objects.filter(
+        task_type="select_content", rule_index=1
+    )
+    batch_options = sorted(
+        set(assets_qs.values_list("batch_id", flat=True).distinct())
+    )
+    if batch_id != "":
+        try:
+            assets_qs = assets_qs.filter(batch_id=int(batch_id))
+        except (TypeError, ValueError):
+            batch_id = ""
+
+    image_map = {
+        row["asset_id"]: row["image_link"]
+        for row in assets_qs.values("asset_id", "image_link")
+    }
+    asset_ids = list(image_map.keys())
+
+    responses = list(
+        prompt_responses.objects.filter(
+            task_type="select_content",
+            rule_index=1,
+            asset_id__in=asset_ids,
+            prompt_response__in=["best", "worst"],
+        ).values("asset_id", "prompt_response", "datetime_created")
+    )
+
+    # Majority vote per asset; newest response breaks ties.
+    by_asset = {}
+    for row in responses:
+        by_asset.setdefault(row["asset_id"], []).append(row)
+
+    labeled_assets = []
+    for asset_id, rows in by_asset.items():
+        votes = Counter(r["prompt_response"] for r in rows)
+        top_count = max(votes.values())
+        winners = [label for label, count in votes.items() if count == top_count]
+        if len(winners) == 1:
+            label = winners[0]
+            agree_status = "agree" if top_count == len(rows) else "majority"
+        else:
+            # Tie — use most recent response as display label.
+            newest = max(rows, key=lambda r: r["datetime_created"] or "")
+            label = newest["prompt_response"]
+            agree_status = "disputed"
+        newest_date = max(
+            (r["datetime_created"] for r in rows if r["datetime_created"]),
+            default=None,
+        )
+        labeled_assets.append(
+            {
+                "asset_id": asset_id,
+                "image_link": image_map.get(asset_id, ""),
+                "label": label,
+                "agree_status": agree_status,
+                "samples": len(rows),
+                "date_labeled": newest_date,
+            }
+        )
+
+    label_counts = (
+        Counter(a["label"] for a in labeled_assets)
+        if labeled_assets
+        else Counter()
+    )
+    counts = [
+        {"label": "best", "count": label_counts.get("best", 0)},
+        {"label": "worst", "count": label_counts.get("worst", 0)},
+    ]
+
+    if label_filter in ("best", "worst"):
+        labeled_assets = [a for a in labeled_assets if a["label"] == label_filter]
+
+    reverse = sort_by != "date_asc"
+    labeled_assets.sort(
+        key=lambda a: a["date_labeled"] or "",
+        reverse=reverse,
+    )
+
+    return render(
+        request,
+        "manage_select_content.html",
+        {
+            "rule_entry": rule_entry,
+            "assets": labeled_assets,
+            "total_assets": len(labeled_assets),
+            "label_counts": counts,
+            "label_filter": label_filter,
+            "label_type_filters": ["all", "best", "worst"],
+            "batch_options": batch_options,
+            "batch_id": batch_id,
+            "sort_by": sort_by,
+        },
+    )
 
 
 @login_required
@@ -2691,7 +2989,7 @@ def admin_create_labeler(request):
 @admin_required
 def admin_bulk_assign(request):
     from django.contrib.auth.models import User
-    from labeling_api.models import label_data_selected_assets_new, labelling_rules
+    from labeling_api.models import labelling_rules
 
     labeler_users = list(
         User.objects.filter(is_staff=True, is_superuser=False)
@@ -2699,12 +2997,7 @@ def admin_bulk_assign(request):
         .values("id", "username")
     )
 
-    all_sub_batches = list(
-        label_data_selected_assets_new.objects
-        .values("task_type", "rule_index", "batch_id", "large_sub_batch")
-        .distinct()
-        .order_by("task_type", "rule_index", "batch_id", "large_sub_batch")
-    )
+    all_sub_batches = _all_asset_sub_batches()
 
     all_rules = list(
         labelling_rules.objects.exclude(task_type="color_type")
