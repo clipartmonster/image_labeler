@@ -9,6 +9,7 @@ from django.db.models.functions import Concat
 from django.conf import settings
 from django.http import FileResponse, Http404
 
+import logging
 import os
 import random
 import string
@@ -19,6 +20,8 @@ import json
 import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
+
+logger = logging.getLogger(__name__)
 
 
 def is_admin(request):
@@ -336,6 +339,14 @@ def show_images(request):
     )
 
 
+def _training_exempt(task_type, rule_index):
+    """Features whose work batches never require a completed training set."""
+    return (
+        (task_type == "line_width_type" and int(rule_index) == 2)
+        or task_type == "select_content"
+    )
+
+
 @login_required
 def setup_session(request):
     from labeling_api.views import _build_session_options
@@ -487,8 +498,7 @@ def setup_session(request):
 
             training_required = (
                 (a.task_type, a.rule_index) not in completed_training_features
-                and not (a.task_type == "line_width_type" and a.rule_index == 2)
-                and a.task_type != "select_content"
+                and not _training_exempt(a.task_type, a.rule_index)
             )
             work_assignments.append({
                 "id": a.id,
@@ -569,6 +579,125 @@ def internal(request):
 
     response = requests.get(api_url, json=data, headers=header)
     assets_to_label = json.loads(response.content)
+
+
+LABEL_HISTORY_SIZE = 48
+
+
+def _label_history_enabled(task_type, rule_index, labeler_source):
+    """Recent-label strips only apply to binary yes/no rules."""
+    if labeler_source == "reconcile_label":
+        return False
+    if task_type == "select_content":
+        return False
+    if task_type == "color_fill_type" and rule_index == 5:
+        return False
+    return True
+
+
+def _label_history(task_type, rule_index, labeler_id, exclude_ids):
+    """Recent Yes/No reference images for the one-image labeling layout.
+
+    Each label is filled in priority order: unanimous consensus from
+    ``assets_w_rule_labels``, then this labeler's own responses, then other
+    labelers' responses. Within a tier, assets are ordered by their most recent
+    response. Lower tiers are only queried when higher tiers leave slots empty.
+
+    Returns:
+        dict: ``{"yes": {"consensus": [...], "own": [...], "others": [...]},
+        "no": {...}}`` where each entry is ``{"asset_id", "image_link"}``.
+    """
+    from django.db.models import Max
+    from labeling_api.models import (
+        assets_w_rule_labels,
+        content_asset_table,
+        label_data_selected_assets_new,
+        label_issues_table,
+        prompt_responses,
+    )
+
+    size = LABEL_HISTORY_SIZE
+    fetch_n = size * 5
+
+    base = (
+        prompt_responses.objects.filter(task_type=task_type, rule_index=rule_index)
+        .exclude(asset_id__in=list(exclude_ids))
+        .exclude(asset_id__in=label_issues_table.objects.values("asset_id"))
+    )
+    rule_labels = assets_w_rule_labels.objects.filter(
+        task_type=task_type, rule_index=rule_index
+    )
+
+    def most_recent(qs):
+        rows = (
+            qs.values("asset_id")
+            .annotate(last=Max("datetime_created"))
+            .order_by("-last")[:fetch_n]
+        )
+        return [r["asset_id"] for r in rows]
+
+    used = set()
+    tier_ids = {}
+    for response, label_value in (("yes", 1), ("no", 0)):
+        consensus_ids = rule_labels.filter(
+            label=label_value, label_strength="strong"
+        ).values("asset_id")
+        opposite_ids = rule_labels.filter(label=1 - label_value).values("asset_id")
+
+        tiers = {"consensus": [], "own": [], "others": []}
+        tiers["consensus"] = most_recent(base.filter(asset_id__in=consensus_ids))
+
+        if len(tiers["consensus"]) < size and labeler_id:
+            tiers["own"] = most_recent(
+                base.filter(labeler_id=labeler_id, prompt_response=response)
+                .exclude(asset_id__in=opposite_ids)
+            )
+
+        if len(tiers["consensus"]) + len(tiers["own"]) < size:
+            others = base.filter(prompt_response=response).exclude(
+                asset_id__in=opposite_ids
+            )
+            if labeler_id:
+                others = others.exclude(labeler_id=labeler_id)
+            tiers["others"] = most_recent(others)
+
+        for name in ("consensus", "own", "others"):
+            unique = []
+            for aid in tiers[name]:
+                if aid not in used:
+                    used.add(aid)
+                    unique.append(aid)
+            tiers[name] = unique
+        tier_ids[response] = tiers
+
+    links = dict(
+        label_data_selected_assets_new.objects.filter(asset_id__in=used)
+        .exclude(image_link__isnull=True)
+        .exclude(image_link="")
+        .values_list("asset_id", "image_link")
+    )
+    missing = used - links.keys()
+    if missing:
+        prod_db = "prod" if "prod" in settings.DATABASES else "default"
+        links.update(
+            content_asset_table.objects.using(prod_db)
+            .filter(asset_id__in=missing)
+            .exclude(image_link__isnull=True)
+            .exclude(image_link="")
+            .values_list("asset_id", "image_link")
+        )
+
+    return {
+        response: {
+            name: [
+                {"asset_id": aid, "image_link": links[aid]}
+                for aid in ids
+                if aid in links
+            ][:size]
+            for name, ids in tiers.items()
+        }
+        for response, tiers in tier_ids.items()
+    }
 
 
 @login_required
@@ -717,12 +846,27 @@ def mturk_redirect(request):
         .prefetch_related("directives", "reference_images")
     )
 
+    single_image_mode = _label_history_enabled(task_type, rule_index, labeler_source)
+    label_history = None
+    if single_image_mode:
+        page_asset_ids = {int(a["asset_id"]) for a in assets_to_label}
+        try:
+            label_history = _label_history(
+                task_type, rule_index, labeler_id, page_asset_ids
+            )
+        except Exception:
+            logger.exception(
+                "label history failed for %s/rule %s", task_type, rule_index
+            )
+
     return render(
         request,
         "label_content.html",
         {
             "task_type": task_type,
             "label": label_type,
+            "single_image_mode": single_image_mode,
+            "label_history": label_history,
             "assets_to_label": assets_to_label,
             "labelling_rules": labelling_rules,
             "collection_data": collection_data,
@@ -3664,7 +3808,7 @@ def complete_training(request):
 def admin_manage_training(request):
     """Admin page to manage training sets per user."""
     from django.contrib.auth.models import User
-    from .models import BatchAssignment, TrainingBatchAsset
+    from .models import BatchAssignment, TrainingBatchAsset, TrainingResult
 
     labeler_users = list(
         User.objects.filter(is_superuser=False, is_staff=True)
@@ -3695,14 +3839,117 @@ def admin_manage_training(request):
     for ta in TrainingBatchAsset.objects.values("assignment_id").annotate(cnt=Count("id")):
         training_asset_counts[ta["assignment_id"]] = ta["cnt"]
 
+    trained = set(
+        TrainingResult.objects.values_list("user__username", "task_type", "rule_index")
+    )
     for a in training_assignments:
         a["asset_count"] = training_asset_counts.get(a["id"], 0)
+        a["waived"] = bool(
+            a["completed_at"]
+            and float(a["payment_amount"] or 0) == 0
+            and (a["user__username"], a["task_type"], a["rule_index"]) not in trained
+        )
+
+    rule_titles = {
+        (r["task_type"], r["rule_index"]): r["title"]
+        for r in LR.objects.values("task_type", "rule_index", "title")
+    }
+    # Open work per labeler for features that need training; the page treats a
+    # feature as locked unless a completed training row exists for it.
+    open_work = {}
+    open_work_qs = (
+        BatchAssignment.objects.filter(
+            is_training=False, completed_at__isnull=True, user__username__in=labeler_users,
+        )
+        .values("user__username", "task_type", "rule_index")
+        .annotate(batches=Count("id"))
+        .order_by("user__username", "task_type", "rule_index")
+    )
+    for w in open_work_qs:
+        if _training_exempt(w["task_type"], w["rule_index"]):
+            continue
+        open_work.setdefault(w["user__username"], []).append({
+            "task_type": w["task_type"],
+            "rule_index": w["rule_index"],
+            "title": rule_titles.get((w["task_type"], w["rule_index"]), ""),
+            "batches": w["batches"],
+        })
 
     return render(request, "admin_manage_training.html", {
         "labeler_users_json": json.dumps(labeler_users),
         "rules_json": json.dumps(rules, default=str),
         "training_assignments_json": json.dumps(training_assignments, default=str),
+        "open_work_json": json.dumps(open_work, default=str),
     })
+
+
+@admin_required_ajax
+def admin_training_unlock(request):
+    """AJAX: remove the training lock for a labeler on one or more features.
+
+    Marks the feature's training assignment complete, or creates an empty
+    completed one when none exists. Waivers carry no pay and are pre-marked
+    paid so they never show as owed. Removing the training row re-locks.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    from django.contrib.auth.models import User
+    from django.utils import timezone
+    from .models import BatchAssignment, TrainingBatchAsset, TrainingResult
+
+    data = json.loads(request.body)
+    username = data.get("username")
+    features = data.get("features") or []
+
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return JsonResponse({"error": f"User '{username}' not found"}, status=404)
+    if not features:
+        return JsonResponse({"error": "No features selected"}, status=400)
+
+    now = timezone.now()
+    rows = []
+    for f in features:
+        task_type = f.get("task_type")
+        try:
+            rule_index = int(f.get("rule_index"))
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "rule_index must be an integer"}, status=400)
+        if not task_type:
+            return JsonResponse({"error": "task_type is required"}, status=400)
+
+        assignment = BatchAssignment.objects.filter(
+            user=user, task_type=task_type, rule_index=rule_index, is_training=True,
+        ).first()
+        if assignment is None:
+            assignment = BatchAssignment.objects.create(
+                user=user, task_type=task_type, rule_index=rule_index,
+                batch_id=0, large_sub_batch=0, is_training=True,
+                payment_amount=0, paid=True, deadline=now, completed_at=now,
+            )
+        elif assignment.completed_at is None:
+            assignment.completed_at = now
+            assignment.payment_amount = 0
+            assignment.paid = True
+            assignment.save(update_fields=["completed_at", "payment_amount", "paid"])
+
+        asset_count = TrainingBatchAsset.objects.filter(assignment=assignment).count()
+        rows.append({
+            "id": assignment.id,
+            "user__username": user.username,
+            "task_type": task_type,
+            "rule_index": rule_index,
+            "completed_at": str(assignment.completed_at),
+            "payment_amount": str(assignment.payment_amount),
+            "asset_count": asset_count,
+            "waived": float(assignment.payment_amount) == 0 and not TrainingResult.objects.filter(
+                user=user, task_type=task_type, rule_index=rule_index,
+            ).exists(),
+        })
+
+    return JsonResponse({"ok": True, "unlocked": rows})
 
 
 @admin_required_ajax

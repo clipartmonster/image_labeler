@@ -68,6 +68,7 @@ urlpatterns = [
     path('admin/training/', views.admin_manage_training, name='admin_manage_training'),
     path('admin/training/create/', views.admin_training_create, name='admin_training_create'),
     path('admin/training/remove/', views.admin_training_remove, name='admin_training_remove'),
+    path('admin/training/unlock/', views.admin_training_unlock, name='admin_training_unlock'),
     path('admin/training/assets/', views.admin_training_assets, name='admin_training_assets'),
     path('admin/training/remove_asset/', views.admin_training_remove_asset, name='admin_training_remove_asset'),
 
