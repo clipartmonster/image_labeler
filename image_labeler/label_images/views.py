@@ -581,7 +581,7 @@ def internal(request):
     assets_to_label = json.loads(response.content)
 
 
-LABEL_HISTORY_SIZE = 48
+LABEL_HISTORY_SIZE = 90
 
 
 def _label_history_enabled(task_type, rule_index, labeler_source):
