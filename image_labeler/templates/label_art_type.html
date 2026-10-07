@@ -416,13 +416,42 @@ body[data-finished] #submit_labels .submit.button.container {
 }
 .label-history-group.yes { background: #b6c9b4; border-color: #9db597; }
 .label-history-group.no { background: #cbbaba; border-color: #b89d9d; }
-.label-history-title {
+.label-history-head {
     flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.label-history-title {
     font-family: "Roboto";
     font-size: 14px;
     font-weight: 700;
     color: #6f7a7a;
 }
+.label-history-pager {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: "Roboto";
+    font-size: 12px;
+    color: #6f7a7a;
+}
+.label-history-pager button {
+    width: 24px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid #9aa8a8;
+    border-radius: 4px;
+    background: #d6dede;
+    color: #4f5c5c;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+}
+.label-history-pager button:hover:not(:disabled) { background: #e8eded; }
+.label-history-pager button:disabled { opacity: .35; cursor: default; }
+.label-history-count { min-width: 64px; text-align: center; }
 .label-history-row {
     flex: 1 1 0;
     min-height: 30px;
@@ -720,13 +749,27 @@ body[data-finished] #submit_labels .submit.button.container {
 <div class="label-history light container">
     <div class="label-history-inner">
         <div class="label-history-group yes">
-            <div class="label-history-title">Recent Yes References</div>
+            <div class="label-history-head">
+                <div class="label-history-title">Recent Yes References</div>
+                <div class="label-history-pager" data-label="yes">
+                    <button type="button" data-page="older" title="Back 9 (older)">&#9664;</button>
+                    <span class="label-history-count"></span>
+                    <button type="button" data-page="newer" title="Forward 9 (newer)">&#9654;</button>
+                </div>
+            </div>
             <div class="label-history-row" data-label="yes" data-row="0"></div>
             <div class="label-history-row" data-label="yes" data-row="1"></div>
             <div class="label-history-row" data-label="yes" data-row="2"></div>
         </div>
         <div class="label-history-group no">
-            <div class="label-history-title">Recent No References</div>
+            <div class="label-history-head">
+                <div class="label-history-title">Recent No References</div>
+                <div class="label-history-pager" data-label="no">
+                    <button type="button" data-page="older" title="Back 9 (older)">&#9664;</button>
+                    <span class="label-history-count"></span>
+                    <button type="button" data-page="newer" title="Forward 9 (newer)">&#9654;</button>
+                </div>
+            </div>
             <div class="label-history-row" data-label="no" data-row="0"></div>
             <div class="label-history-row" data-label="no" data-row="1"></div>
             <div class="label-history-row" data-label="no" data-row="2"></div>
@@ -816,14 +859,15 @@ body[data-finished] #submit_labels .submit.button.container {
 
 {{ label_history|json_script:"label-history-data" }}
 <script>
-/* Recent-label panel for the one-image layout. Slots fill in priority order:
-   consensus, then this labeler's own labels, then other labelers'. Answers
-   given on this page join the "own" tier as they happen. */
+/* Recent-label panel for the one-image layout. Answers given on this page come
+   first, newest first; then consensus, this labeler's earlier labels, and other
+   labelers' labels. */
 document.addEventListener('DOMContentLoaded', function() {
     var THUMB_GAP = 6;
     var PER_ROW = 3;
-    var TIERS = ['consensus', 'own', 'others'];
+    var TIERS = ['session', 'consensus', 'own', 'others'];
     var TIER_TEXT = {
+        session: 'Your label',
         consensus: 'Consensus label',
         own: 'Your label',
         others: "Another labeler's label"
@@ -836,23 +880,45 @@ document.addEventListener('DOMContentLoaded', function() {
         TIERS.forEach(function(tier) { history[label][tier] = history[label][tier] || []; });
     });
 
-    function shown(label, count) {
+    function ordered(label) {
         var out = [];
         TIERS.forEach(function(tier) {
             history[label][tier].forEach(function(item) { out.push({ item: item, tier: tier }); });
         });
-        return out.slice(0, count);
+        return out;
+    }
+
+    // Page 0 is the most recent nine; each step back shows the next nine older labels.
+    var page = { yes: 0, no: 0 };
+    function pageSize() {
+        return PER_ROW * document.querySelectorAll('.label-history-row[data-label="yes"]').length;
+    }
+
+    function renderPager(label, total) {
+        var pager = document.querySelector('.label-history-pager[data-label="' + label + '"]');
+        if (!pager) return;
+        var per = pageSize();
+        var lastPage = Math.max(0, Math.ceil(total / per) - 1);
+        pager.querySelector('.label-history-count').textContent = total
+            ? (page[label] * per + 1) + '\u2013' + Math.min(total, (page[label] + 1) * per) + ' of ' + total
+            : 'None yet';
+        pager.querySelector('[data-page="older"]').disabled = page[label] >= lastPage;
+        pager.querySelector('[data-page="newer"]').disabled = page[label] <= 0;
     }
 
     // A 3 x 3 grid per label: square thumbnails as large as the row height and width allow.
     function render(label) {
         var rows = document.querySelectorAll('.label-history-row[data-label="' + label + '"]');
+        var all = ordered(label);
+        var per = PER_ROW * rows.length;
+        page[label] = Math.min(page[label], Math.max(0, Math.ceil(all.length / per) - 1));
+        renderPager(label, all.length);
         var width = rows[0].clientWidth;
         var height = rows[0].clientHeight;
         if (!width || !height) return;
         var perRow = PER_ROW;
         var size = Math.floor(Math.min(height, (width - (perRow - 1) * THUMB_GAP) / perRow));
-        var items = shown(label, perRow * rows.length);
+        var items = all.slice(page[label] * per, (page[label] + 1) * per);
         rows.forEach(function(row) {
             var start = parseInt(row.dataset.row, 10) * perRow;
             row.style.gridTemplateColumns = 'repeat(' + perRow + ', ' + size + 'px)';
@@ -869,7 +935,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     img.alt = caption;
                     slot.title = caption;
                     img.addEventListener('click', function(src, text) {
-                        return function() { openImageLightbox(src, text); };
+                        return function() { openReference(src, text); };
                     }(entry.item.image_link, caption));
                     img.addEventListener('error', function(assetId) {
                         return function() { removeAsset(assetId); renderAll(); };
@@ -884,6 +950,68 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function renderAll() { render('yes'); render('no'); }
+
+    // Reference images open in the lightbox at the size of the main image box,
+    // scaled to fit; every other lightbox use keeps its default sizing.
+    var lightboxImg = document.getElementById('lightboxImg');
+    var origOpenLightbox = window.openImageLightbox;
+    function resetLightboxImage() {
+        if (!lightboxImg) return;
+        ['width', 'height', 'objectFit', 'background'].forEach(function(prop) { lightboxImg.style[prop] = ''; });
+        lightboxImg.style.maxWidth = '90vw';
+        lightboxImg.style.maxHeight = '85vh';
+    }
+    if (typeof origOpenLightbox === 'function') {
+        window.openImageLightbox = function() {
+            resetLightboxImage();
+            return origOpenLightbox.apply(this, arguments);
+        };
+    }
+
+    function referenceFrame() {
+        var card = reviewing || document.querySelector('[data-asset-listing].active');
+        var box = card && card.querySelector('.design.dark.container');
+        var w = window.innerWidth * 0.7;
+        var h = window.innerHeight * 0.8;
+        var bg = '#ffffff';
+        if (box && box.offsetParent !== null) {
+            var cs = getComputedStyle(box);
+            w = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+            h = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+            if (cs.backgroundColor && cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent') {
+                bg = cs.backgroundColor;
+            }
+        }
+        return {
+            w: Math.floor(Math.min(w, window.innerWidth * 0.9)),
+            h: Math.floor(Math.min(h, window.innerHeight * 0.82)),
+            bg: bg
+        };
+    }
+
+    function openReference(src, caption) {
+        window.openImageLightbox(src, caption);
+        if (!lightboxImg) return;
+        var frame = referenceFrame();
+        lightboxImg.style.maxWidth = 'none';
+        lightboxImg.style.maxHeight = 'none';
+        lightboxImg.style.width = frame.w + 'px';
+        lightboxImg.style.height = frame.h + 'px';
+        lightboxImg.style.objectFit = 'contain';
+        lightboxImg.style.background = frame.bg;
+    }
+
+    document.querySelectorAll('.label-history-pager').forEach(function(pager) {
+        var label = pager.dataset.label;
+        pager.addEventListener('click', function(event) {
+            var button = event.target.closest('button[data-page]');
+            if (!button || button.disabled) return;
+            page[label] += button.dataset.page === 'older' ? 1 : -1;
+            page[label] = Math.max(0, page[label]);
+            render(label);
+            button.blur();
+        });
+    });
 
     // Scale the on-screen image (up or down) to the largest size that fits its
     // box below the asset id, keeping its aspect ratio.
@@ -955,7 +1083,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!img || (img.complete && img.naturalWidth === 0)) return;
         var assetId = containerAssetId(container);
         removeAsset(assetId);
-        history[response].own.unshift({ asset_id: assetId, image_link: img.currentSrc || img.src });
+        history[response].session.unshift({ asset_id: assetId, image_link: img.currentSrc || img.src });
+        page[response] = 0;
         renderAll();
     }
 
