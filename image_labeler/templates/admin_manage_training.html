@@ -50,6 +50,40 @@
         <p id="createTrainStatus" class="wf-muted" style="min-height:1.4em; margin-top:8px;"></p>
     </div>
 
+    <!-- Remove Training Lock -->
+    <div class="wf-card" style="margin-bottom:20px;">
+        <h2 style="margin-top:0; font-size:1rem;">Remove Training Lock</h2>
+        <p class="wf-muted" style="margin:0 0 12px; font-size:.85rem;">
+            Lets a labeler start work batches without finishing training. The waiver shows as a
+            $0 &ldquo;Waived&rdquo; row in Existing Training Sets; remove that row to lock them again.
+        </p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Labeler</label>
+                <select id="unlockLabeler" class="wf-select" style="width:160px;" onchange="renderLocked()">
+                    <option value="">-- select --</option>
+                </select>
+            </div>
+        </div>
+        <div id="lockedList" style="margin-top:12px;"></div>
+        <div id="unlockOther" style="display:none; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-top:14px; padding-top:12px; border-top:1px solid #c5d0d0;">
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Unlock another rule &mdash; Task Type</label>
+                <select id="unlockTaskType" class="wf-select" style="width:180px;" onchange="onUnlockTaskTypeChange()">
+                    <option value="">-- select --</option>
+                </select>
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Rule</label>
+                <select id="unlockRule" class="wf-select" style="width:200px;">
+                    <option value="">-- select task type first --</option>
+                </select>
+            </div>
+            <button class="wf-btn wf-btn-primary" onclick="unlockSelectedRule()" style="height:36px;">Unlock</button>
+        </div>
+        <p id="unlockStatus" class="wf-muted" style="min-height:1.4em; margin-top:8px;"></p>
+    </div>
+
     <!-- Existing Training Sets -->
     <div class="wf-card">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
@@ -79,28 +113,171 @@
 var _labelers = {{ labeler_users_json|safe }};
 var _rules = {{ rules_json|safe }};
 var _trainingSets = {{ training_assignments_json|safe }};
+var _openWork = {{ open_work_json|safe }};
 
 function getCsrfToken() { var c = document.cookie.match(/csrftoken=([^;]+)/); return c ? c[1] : ''; }
+
+function lockedFor(username) {
+    return (_openWork[username] || []).filter(function(f) {
+        return !_trainingSets.some(function(a) {
+            return a.user__username === username && a.task_type === f.task_type &&
+                a.rule_index == f.rule_index && a.completed_at;
+        });
+    });
+}
+
+function refreshUnlockOptions() {
+    Array.prototype.forEach.call(document.getElementById('unlockLabeler').options, function(o) {
+        if (!o.value) return;
+        var n = lockedFor(o.value).length;
+        o.textContent = n ? o.value + ' (' + n + ' locked)' : o.value;
+    });
+}
 
 (function init() {
     var labelerSel = document.getElementById('trainLabeler');
     var filterSel = document.getElementById('filterLabeler');
+    var unlockSel = document.getElementById('unlockLabeler');
     _labelers.forEach(function(u) {
         var o = document.createElement('option'); o.value = u; o.textContent = u;
         labelerSel.appendChild(o);
-        var o2 = o.cloneNode(true);
-        filterSel.appendChild(o2);
+        filterSel.appendChild(o.cloneNode(true));
+        unlockSel.appendChild(o.cloneNode(true));
     });
+    refreshUnlockOptions();
 
     var ttSet = new Set(_rules.map(function(r) { return r.task_type; }));
-    var ttSel = document.getElementById('trainTaskType');
-    ttSet.forEach(function(tt) {
-        var o = document.createElement('option'); o.value = tt; o.textContent = tt;
-        ttSel.appendChild(o);
+    ['trainTaskType', 'unlockTaskType'].forEach(function(id) {
+        var sel = document.getElementById(id);
+        ttSet.forEach(function(tt) {
+            var o = document.createElement('option'); o.value = tt; o.textContent = tt;
+            sel.appendChild(o);
+        });
     });
 
     renderTrainingSets();
 })();
+
+function ruleTitle(taskType, ruleIndex) {
+    var title = '';
+    _rules.forEach(function(r) {
+        if (r.task_type === taskType && r.rule_index == ruleIndex) title = r.title || '';
+    });
+    return title;
+}
+
+function renderLocked() {
+    var username = document.getElementById('unlockLabeler').value;
+    var list = document.getElementById('lockedList');
+    document.getElementById('unlockStatus').textContent = '';
+    document.getElementById('unlockOther').style.display = username ? 'flex' : 'none';
+    if (!username) { list.innerHTML = ''; return; }
+
+    var locked = lockedFor(username);
+    if (!locked.length) {
+        list.innerHTML = '<p class="wf-muted" style="margin:0;">' + username +
+            ' has no locked work batches. Use the picker below to unlock a rule before assigning it.</p>';
+        return;
+    }
+
+    var html = '<table class="wf-table"><thead><tr>' +
+        '<th>Task Type</th><th>Rule</th><th>Locked Batches</th><th>' +
+        '<button class="wf-btn wf-btn-sm wf-btn-success" onclick="unlockAll(this)">Unlock all (' + locked.length + ')</button>' +
+        '</th></tr></thead><tbody>';
+    locked.forEach(function(f, i) {
+        var title = f.title || ruleTitle(f.task_type, f.rule_index);
+        html += '<tr>' +
+            '<td>' + f.task_type + '</td>' +
+            '<td>Rule ' + f.rule_index + (title ? ' — ' + title : '') + '</td>' +
+            '<td>' + f.batches + '</td>' +
+            '<td><button class="wf-btn wf-btn-sm wf-btn-primary" onclick="unlockOne(' + i + ', this)">Unlock</button></td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    list.innerHTML = html;
+}
+
+function onUnlockTaskTypeChange() {
+    var tt = document.getElementById('unlockTaskType').value;
+    var ruleSel = document.getElementById('unlockRule');
+    ruleSel.innerHTML = '<option value="">-- select --</option>';
+    _rules.forEach(function(r) {
+        if (r.task_type === tt) {
+            var o = document.createElement('option');
+            o.value = r.rule_index;
+            o.textContent = 'Rule ' + r.rule_index + (r.title ? ' — ' + r.title : '');
+            ruleSel.appendChild(o);
+        }
+    });
+}
+
+function unlockOne(index, btn) {
+    var username = document.getElementById('unlockLabeler').value;
+    var f = lockedFor(username)[index];
+    if (f) sendUnlock(username, [f], btn);
+}
+
+function unlockAll(btn) {
+    var username = document.getElementById('unlockLabeler').value;
+    var locked = lockedFor(username);
+    if (!locked.length) return;
+    if (!confirm('Remove the training lock on ' + locked.length + ' rule(s) for ' + username + '?')) return;
+    sendUnlock(username, locked.slice(), btn);
+}
+
+function unlockSelectedRule() {
+    var username = document.getElementById('unlockLabeler').value;
+    var taskType = document.getElementById('unlockTaskType').value;
+    var ruleIndex = document.getElementById('unlockRule').value;
+    var status = document.getElementById('unlockStatus');
+    if (!username || !taskType || !ruleIndex) {
+        status.style.color = '#bd4444';
+        status.textContent = 'Please select a labeler, task type, and rule.';
+        return;
+    }
+    sendUnlock(username, [{task_type: taskType, rule_index: parseInt(ruleIndex)}], null);
+}
+
+function sendUnlock(username, features, btn) {
+    var status = document.getElementById('unlockStatus');
+    if (btn) btn.disabled = true;
+    status.style.color = '#6f7a7a';
+    status.textContent = 'Removing training lock\u2026';
+
+    fetch('/label_images/admin/training/unlock/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({
+            username: username,
+            features: features.map(function(f) { return {task_type: f.task_type, rule_index: f.rule_index}; }),
+        }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            status.style.color = '#bd4444';
+            status.textContent = data.error;
+            if (btn) btn.disabled = false;
+            return;
+        }
+        data.unlocked.forEach(function(row) {
+            _trainingSets = _trainingSets.filter(function(a) { return a.id !== row.id; });
+            _trainingSets.push(row);
+        });
+        var msg = 'Training lock removed for ' + username + ': ' +
+            data.unlocked.map(function(row) { return row.task_type + ' rule ' + row.rule_index; }).join(', ') + '.';
+        refreshUnlockOptions();
+        renderLocked();
+        renderTrainingSets();
+        status.style.color = '#5a8a5a';
+        status.textContent = msg;
+    })
+    .catch(function() {
+        status.style.color = '#bd4444';
+        status.textContent = 'Request failed.';
+        if (btn) btn.disabled = false;
+    });
+}
 
 function onTrainTaskTypeChange() {
     var tt = document.getElementById('trainTaskType').value;
@@ -184,9 +361,11 @@ function renderTrainingSets() {
         '</tr></thead><tbody>';
 
     filtered.forEach(function(a) {
-        var status = a.completed_at
-            ? '<span class="wf-badge wf-badge-green">Done</span>'
-            : '<span class="wf-badge wf-badge-gray">Pending</span>';
+        var status = a.waived
+            ? '<span class="wf-badge wf-badge-blue" title="Training lock removed by an admin">Waived</span>'
+            : a.completed_at
+                ? '<span class="wf-badge wf-badge-green">Done</span>'
+                : '<span class="wf-badge wf-badge-gray">Pending</span>';
         var ruleName = '';
         _rules.forEach(function(r) {
             if (r.task_type === a.task_type && r.rule_index == a.rule_index) ruleName = r.title || '';
@@ -208,7 +387,12 @@ function renderTrainingSets() {
 }
 
 function removeTraining(assignmentId, btn) {
-    if (!confirm('Remove this training set and all its assets?')) return;
+    var row = _trainingSets.filter(function(a) { return a.id === assignmentId; })[0];
+    var prompt = row && row.waived
+        ? 'Remove this waiver? ' + row.user__username + ' will be locked out of ' + row.task_type +
+          ' rule ' + row.rule_index + ' work batches again until they complete training.'
+        : 'Remove this training set and all its assets?';
+    if (!confirm(prompt)) return;
     btn.disabled = true;
 
     fetch('/label_images/admin/training/remove/', {
@@ -221,6 +405,8 @@ function removeTraining(assignmentId, btn) {
         if (data.error) { alert(data.error); btn.disabled = false; return; }
         _trainingSets = _trainingSets.filter(function(a) { return a.id !== assignmentId; });
         renderTrainingSets();
+        refreshUnlockOptions();
+        renderLocked();
     });
 }
 

@@ -1949,17 +1949,24 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
     )
 
     # Aggregated totals per rule_index (across all batches) — used for rule selection buttons.
-    # Falls back to labeling_rule_options (from labelling_rules table) when there are no assets
-    # yet, so the rule buttons always appear.
+    # Every rule in labelling_rules gets a button, including rules with no queued assets yet
+    # (shown as 0 / 0); the Add Sub-batch modal reads its rule list from these buttons.
     if not rule_index_stats.empty:
-        rule_summary = (
+        asset_totals = (
             rule_index_stats.groupby(["task_type", "rule_index"])
             .agg(
                 completed_labels=("completed_labels", "sum"), samples=("samples", "sum")
             )
-            .astype({"completed_labels": "int"})
             .reset_index()
-            .merge(labeling_rule_options, on=["task_type", "rule_index"], how="left")
+        )
+        rule_summary = (
+            labeling_rule_options.merge(
+                asset_totals, on=["task_type", "rule_index"], how="outer"
+            )
+            .fillna({"completed_labels": 0, "samples": 0, "title": ""})
+            .astype({"completed_labels": "int", "samples": "int"})
+            .sort_values("rule_index")
+            .reset_index(drop=True)
         )
     else:
         rule_summary = labeling_rule_options.assign(completed_labels=0, samples=0)
