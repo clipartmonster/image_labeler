@@ -6,6 +6,7 @@ import time
 from django.views.decorators.csrf import csrf_exempt
 
 logger = logging.getLogger(__name__)
+SELECT_CONTENT_RESPONSES = frozenset({"best", "worst"})
 from django.db.models import Max
 from django.db.models import Count
 from django.apps import apps
@@ -705,6 +706,18 @@ def collect_prompt_internal_source(request: Request) -> JsonResponse:
     rule_index = request.data.get("rule_index", None)
     prompt_response = request.data.get("prompt_response", None)
 
+    if (
+        task_type == "select_content"
+        and prompt_response not in SELECT_CONTENT_RESPONSES
+    ):
+        return JsonResponse(
+            {
+                "status": "failed",
+                "explanation": "select_content response must be best or worst",
+            },
+            status=400,
+        )
+
     # Prevent duplicate labels: if this labeler already labeled this asset, skip.
     # Admins and reconcile labels are exempt so they can re-label.
     is_admin = hasattr(request, "user") and request.user.is_authenticated and request.user.is_superuser
@@ -880,8 +893,9 @@ def _check_batch_complete(labeler_id, task_type, rule_index):
                 a.save(update_fields=["completed_at"])
             continue
 
+        asset_model = task_asset_model(a.task_type)
         batch_asset_ids = set(
-            label_data_selected_assets_new.objects.filter(
+            asset_model.objects.filter(
                 task_type=a.task_type,
                 rule_index=a.rule_index,
                 batch_id=a.batch_id,
@@ -949,6 +963,18 @@ def collect_prompt(request: Request) -> JsonResponse:
     is_test_question = request.data.get("is_test_question", "no")
     mturk_batch_id = request.data.get("mturk_batch_id", None)
     is_lure_question = request.data.get("is_lure_question", "no")
+
+    if (
+        task_type == "select_content"
+        and prompt_response not in SELECT_CONTENT_RESPONSES
+    ):
+        return JsonResponse(
+            {
+                "status": "failed",
+                "explanation": "select_content response must be best or worst",
+            },
+            status=400,
+        )
 
     data_table = apps.get_model(
         "labeling_api", "label_data_" + task_type + "_prompt_responses"
@@ -3233,8 +3259,9 @@ def get_asset_batch(request: Request) -> JsonResponse:
             safe=False,
         )
 
+    asset_model = task_asset_model(task_type)
     batch_asset_ids = set(
-        label_data_selected_assets_new.objects.filter(
+        asset_model.objects.filter(
             task_type=task_type,
             rule_index=rule_index,
             batch_id=batch_id,
@@ -3267,7 +3294,7 @@ def get_asset_batch(request: Request) -> JsonResponse:
     flagged_ids = set(label_issues_table.objects.values_list("asset_id", flat=True))
 
     asset_batch = list(
-        label_data_selected_assets_new.objects.filter(
+        asset_model.objects.filter(
             task_type=task_type,
             rule_index=rule_index,
             batch_id=batch_id,
@@ -3453,8 +3480,9 @@ def get_disputed_assets(request: Request) -> JsonResponse:
     rule_index = request.data.get("rule_index", 1)
     task_type = request.data.get("task_type", None)
 
+    asset_model = task_asset_model(task_type)
     asset_links = pd.DataFrame(
-        list(label_data_selected_assets_new.objects.values("asset_id", "image_link"))
+        list(asset_model.objects.values("asset_id", "image_link"))
     ).drop_duplicates(subset=["asset_id"], keep="first")
 
     data = prompt_responses.objects.filter(
@@ -3470,14 +3498,41 @@ def get_disputed_assets(request: Request) -> JsonResponse:
 
     #################################
 
-    pr_df = pd.DataFrame(list(data)).filter(
+    response_df = pd.DataFrame(list(data)).filter(
         ["asset_id", "labeler_id", "prompt_response"]
     )
+    if response_df.empty:
+        return JsonResponse([], safe=False)
 
+    if task_type == "select_content":
+        vote_counts = (
+            response_df.groupby(["asset_id", "prompt_response"])
+            .size()
+            .reset_index(name="votes")
+        )
+        totals = response_df.groupby("asset_id").size().rename("samples")
+        max_votes = vote_counts.groupby("asset_id")["votes"].max().rename("max_votes")
+        winner_counts = (
+            vote_counts.merge(max_votes, on="asset_id")
+            .query("votes == max_votes")
+            .groupby("asset_id")
+            .size()
+            .rename("winner_count")
+        )
+        disputed_ids = (
+            pd.concat([totals, winner_counts], axis=1)
+            .reset_index()
+            .query("samples > 1 and winner_count > 1")["asset_id"]
+        )
+        dispusted_assets = (
+            pd.DataFrame({"asset_id": disputed_ids})
+            .merge(asset_links, on="asset_id", how="left")
+            .filter(["asset_id", "image_link"])
+        )
     # color_fill_type rule 5 is graded (Flat / N layers / gradient), so a dispute
     # is a plurality tie rather than a yes/no 50/50 split.
-    if str(task_type) == "color_fill_type" and int(rule_index) == 5:
-        disputed_ids = _plurality_tie_asset_ids(pr_df)
+    elif str(task_type) == "color_fill_type" and int(rule_index) == 5:
+        disputed_ids = _plurality_tie_asset_ids(response_df)
         dispusted_assets = (
             pd.DataFrame({"asset_id": list(disputed_ids)})
             .merge(asset_links, on="asset_id", how="left")
@@ -3485,7 +3540,7 @@ def get_disputed_assets(request: Request) -> JsonResponse:
         )
     else:
         dispusted_assets = (
-            pr_df
+            response_df
             .assign(samples=lambda x: x.groupby("asset_id")["asset_id"].transform("count"))
             .query("samples > 1")
             .assign(yes_response=lambda x: np.where(x.prompt_response == "yes", 1, 0))
@@ -3760,7 +3815,8 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
         return data
 
     # ── selected assets (batch/sub-batch metadata) ──────────────────────────
-    assets_qs = label_data_selected_assets_new.objects.filter(
+    asset_model = task_asset_model(task_type)
+    assets_qs = asset_model.objects.filter(
         task_type=task_type
     ).values("asset_id", "batch_id", "large_sub_batch", "task_type", "rule_index")
 
@@ -3769,7 +3825,16 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
         flagged_ids = label_issues_table.objects.values_list("asset_id", flat=True)
         assets_qs = assets_qs.exclude(asset_id__in=flagged_ids)
 
-    selected_assets_new = pd.DataFrame(list(assets_qs))
+    selected_assets_new = pd.DataFrame(
+        list(assets_qs),
+        columns=[
+            "asset_id",
+            "batch_id",
+            "large_sub_batch",
+            "task_type",
+            "rule_index",
+        ],
+    )
 
     batch_options = (
         selected_assets_new[["batch_id"]]
@@ -3850,17 +3915,24 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
     )
 
     # Aggregated totals per rule_index (across all batches) — used for rule selection buttons.
-    # Falls back to labeling_rule_options (from labelling_rules table) when there are no assets
-    # yet, so the rule buttons always appear.
+    # Every rule in labelling_rules gets a button, including rules with no queued assets yet
+    # (shown as 0 / 0); the Add Sub-batch modal reads its rule list from these buttons.
     if not rule_index_stats.empty:
-        rule_summary = (
+        asset_totals = (
             rule_index_stats.groupby(["task_type", "rule_index"])
             .agg(
                 completed_labels=("completed_labels", "sum"), samples=("samples", "sum")
             )
-            .astype({"completed_labels": "int"})
             .reset_index()
-            .merge(labeling_rule_options, on=["task_type", "rule_index"], how="left")
+        )
+        rule_summary = (
+            labeling_rule_options.merge(
+                asset_totals, on=["task_type", "rule_index"], how="outer"
+            )
+            .fillna({"completed_labels": 0, "samples": 0, "title": ""})
+            .astype({"completed_labels": "int", "samples": "int"})
+            .sort_values("rule_index")
+            .reset_index(drop=True)
         )
     else:
         rule_summary = labeling_rule_options.assign(completed_labels=0, samples=0)
@@ -5883,8 +5955,9 @@ def get_sub_batch_options(request):
             .order_by("model_version")
         )
 
+        asset_model = task_asset_model(task_type)
         batch_counts_qs = (
-            label_data_selected_assets_new.objects.filter(
+            asset_model.objects.filter(
                 task_type=task_type, rule_index=rule_index
             )
             .values("batch_id")
@@ -5967,6 +6040,19 @@ def create_sub_batch(request):
     if not task_type:
         return JsonResponse(
             {"status": "failed", "explanation": "task_type is required"}, status=400
+        )
+
+    if task_type == "select_content":
+        return JsonResponse(
+            {
+                "status": "failed",
+                "explanation": (
+                    "select_content batches are created by the offline script "
+                    "image_labeler/new_labels/create_select_content_batch_cursor.py, "
+                    "not through Add Sub-batch."
+                ),
+            },
+            status=400,
         )
 
     try:
@@ -6237,18 +6323,40 @@ def get_reconcile_count(request):
             }
             return JsonResponse({"disputed_count": len(disputed_ids)})
 
-        disputed = (
-            pr_df.groupby("asset_id")
-            .agg(
-                samples=("prompt_response", "count"),
-                yes=("prompt_response", lambda x: (x == "yes").sum()),
+        if task_type == "select_content":
+            vote_counts = (
+                pr_df.groupby(["asset_id", "prompt_response"])
+                .size()
+                .reset_index(name="votes")
             )
-            .reset_index()
-            .query("samples > 1")
-            .assign(pct=lambda x: x.yes / x.samples)
-            .query("pct == 0.5")
-            .query("asset_id not in @flagged_ids")
-        )
+            totals = pr_df.groupby("asset_id").size().rename("samples")
+            max_votes = vote_counts.groupby("asset_id")["votes"].max().rename("max_votes")
+            winner_counts = (
+                vote_counts.merge(max_votes, on="asset_id")
+                .query("votes == max_votes")
+                .groupby("asset_id")
+                .size()
+                .rename("winner_count")
+            )
+            disputed = (
+                pd.concat([totals, winner_counts], axis=1)
+                .reset_index()
+                .query("samples > 1 and winner_count > 1")
+                .query("asset_id not in @flagged_ids")
+            )
+        else:
+            disputed = (
+                pr_df.groupby("asset_id")
+                .agg(
+                    samples=("prompt_response", "count"),
+                    yes=("prompt_response", lambda x: (x == "yes").sum()),
+                )
+                .reset_index()
+                .query("samples > 1")
+                .assign(pct=lambda x: x.yes / x.samples)
+                .query("pct == 0.5")
+                .query("asset_id not in @flagged_ids")
+            )
 
         return JsonResponse({"disputed_count": len(disputed)})
 
