@@ -2691,7 +2691,9 @@ def admin_create_labeler(request):
 @admin_required
 def admin_bulk_assign(request):
     from django.contrib.auth.models import User
-    from labeling_api.models import label_data_selected_assets_new, labelling_rules
+    from labeling_api.models import (
+        label_data_selected_assets_new, label_data_selected_pair_labels, labelling_rules,
+    )
 
     labeler_users = list(
         User.objects.filter(is_staff=True, is_superuser=False)
@@ -2699,12 +2701,22 @@ def admin_bulk_assign(request):
         .values("id", "username")
     )
 
+    batch_fields = ("task_type", "rule_index", "batch_id", "large_sub_batch")
     all_sub_batches = list(
         label_data_selected_assets_new.objects
-        .values("task_type", "rule_index", "batch_id", "large_sub_batch")
+        .values(*batch_fields)
         .distinct()
-        .order_by("task_type", "rule_index", "batch_id", "large_sub_batch")
+        .order_by(*batch_fields)
     )
+    # Pair tasks (same_style rule 2) are queued in selected_pair_labels, not
+    # selected_assets_new.
+    all_sub_batches += list(
+        label_data_selected_pair_labels.objects
+        .values(*batch_fields)
+        .distinct()
+        .order_by(*batch_fields)
+    )
+    all_sub_batches.sort(key=lambda sb: tuple(sb[f] for f in batch_fields))
 
     all_rules = list(
         labelling_rules.objects.exclude(task_type="color_type")
@@ -4150,6 +4162,25 @@ def admin_subbatch_completion(request):
         key = f"{task_type}|{row[1]}|{row[2]}|{row[3]}"
         stats[key][0] += 1
         if row[0] in done_ids:
+            stats[key][1] += 1
+
+    # Pair tasks (same_style rule 2) live in selected_pair_labels; a pair is done
+    # once it has a response in style_prompt_responses.
+    from labeling_api.models import label_data_selected_pair_labels, style_prompt_responses
+    done_pairs = set(
+        style_prompt_responses.objects
+        .filter(task_type=task_type)
+        .values_list("asset_id_1", "asset_id_2", "rule_index")
+        .distinct()
+    )
+    for a1, a2, ri, bid, lsb in (
+        label_data_selected_pair_labels.objects
+        .filter(task_type=task_type)
+        .values_list("asset_id_1", "asset_id_2", "rule_index", "batch_id", "large_sub_batch")
+    ):
+        key = f"{task_type}|{ri}|{bid}|{lsb}"
+        stats[key][0] += 1
+        if (a1, a2, ri) in done_pairs:
             stats[key][1] += 1
 
     result = {}
