@@ -9,6 +9,7 @@ from django.db.models.functions import Concat
 from django.conf import settings
 from django.http import FileResponse, Http404
 
+import logging
 import os
 import random
 import string
@@ -20,12 +21,44 @@ import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
+logger = logging.getLogger(__name__)
+
 
 def is_admin(request):
     """Return True if the logged-in user is a superuser (admin)."""
     if not request.user.is_authenticated:
         return False
     return request.user.is_superuser
+
+
+def _asset_model_for_task(task_type):
+    from labeling_api.models import task_asset_model
+
+    return task_asset_model(task_type)
+
+
+def _all_asset_sub_batches():
+    from django.db.utils import OperationalError, ProgrammingError
+    from labeling_api.models import (
+        label_data_selected_assets_new,
+        select_content_assets,
+    )
+
+    fields = ("task_type", "rule_index", "batch_id", "large_sub_batch")
+    rows = list(label_data_selected_assets_new.objects.values(*fields).distinct())
+    try:
+        rows.extend(select_content_assets.objects.values(*fields).distinct())
+    except (OperationalError, ProgrammingError):
+        pass
+    return sorted(
+        rows,
+        key=lambda row: (
+            row["task_type"],
+            row["rule_index"],
+            row["batch_id"],
+            row["large_sub_batch"],
+        ),
+    )
 
 
 @login_required
@@ -36,9 +69,15 @@ def change_password(request):
         confirm_pw = request.POST.get("confirm_password", "")
 
         if len(new_pw) < 8:
-            return render(request, "change_password.html", {"error": "Password must be at least 8 characters."})
+            return render(
+                request,
+                "change_password.html",
+                {"error": "Password must be at least 8 characters."},
+            )
         if new_pw != confirm_pw:
-            return render(request, "change_password.html", {"error": "Passwords do not match."})
+            return render(
+                request, "change_password.html", {"error": "Passwords do not match."}
+            )
 
         request.user.set_password(new_pw)
         request.user.save()
@@ -49,6 +88,7 @@ def change_password(request):
             profile.save()
 
         from django.contrib.auth import update_session_auth_hash
+
         update_session_auth_hash(request, request.user)
         return redirect("front_page")
 
@@ -86,7 +126,9 @@ def assign_batch(request):
 
     user = User.objects.get(username=username)
     deadline_date = parse_date(deadline_str)
-    deadline_dt = timezone.make_aware(datetime.combine(deadline_date, datetime.max.time().replace(microsecond=0)))
+    deadline_dt = timezone.make_aware(
+        datetime.combine(deadline_date, datetime.max.time().replace(microsecond=0))
+    )
 
     BatchAssignment.objects.update_or_create(
         user=user,
@@ -118,7 +160,9 @@ def select_line_widths(request):
         rule_indexes = rule_indexes_raw
     if not isinstance(rule_indexes, list):
         rule_indexes = [rule_indexes]
-    rule_index = int(rule_indexes[0]) if rule_indexes else int(request.GET.get("rule_index", 2))
+    rule_index = (
+        int(rule_indexes[0]) if rule_indexes else int(request.GET.get("rule_index", 2))
+    )
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_asset_batch/"
 
@@ -140,12 +184,15 @@ def select_line_widths(request):
 
     # Exclude assets that this labeler has already sampled
     from labeling_api.models import line_width_sample_table
+
     already_sampled = set(
-        line_width_sample_table.objects
-        .filter(labeler_id=labeler_id)
-        .values_list("asset_id", flat=True)
+        line_width_sample_table.objects.filter(labeler_id=labeler_id).values_list(
+            "asset_id", flat=True
+        )
     )
-    assets_to_label = [a for a in assets_to_label if a["asset_id"] not in already_sampled]
+    assets_to_label = [
+        a for a in assets_to_label if a["asset_id"] not in already_sampled
+    ]
 
     sampling_array = [[1 + col + row * 3 for col in range(3)] for row in range(3)]
 
@@ -174,7 +221,9 @@ def measure_line_widths(request):
         rule_indexes = rule_indexes_raw
     if not isinstance(rule_indexes, list):
         rule_indexes = [rule_indexes]
-    rule_index = int(rule_indexes[0]) if rule_indexes else int(request.GET.get("rule_index", 2))
+    rule_index = (
+        int(rule_indexes[0]) if rule_indexes else int(request.GET.get("rule_index", 2))
+    )
 
     header = {
         "Content-Type": "application/json",
@@ -201,22 +250,30 @@ def measure_line_widths(request):
     labelling_rules = sorted(labelling_rules, key=lambda x: x["rule_index"])
 
     from .models import RuleGuide
+
     rule_guides = list(
-        RuleGuide.objects.filter(task_type=task_type, rule_index=rule_index)
-        .prefetch_related("directives", "reference_images", "directives__reference_images")
+        RuleGuide.objects.filter(
+            task_type=task_type, rule_index=rule_index
+        ).prefetch_related(
+            "directives", "reference_images", "directives__reference_images"
+        )
     )
 
-    return render(request, "measure_line_widths.html", {
-        "assets_to_label": assets_to_label,
-        "labeler_id": labeler_id,
-        "rule_index": rule_index,
-        "batch_id": batch_id,
-        "large_sub_batch": large_sub_batch,
-        "total_count": len(assets_to_label),
-        "task_type": task_type,
-        "labelling_rules": labelling_rules,
-        "rule_guides": rule_guides,
-    })
+    return render(
+        request,
+        "measure_line_widths.html",
+        {
+            "assets_to_label": assets_to_label,
+            "labeler_id": labeler_id,
+            "rule_index": rule_index,
+            "batch_id": batch_id,
+            "large_sub_batch": large_sub_batch,
+            "total_count": len(assets_to_label),
+            "task_type": task_type,
+            "labelling_rules": labelling_rules,
+            "rule_guides": rule_guides,
+        },
+    )
 
 
 @login_required
@@ -304,6 +361,13 @@ def show_images(request):
     )
 
 
+def _training_exempt(task_type, rule_index):
+    """Features whose work batches never require a completed training set."""
+    return (
+        task_type == "line_width_type" and int(rule_index) == 2
+    ) or task_type == "select_content"
+
+
 @login_required
 def setup_session(request):
     from labeling_api.views import _build_session_options
@@ -328,17 +392,19 @@ def setup_session(request):
             )
 
         from django.contrib.auth.models import User
-        from labeling_api.models import labelling_rules, label_data_selected_assets_new
-        labeler_users = User.objects.filter(is_staff=True, is_superuser=False).values_list("username", flat=True)
+        from labeling_api.models import labelling_rules
 
-        all_rules = list(labelling_rules.objects.exclude(task_type="color_type")
-                         .values("task_type", "rule_index", "title")
-                         .order_by("task_type", "rule_index"))
+        labeler_users = User.objects.filter(
+            is_staff=True, is_superuser=False
+        ).values_list("username", flat=True)
 
-        all_sub_batches = list(label_data_selected_assets_new.objects
-                               .values("task_type", "rule_index", "batch_id", "large_sub_batch")
-                               .distinct()
-                               .order_by("task_type", "rule_index", "batch_id", "large_sub_batch"))
+        all_rules = list(
+            labelling_rules.objects.exclude(task_type="color_type")
+            .values("task_type", "rule_index", "title")
+            .order_by("task_type", "rule_index")
+        )
+
+        all_sub_batches = _all_asset_sub_batches()
 
         selected_options = {
             "labeler_id": labeler_id,
@@ -362,50 +428,63 @@ def setup_session(request):
         )
     else:
         now = timezone.now()
-        from labeling_api.models import label_data_selected_assets_new, prompt_responses, labelling_rules as LR
+        from labeling_api.models import (
+            label_data_selected_assets_new,
+            prompt_responses,
+            labelling_rules as LR,
+        )
         from .models import TrainingBatchAsset, TrainingExemption
 
         rule_titles = {}
-        for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
+        for r in LR.objects.exclude(task_type="color_type").values(
+            "task_type", "rule_index", "title"
+        ):
             rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
 
         # Always show training batches (even completed); only show incomplete work batches
         training_qs = BatchAssignment.objects.filter(
-            user=request.user, is_training=True,
+            user=request.user,
+            is_training=True,
         ).order_by("completed_at", "deadline")
         work_qs = BatchAssignment.objects.filter(
-            user=request.user, is_training=False, completed_at__isnull=True,
+            user=request.user,
+            is_training=False,
+            completed_at__isnull=True,
         ).order_by("deadline")
 
         # Build set of features with completed training
         completed_training_features = set(
-            training_qs.filter(completed_at__isnull=False)
-            .values_list("task_type", "rule_index")
+            training_qs.filter(completed_at__isnull=False).values_list(
+                "task_type", "rule_index"
+            )
         )
         # Features an admin has cleared this labeler to work untrained.
         exempt_features = set(
-            TrainingExemption.objects.filter(user=request.user)
-            .values_list("task_type", "rule_index")
+            TrainingExemption.objects.filter(user=request.user).values_list(
+                "task_type", "rule_index"
+            )
         )
 
         training_assignments = []
         for a in training_qs:
             total = TrainingBatchAsset.objects.filter(assignment=a).count()
             is_done = a.completed_at is not None
-            training_assignments.append({
-                "id": a.id,
-                "task_type": a.task_type,
-                "rule_index": a.rule_index,
-                "feature_name": rule_titles.get((a.task_type, a.rule_index), ""),
-                "batch_id": a.batch_id,
-                "large_sub_batch": a.large_sub_batch,
-                "payment_amount": a.payment_amount,
-                "total": total,
-                "completed": total if is_done else 0,
-                "progress_pct": 100 if is_done else 0,
-                "is_training": True,
-                "training_done": is_done,
-            })
+            training_assignments.append(
+                {
+                    "id": a.id,
+                    "task_type": a.task_type,
+                    "rule_index": a.rule_index,
+                    "feature_name": rule_titles.get((a.task_type, a.rule_index), ""),
+                    "batch_id": a.batch_id,
+                    "large_sub_batch": a.large_sub_batch,
+                    "payment_amount": a.payment_amount,
+                    "total": total,
+                    "completed": total if is_done else 0,
+                    "progress_pct": 100 if is_done else 0,
+                    "is_training": True,
+                    "training_done": is_done,
+                }
+            )
 
         from labeling_api.models import label_issues_table, line_width_sample_table
         from labeling_api.models import (
@@ -438,6 +517,7 @@ def setup_session(request):
 
                 if total > 0 and completed >= total:
                     from django.utils import timezone as tz
+
                     a.completed_at = tz.now()
                     a.save(update_fields=["completed_at"])
                     continue
@@ -450,28 +530,35 @@ def setup_session(request):
                 else:
                     deadline_status = "ok"
 
-                work_assignments.append({
-                    "id": a.id,
-                    "task_type": a.task_type,
-                    "rule_index": a.rule_index,
-                    "feature_name": rule_titles.get((a.task_type, a.rule_index), ""),
-                    "batch_id": a.batch_id,
-                    "large_sub_batch": a.large_sub_batch,
-                    "payment_amount": a.payment_amount,
-                    "bonus_amount": getattr(a, "bonus_amount", 0) or 0,
-                    "deadline": a.deadline,
-                    "deadline_status": deadline_status,
-                    "total": total,
-                    "completed": completed,
-                    "progress_pct": int((completed / total * 100) if total > 0 else 0),
-                    "is_training": False,
-                    # Pair task has no training batch yet; don't gate labeling on it.
-                    "training_required": False,
-                })
+                work_assignments.append(
+                    {
+                        "id": a.id,
+                        "task_type": a.task_type,
+                        "rule_index": a.rule_index,
+                        "feature_name": rule_titles.get(
+                            (a.task_type, a.rule_index), ""
+                        ),
+                        "batch_id": a.batch_id,
+                        "large_sub_batch": a.large_sub_batch,
+                        "payment_amount": a.payment_amount,
+                        "bonus_amount": getattr(a, "bonus_amount", 0) or 0,
+                        "deadline": a.deadline,
+                        "deadline_status": deadline_status,
+                        "total": total,
+                        "completed": completed,
+                        "progress_pct": int(
+                            (completed / total * 100) if total > 0 else 0
+                        ),
+                        "is_training": False,
+                        # Pair task has no training batch yet; don't gate labeling on it.
+                        "training_required": False,
+                    }
+                )
                 continue
 
+            asset_model = _asset_model_for_task(a.task_type)
             batch_asset_ids = set(
-                label_data_selected_assets_new.objects.filter(
+                asset_model.objects.filter(
                     task_type=a.task_type,
                     rule_index=a.rule_index,
                     batch_id=a.batch_id,
@@ -485,7 +572,9 @@ def setup_session(request):
                     line_width_sample_table.objects.filter(
                         asset_id__in=batch_asset_ids,
                         labeler_id=request.user.username,
-                    ).values_list("asset_id", flat=True).distinct()
+                    )
+                    .values_list("asset_id", flat=True)
+                    .distinct()
                 )
             else:
                 labeled_ids = set(
@@ -494,7 +583,9 @@ def setup_session(request):
                         rule_index=a.rule_index,
                         labeler_id=request.user.username,
                         asset_id__in=batch_asset_ids,
-                    ).values_list("asset_id", flat=True).distinct()
+                    )
+                    .values_list("asset_id", flat=True)
+                    .distinct()
                 )
             # Count flagged assets as completed too
             flagged_ids = set(
@@ -507,6 +598,7 @@ def setup_session(request):
             # Backfill: mark assignment complete if all assets are covered
             if total > 0 and completed >= total:
                 from django.utils import timezone as tz
+
                 a.completed_at = tz.now()
                 a.save(update_fields=["completed_at"])
                 continue
@@ -522,27 +614,30 @@ def setup_session(request):
             training_required = (
                 (a.task_type, a.rule_index) not in completed_training_features
                 and (a.task_type, a.rule_index) not in exempt_features
-                and not (a.task_type == "line_width_type" and a.rule_index == 2)
+                and not _training_exempt(a.task_type, a.rule_index)
             )
-            work_assignments.append({
-                "id": a.id,
-                "task_type": a.task_type,
-                "rule_index": a.rule_index,
-                "feature_name": rule_titles.get((a.task_type, a.rule_index), ""),
-                "batch_id": a.batch_id,
-                "large_sub_batch": a.large_sub_batch,
-                "payment_amount": a.payment_amount,
-                "bonus_amount": getattr(a, "bonus_amount", 0) or 0,
-                "deadline": a.deadline,
-                "deadline_status": deadline_status,
-                "total": total,
-                "completed": completed,
-                "progress_pct": int((completed / total * 100) if total > 0 else 0),
-                "is_training": False,
-                "training_required": training_required,
-            })
+            work_assignments.append(
+                {
+                    "id": a.id,
+                    "task_type": a.task_type,
+                    "rule_index": a.rule_index,
+                    "feature_name": rule_titles.get((a.task_type, a.rule_index), ""),
+                    "batch_id": a.batch_id,
+                    "large_sub_batch": a.large_sub_batch,
+                    "payment_amount": a.payment_amount,
+                    "bonus_amount": getattr(a, "bonus_amount", 0) or 0,
+                    "deadline": a.deadline,
+                    "deadline_status": deadline_status,
+                    "total": total,
+                    "completed": completed,
+                    "progress_pct": int((completed / total * 100) if total > 0 else 0),
+                    "is_training": False,
+                    "training_required": training_required,
+                }
+            )
 
         from collections import OrderedDict
+
         def _group_by_task(items):
             groups = OrderedDict()
             for a in items:
@@ -603,6 +698,128 @@ def internal(request):
 
     response = requests.get(api_url, json=data, headers=header)
     assets_to_label = json.loads(response.content)
+
+
+LABEL_HISTORY_SIZE = 90
+
+
+def _label_history_enabled(task_type, rule_index, labeler_source):
+    """Recent-label strips only apply to binary yes/no rules."""
+    if labeler_source == "reconcile_label":
+        return False
+    if task_type == "select_content":
+        return False
+    if task_type == "color_fill_type" and rule_index == 5:
+        return False
+    if task_type == "same_style" and rule_index == 2:
+        return False
+    return True
+
+
+def _label_history(task_type, rule_index, labeler_id, exclude_ids):
+    """Recent Yes/No reference images for the one-image labeling layout.
+
+    Each label is filled in priority order: unanimous consensus from
+    ``assets_w_rule_labels``, then this labeler's own responses, then other
+    labelers' responses. Within a tier, assets are ordered by their most recent
+    response. Lower tiers are only queried when higher tiers leave slots empty.
+
+    Returns:
+        dict: ``{"yes": {"consensus": [...], "own": [...], "others": [...]},
+        "no": {...}}`` where each entry is ``{"asset_id", "image_link"}``.
+    """
+    from django.db.models import Max
+    from labeling_api.models import (
+        assets_w_rule_labels,
+        content_asset_table,
+        label_data_selected_assets_new,
+        label_issues_table,
+        prompt_responses,
+    )
+
+    size = LABEL_HISTORY_SIZE
+    fetch_n = size * 5
+
+    base = (
+        prompt_responses.objects.filter(task_type=task_type, rule_index=rule_index)
+        .exclude(asset_id__in=list(exclude_ids))
+        .exclude(asset_id__in=label_issues_table.objects.values("asset_id"))
+    )
+    rule_labels = assets_w_rule_labels.objects.filter(
+        task_type=task_type, rule_index=rule_index
+    )
+
+    def most_recent(qs):
+        rows = (
+            qs.values("asset_id")
+            .annotate(last=Max("datetime_created"))
+            .order_by("-last")[:fetch_n]
+        )
+        return [r["asset_id"] for r in rows]
+
+    used = set()
+    tier_ids = {}
+    for response, label_value in (("yes", 1), ("no", 0)):
+        consensus_ids = rule_labels.filter(
+            label=label_value, label_strength="strong"
+        ).values("asset_id")
+        opposite_ids = rule_labels.filter(label=1 - label_value).values("asset_id")
+
+        tiers = {"consensus": [], "own": [], "others": []}
+        tiers["consensus"] = most_recent(base.filter(asset_id__in=consensus_ids))
+
+        if len(tiers["consensus"]) < size and labeler_id:
+            tiers["own"] = most_recent(
+                base.filter(labeler_id=labeler_id, prompt_response=response).exclude(
+                    asset_id__in=opposite_ids
+                )
+            )
+
+        if len(tiers["consensus"]) + len(tiers["own"]) < size:
+            others = base.filter(prompt_response=response).exclude(
+                asset_id__in=opposite_ids
+            )
+            if labeler_id:
+                others = others.exclude(labeler_id=labeler_id)
+            tiers["others"] = most_recent(others)
+
+        for name in ("consensus", "own", "others"):
+            unique = []
+            for aid in tiers[name]:
+                if aid not in used:
+                    used.add(aid)
+                    unique.append(aid)
+            tiers[name] = unique
+        tier_ids[response] = tiers
+
+    links = dict(
+        label_data_selected_assets_new.objects.filter(asset_id__in=used)
+        .exclude(image_link__isnull=True)
+        .exclude(image_link="")
+        .values_list("asset_id", "image_link")
+    )
+    missing = used - links.keys()
+    if missing:
+        prod_db = "prod" if "prod" in settings.DATABASES else "default"
+        links.update(
+            content_asset_table.objects.using(prod_db)
+            .filter(asset_id__in=missing)
+            .exclude(image_link__isnull=True)
+            .exclude(image_link="")
+            .values_list("asset_id", "image_link")
+        )
+
+    return {
+        response: {
+            name: [
+                {"asset_id": aid, "image_link": links[aid]}
+                for aid in ids
+                if aid in links
+            ][:size]
+            for name, ids in tiers.items()
+        }
+        for response, tiers in tier_ids.items()
+    }
 
 
 @login_required
@@ -708,7 +925,9 @@ def mturk_redirect(request):
             ).values("asset_id", "image_link", "correct_label")
         )
 
-        assets_to_label = [{"asset_id": t["asset_id"], "image_link": t["image_link"]} for t in ta_list]
+        assets_to_label = [
+            {"asset_id": t["asset_id"], "image_link": t["image_link"]} for t in ta_list
+        ]
         for t in ta_list:
             training_answers[str(t["asset_id"])] = t["correct_label"]
 
@@ -731,7 +950,11 @@ def mturk_redirect(request):
 
     if not is_training and not assets_to_label and not request.user.is_superuser:
         from django.contrib import messages
-        messages.info(request, "This batch is already complete — all assets have been labeled or flagged.")
+
+        messages.info(
+            request,
+            "This batch is already complete — all assets have been labeled or flagged.",
+        )
         return redirect("setup_session")
 
     collection_data = {
@@ -746,10 +969,25 @@ def mturk_redirect(request):
     }
 
     from .models import RuleGuide
+
     rule_guides = list(
-        RuleGuide.objects.filter(task_type=task_type, rule_index=rule_index)
-        .prefetch_related("directives", "reference_images")
+        RuleGuide.objects.filter(
+            task_type=task_type, rule_index=rule_index
+        ).prefetch_related("directives", "reference_images")
     )
+
+    single_image_mode = _label_history_enabled(task_type, rule_index, labeler_source)
+    label_history = None
+    if single_image_mode:
+        page_asset_ids = {int(a["asset_id"]) for a in assets_to_label}
+        try:
+            label_history = _label_history(
+                task_type, rule_index, labeler_id, page_asset_ids
+            )
+        except Exception:
+            logger.exception(
+                "label history failed for %s/rule %s", task_type, rule_index
+            )
 
     return render(
         request,
@@ -757,6 +995,8 @@ def mturk_redirect(request):
         {
             "task_type": task_type,
             "label": label_type,
+            "single_image_mode": single_image_mode,
+            "label_history": label_history,
             "assets_to_label": assets_to_label,
             "labelling_rules": labelling_rules,
             "collection_data": collection_data,
@@ -904,26 +1144,32 @@ def reconcile_labels(request):
     }
 
     from .models import RuleGuide
+
     rule_guides = list(
-        RuleGuide.objects.filter(task_type=task_type, rule_index=rule_index)
-        .prefetch_related("directives", "reference_images")
+        RuleGuide.objects.filter(
+            task_type=task_type, rule_index=rule_index
+        ).prefetch_related("directives", "reference_images")
     )
 
     # Fetch per-labeler responses for each disputed asset
     from labeling_api.models import prompt_responses as PromptResp
+
     disputed_asset_ids = [a["asset_id"] for a in assets_to_label]
     votes_by_asset = {}
     if disputed_asset_ids:
         qs = PromptResp.objects.filter(
-            task_type=task_type, rule_index=rule_index,
+            task_type=task_type,
+            rule_index=rule_index,
             asset_id__in=disputed_asset_ids,
         ).values("asset_id", "labeler_id", "prompt_response")
         for row in qs:
             aid = row["asset_id"]
-            votes_by_asset.setdefault(aid, []).append({
-                "labeler": row["labeler_id"],
-                "response": row["prompt_response"],
-            })
+            votes_by_asset.setdefault(aid, []).append(
+                {
+                    "labeler": row["labeler_id"],
+                    "response": row["prompt_response"],
+                }
+            )
 
     return render(
         request,
@@ -1026,7 +1272,8 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
     if not pairs_df.empty and category != "all":
         pairs_df = pairs_df[
             pairs_df["categories"].apply(
-                (lambda cats: not cats) if category == "none"
+                (lambda cats: not cats)
+                if category == "none"
                 else (lambda cats: category in (cats or []))
             )
         ]
@@ -1064,15 +1311,23 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
         "sort_by": sort_by,
         "flag_filter": flag_filter,
         "flag_filter_options": [
-            "all", "disagree", "ok", "uncertain", "suspect_fp", "suspect_fn",
-            "scored", "unscored",
+            "all",
+            "disagree",
+            "ok",
+            "uncertain",
+            "suspect_fp",
+            "suspect_fn",
+            "scored",
+            "unscored",
         ],
         "category": category,
         "category_counts": category_counts,
         "pair_choices": ["same", "similar", "different", "duplicate"],
         "cv_runs": cv_runs,
         "cv_run_id": cv_run_id,
-        "batch_of_pairs": pairs_df.to_dict(orient="records") if not pairs_df.empty else [],
+        "batch_of_pairs": (
+            pairs_df.to_dict(orient="records") if not pairs_df.empty else []
+        ),
     }
 
     return render(request, "view_batch_pair_labels.html", data)
@@ -1126,7 +1381,10 @@ def _view_batch_cv_labels(request, task_type, rule_index, sort_by):
     rule_entry, all_rules = _batch_label_rules(task_type, rule_index, header)
 
     from django.contrib.auth.models import User
-    labeler_id_options = list(User.objects.filter(is_staff=True).values_list("username", flat=True))
+
+    labeler_id_options = list(
+        User.objects.filter(is_staff=True).values_list("username", flat=True)
+    )
 
     data = {
         "rule_entry": rule_entry,
@@ -1142,7 +1400,13 @@ def _view_batch_cv_labels(request, task_type, rule_index, sort_by):
         "sort_by": sort_by,
         "flag_filter": flag_filter,
         "flag_filter_options": [
-            "all", "disagree", "stale", "ok", "uncertain", "suspect_fp", "suspect_fn",
+            "all",
+            "disagree",
+            "stale",
+            "ok",
+            "uncertain",
+            "suspect_fp",
+            "suspect_fn",
         ],
         "bucket_filter": bucket_filter,
         "label_filter": label_filter,
@@ -1158,23 +1422,36 @@ def _view_batch_cv_labels(request, task_type, rule_index, sort_by):
 def _batch_label_rules(task_type, rule_index, header):
     """Rule title/prompt for the current rule, plus every rule for the dropdown."""
     rules_response = requests.get(
-        f"{settings.LABELING_API_BASE_URL}/get_labelling_rules/", json={}, headers=header
+        f"{settings.LABELING_API_BASE_URL}/get_labelling_rules/",
+        json={},
+        headers=header,
     )
     labelling_rules = dict(json.loads(rules_response.content))
     rule_entry, all_rules = [], []
     if "labelling_rules" in labelling_rules:
         rules_df = pd.DataFrame(labelling_rules["labelling_rules"])
-        if not rules_df.empty and {"task_type", "rule_index"}.issubset(rules_df.columns):
+        if not rules_df.empty and {"task_type", "rule_index"}.issubset(
+            rules_df.columns
+        ):
             rule_entry = (
                 rules_df.query("task_type == @task_type")
                 .query("rule_index == @rule_index")
                 .to_dict(orient="records")
             )
-            all_rules = rules_df[["task_type", "rule_index", "title"]].to_dict(orient="records")
+            all_rules = rules_df[["task_type", "rule_index", "title"]].to_dict(
+                orient="records"
+            )
 
-    rule_entry = rule_entry[0] if rule_entry else {
-        "title": "No Rule Found", "prompt": "", "task_type": task_type, "rule_index": rule_index,
-    }
+    rule_entry = (
+        rule_entry[0]
+        if rule_entry
+        else {
+            "title": "No Rule Found",
+            "prompt": "",
+            "task_type": task_type,
+            "rule_index": rule_index,
+        }
+    )
     return rule_entry, all_rules
 
 
@@ -1192,14 +1469,18 @@ def view_batch_labels(request):
     # Pair-comparison tasks (same_style rule 2) are keyed on a pair with a
     # categorical label, so they use a dedicated view + template.
     if task_type == "same_style" and rule_index == 2:
-        return _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by)
+        return _view_batch_pair_labels(
+            request, task_type, rule_index, batch_index, sort_by
+        )
 
     # Cross-validation review of the same yes/no labels, opt-in via the URL so the
     # default page is untouched. Its own default sort, since "newest first" means
     # nothing here -- a run scores everything on one day.
     if request.GET.get("view") == "cv":
         return _view_batch_cv_labels(
-            request, task_type, rule_index,
+            request,
+            task_type,
+            rule_index,
             request.GET.get("sort_by", "suspicion_desc"),
         )
 
@@ -1243,7 +1524,9 @@ def view_batch_labels(request):
 
         if "date_labeled" in batch_of_assets.columns:
             ascending = sort_by == "date_asc"
-            batch_of_assets = batch_of_assets.sort_values("date_labeled", ascending=ascending)
+            batch_of_assets = batch_of_assets.sort_values(
+                "date_labeled", ascending=ascending
+            )
         else:
             batch_of_assets = pd.DataFrame()
     else:
@@ -1293,7 +1576,9 @@ def view_batch_labels(request):
                 .query("rule_index == @rule_index")
                 .to_dict(orient="records")
             )
-            all_rules = rules_df[["task_type", "rule_index", "title"]].to_dict(orient="records")
+            all_rules = rules_df[["task_type", "rule_index", "title"]].to_dict(
+                orient="records"
+            )
 
     print("------------")
     print(rule_entry)
@@ -1303,7 +1588,10 @@ def view_batch_labels(request):
     total_assets = len(batch_of_assets)
 
     from django.contrib.auth.models import User
-    labeler_id_options = list(User.objects.filter(is_staff=True).values_list("username", flat=True))
+
+    labeler_id_options = list(
+        User.objects.filter(is_staff=True).values_list("username", flat=True)
+    )
     label_type_filters = ["only_yes", "only_no"]
 
     if len(rule_entry) > 0:
@@ -1336,6 +1624,123 @@ def view_batch_labels(request):
 
         traceback.print_exc()
         raise e
+
+
+@login_required
+def manage_select_content(request):
+    """Browse select_content labels with Best / Worst filters."""
+    from collections import Counter
+    from labeling_api.models import (
+        prompt_responses,
+        select_content_assets,
+        labelling_rules as LR,
+    )
+
+    label_filter = request.GET.get("label_filter", "all")
+    batch_id = request.GET.get("batch_id", "")
+    sort_by = request.GET.get("sort_by", "date_desc")
+
+    rule_entry = (
+        LR.objects.filter(task_type="select_content", rule_index=1)
+        .values("task_type", "rule_index", "title", "prompt")
+        .first()
+    ) or {
+        "task_type": "select_content",
+        "rule_index": 1,
+        "title": "Select Best/Worst",
+        "prompt": "Select Best or Worst.",
+    }
+
+    assets_qs = select_content_assets.objects.filter(
+        task_type="select_content", rule_index=1
+    )
+    batch_options = sorted(set(assets_qs.values_list("batch_id", flat=True).distinct()))
+    if batch_id != "":
+        try:
+            assets_qs = assets_qs.filter(batch_id=int(batch_id))
+        except (TypeError, ValueError):
+            batch_id = ""
+
+    image_map = {
+        row["asset_id"]: row["image_link"]
+        for row in assets_qs.values("asset_id", "image_link")
+    }
+    asset_ids = list(image_map.keys())
+
+    responses = list(
+        prompt_responses.objects.filter(
+            task_type="select_content",
+            rule_index=1,
+            asset_id__in=asset_ids,
+            prompt_response__in=["best", "worst"],
+        ).values("asset_id", "prompt_response", "datetime_created")
+    )
+
+    # Majority vote per asset; newest response breaks ties.
+    by_asset = {}
+    for row in responses:
+        by_asset.setdefault(row["asset_id"], []).append(row)
+
+    labeled_assets = []
+    for asset_id, rows in by_asset.items():
+        votes = Counter(r["prompt_response"] for r in rows)
+        top_count = max(votes.values())
+        winners = [label for label, count in votes.items() if count == top_count]
+        if len(winners) == 1:
+            label = winners[0]
+            agree_status = "agree" if top_count == len(rows) else "majority"
+        else:
+            # Tie — use most recent response as display label.
+            newest = max(rows, key=lambda r: r["datetime_created"] or "")
+            label = newest["prompt_response"]
+            agree_status = "disputed"
+        newest_date = max(
+            (r["datetime_created"] for r in rows if r["datetime_created"]),
+            default=None,
+        )
+        labeled_assets.append(
+            {
+                "asset_id": asset_id,
+                "image_link": image_map.get(asset_id, ""),
+                "label": label,
+                "agree_status": agree_status,
+                "samples": len(rows),
+                "date_labeled": newest_date,
+            }
+        )
+
+    label_counts = (
+        Counter(a["label"] for a in labeled_assets) if labeled_assets else Counter()
+    )
+    counts = [
+        {"label": "best", "count": label_counts.get("best", 0)},
+        {"label": "worst", "count": label_counts.get("worst", 0)},
+    ]
+
+    if label_filter in ("best", "worst"):
+        labeled_assets = [a for a in labeled_assets if a["label"] == label_filter]
+
+    reverse = sort_by != "date_asc"
+    labeled_assets.sort(
+        key=lambda a: a["date_labeled"] or "",
+        reverse=reverse,
+    )
+
+    return render(
+        request,
+        "manage_select_content.html",
+        {
+            "rule_entry": rule_entry,
+            "assets": labeled_assets,
+            "total_assets": len(labeled_assets),
+            "label_counts": counts,
+            "label_filter": label_filter,
+            "label_type_filters": ["all", "best", "worst"],
+            "batch_options": batch_options,
+            "batch_id": batch_id,
+            "sort_by": sort_by,
+        },
+    )
 
 
 @login_required
@@ -1600,7 +2005,10 @@ def view_prediction_labels(request):
 
     label_types = ["model", "manual"]
     from django.contrib.auth.models import User
-    labeler_id_options = list(User.objects.filter(is_staff=True).values_list("username", flat=True))
+
+    labeler_id_options = list(
+        User.objects.filter(is_staff=True).values_list("username", flat=True)
+    )
     label_type_filters = ["only_yes", "only_no", "mismatch"]
 
     data = {
@@ -1744,7 +2152,10 @@ def view_label_issues(request):
 
     label_types = ["model", "manual"]
     from django.contrib.auth.models import User
-    labeler_id_options = list(User.objects.filter(is_staff=True).values_list("username", flat=True))
+
+    labeler_id_options = list(
+        User.objects.filter(is_staff=True).values_list("username", flat=True)
+    )
 
     # data = {'assets':assets_w_label_issues}
 
@@ -1789,8 +2200,10 @@ def label_testing(request):
 @login_required
 def view_model_results(request):
     from labeling_api.models import (
-        model_results_table, production_models_table,
-        rule_index_thresholds_table, labelling_rules as LR,
+        model_results_table,
+        production_models_table,
+        rule_index_thresholds_table,
+        labelling_rules as LR,
     )
 
     _db = "prod" if "prod" in settings.DATABASES else "default"
@@ -1802,7 +2215,9 @@ def view_model_results(request):
     SCALE_FEATURES = {("color_fill_type", 5)}
 
     rule_titles = {}
-    for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
+    for r in LR.objects.exclude(task_type="color_type").values(
+        "task_type", "rule_index", "title"
+    ):
         rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
 
     # model_results_prod is SSOT for what's in production.
@@ -1820,18 +2235,32 @@ def view_model_results(request):
             "rule_index": t["rule_index"],
             "thresh_precision": round(t["precision"], 3) if t["precision"] else None,
             "thresh_recall": round(t["recall"], 3) if t["recall"] else None,
-            "percent_kept": round(t["percent_kept"] * 100, 1) if t["percent_kept"] else None,
-            "min_threshold": round(t["min_threshold"], 3) if t["min_threshold"] is not None else None,
-            "max_threshold": round(t["max_threshold"], 3) if t["max_threshold"] is not None else None,
+            "percent_kept": (
+                round(t["percent_kept"] * 100, 1) if t["percent_kept"] else None
+            ),
+            "min_threshold": (
+                round(t["min_threshold"], 3) if t["min_threshold"] is not None else None
+            ),
+            "max_threshold": (
+                round(t["max_threshold"], 3) if t["max_threshold"] is not None else None
+            ),
         }
 
     # Parse version_id to (task_type, rule_index) as fallback when no threshold data
     import re
+
     _VID_PREFIX = {
-        "A": "asset_type", "CF": "color_fill_type", "CL": "clip_art_type",
-        "MU": "multi_color_type", "MO": "mono_color_type", "LW": "line_width_type",
-        "DR": "dark_ratio_score", "RO": "roughness_score", "PC": "select_primary_colors",
+        "A": "asset_type",
+        "CF": "color_fill_type",
+        "CL": "clip_art_type",
+        "MU": "multi_color_type",
+        "MO": "mono_color_type",
+        "LW": "line_width_type",
+        "DR": "dark_ratio_score",
+        "RO": "roughness_score",
+        "PC": "select_primary_colors",
     }
+
     def _parse_version_id(vid):
         m = re.match(r"^([A-Z]+)(\d+)_", vid)
         if not m:
@@ -1853,16 +2282,16 @@ def view_model_results(request):
         if not feat_key:
             continue
         prod_by_feature[feat_key] = {
-            "version_id": vid, "dev_id": pr["dev_id"],
-            "threshold": thresh, "feat_key": feat_key,
+            "version_id": vid,
+            "dev_id": pr["dev_id"],
+            "threshold": thresh,
+            "feat_key": feat_key,
         }
         if pr["dev_id"] is not None:
             prod_dev_ids_valid.add((pr["dev_id"], feat_key))
 
     all_results = list(
-        model_results_table.objects.using(_db)
-        .order_by("-created_at")
-        .values()
+        model_results_table.objects.using(_db).order_by("-created_at").values()
     )
 
     def _float(v):
@@ -1880,11 +2309,25 @@ def view_model_results(request):
         # than a convincing-looking 0.000. Scale features include MAE, because a
         # graded run that recorded none would otherwise read as a perfect 0; the
         # other kinds have always coerced to 0 and the arithmetic below needs it.
-        optional = ("val_accuracy", "val_f1", "val_mae") if row["is_scale"] else ("val_accuracy", "val_f1")
-        for f in ("val_recall", "val_precision", "val_auc", "val_loss", "val_mae",
-                  "learning_rate", "val_accuracy", "val_f1"):
+        optional = (
+            ("val_accuracy", "val_f1", "val_mae")
+            if row["is_scale"]
+            else ("val_accuracy", "val_f1")
+        )
+        for f in (
+            "val_recall",
+            "val_precision",
+            "val_auc",
+            "val_loss",
+            "val_mae",
+            "learning_rate",
+            "val_accuracy",
+            "val_f1",
+        ):
             value = row.get(f)
-            row[f] = None if (value is None and f in optional) else round(_float(value), 3)
+            row[f] = (
+                None if (value is None and f in optional) else round(_float(value), 3)
+            )
 
         if row["is_scale"]:
             # Ranks the history table only; macro F1 is the headline number for a
@@ -1895,13 +2338,25 @@ def view_model_results(request):
         elif row["is_regressor"]:
             row["score"] = round(-row["val_mae"], 3) if row["val_mae"] else 0
         else:
-            row["score"] = round((row["val_precision"] + row["val_recall"]) - abs(row["val_precision"] - row["val_recall"]), 3)
-        row["total_samples"] = (row.get("train_samples") or 0) + (row.get("val_samples") or 0)
-        row["date"] = row["created_at"].strftime("%b %d, %Y") if row["created_at"] else ""
+            row["score"] = round(
+                (row["val_precision"] + row["val_recall"])
+                - abs(row["val_precision"] - row["val_recall"]),
+                3,
+            )
+        row["total_samples"] = (row.get("train_samples") or 0) + (
+            row.get("val_samples") or 0
+        )
+        row["date"] = (
+            row["created_at"].strftime("%b %d, %Y") if row["created_at"] else ""
+        )
         feat_key = (row["task_type"], row["rule_index"])
         # Only mark as prod if dev_id matches AND the feature matches
         row["is_prod"] = (row["id"], feat_key) in prod_dev_ids_valid
-        row["threshold"] = prod_by_feature[feat_key]["threshold"] if row["is_prod"] and feat_key in prod_by_feature else None
+        row["threshold"] = (
+            prod_by_feature[feat_key]["threshold"]
+            if row["is_prod"] and feat_key in prod_by_feature
+            else None
+        )
 
     features = {}
     for row in all_results:
@@ -1954,12 +2409,24 @@ def view_model_results(request):
                     if mae is None:
                         feat["perf"] = "none"
                     else:
-                        feat["perf"] = "yes" if mae <= 0.5 else ("close" if mae <= 1.0 else "no")
+                        feat["perf"] = (
+                            "yes" if mae <= 0.5 else ("close" if mae <= 1.0 else "no")
+                        )
                 elif is_reg:
-                    feat["perf"] = "yes" if p["val_mae"] <= 0.1 else ("close" if p["val_mae"] <= 0.2 else "no")
+                    feat["perf"] = (
+                        "yes"
+                        if p["val_mae"] <= 0.1
+                        else ("close" if p["val_mae"] <= 0.2 else "no")
+                    )
                 else:
-                    feat["perf"] = "yes" if p["val_recall"] > 0.9 and p["val_precision"] > 0.9 else (
-                        "close" if p["val_recall"] > 0.88 and p["val_precision"] > 0.88 else "no"
+                    feat["perf"] = (
+                        "yes"
+                        if p["val_recall"] > 0.9 and p["val_precision"] > 0.9
+                        else (
+                            "close"
+                            if p["val_recall"] > 0.88 and p["val_precision"] > 0.88
+                            else "no"
+                        )
                     )
             else:
                 feat["perf"] = "yes"
@@ -2461,7 +2928,9 @@ def label_search_results(request):
 
 from .decorators import admin_required, labeler_required, admin_required_ajax
 from .models import (
-    BatchAssignment, LabelingSession, GoldStandardLabel,
+    BatchAssignment,
+    LabelingSession,
+    GoldStandardLabel,
     UserProfile,
 )
 
@@ -2470,14 +2939,19 @@ from .models import (
 # Labeler: earnings view
 # ---------------------------------------------------------------------------
 
+
 @labeler_required
 def labeler_earnings(request):
     from labeling_api.models import labelling_rules as LR
 
-    assignments = BatchAssignment.objects.filter(user=request.user).order_by("-deadline")
+    assignments = BatchAssignment.objects.filter(user=request.user).order_by(
+        "-deadline"
+    )
 
     rule_titles = {}
-    for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
+    for r in LR.objects.exclude(task_type="color_type").values(
+        "task_type", "rule_index", "title"
+    ):
         rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
 
     def annotate(a):
@@ -2490,31 +2964,40 @@ def labeler_earnings(request):
     completed_total = sum(a.payment_amount for a in completed)
     pending_total = sum(a.payment_amount for a in pending)
 
-    return render(request, "labeler_earnings.html", {
-        "completed_assignments": completed,
-        "pending_assignments": pending,
-        "completed_total": completed_total,
-        "pending_total": pending_total,
-    })
+    return render(
+        request,
+        "labeler_earnings.html",
+        {
+            "completed_assignments": completed,
+            "pending_assignments": pending,
+            "completed_total": completed_total,
+            "pending_total": pending_total,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
 # Labeler: view my corrections / errors
 # ---------------------------------------------------------------------------
 
+
 @login_required
 def labeler_errors(request):
     from labeling_api.models import (
-        labelling_rules as LR, label_data_selected_assets_new,
-        modified_prompt_table, prompt_responses,
+        labelling_rules as LR,
+        label_data_selected_assets_new,
+        modified_prompt_table,
+        prompt_responses,
     )
 
     username = request.user.username
 
     # Get this labeler's original prompt_responses
-    orig_responses = list(prompt_responses.objects.filter(
-        labeler_id=username,
-    ).values("asset_id", "task_type", "rule_index", "prompt_response"))
+    orig_responses = list(
+        prompt_responses.objects.filter(
+            labeler_id=username,
+        ).values("asset_id", "task_type", "rule_index", "prompt_response")
+    )
 
     if not orig_responses:
         return render(request, "labeler_errors.html", {"items": [], "total": 0})
@@ -2526,8 +3009,13 @@ def labeler_errors(request):
     mod_map = {}
     for m in modified_prompt_table.objects.filter(
         asset_id__in=asset_ids,
-    ).values("asset_id", "task_type", "rule_index",
-             "modified_prompt_response", "date_time_created"):
+    ).values(
+        "asset_id",
+        "task_type",
+        "rule_index",
+        "modified_prompt_response",
+        "date_time_created",
+    ):
         key = (m["asset_id"], m["task_type"], m["rule_index"])
         mod_map[key] = {
             "correct": "yes" if m["modified_prompt_response"] == "1" else "no",
@@ -2538,13 +3026,17 @@ def labeler_errors(request):
         return render(request, "labeler_errors.html", {"items": [], "total": 0})
 
     rule_titles = {}
-    for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
+    for r in LR.objects.exclude(task_type="color_type").values(
+        "task_type", "rule_index", "title"
+    ):
         rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
 
     image_map = {}
-    for row in label_data_selected_assets_new.objects.filter(
-        asset_id__in=asset_ids
-    ).values("asset_id", "image_link").distinct():
+    for row in (
+        label_data_selected_assets_new.objects.filter(asset_id__in=asset_ids)
+        .values("asset_id", "image_link")
+        .distinct()
+    ):
         if row["asset_id"] not in image_map:
             image_map[row["asset_id"]] = row["image_link"]
 
@@ -2555,27 +3047,36 @@ def labeler_errors(request):
         if not mod:
             continue
         if r["prompt_response"] != mod["correct"]:
-            items.append({
-                "asset_id": r["asset_id"],
-                "feature": rule_titles.get((r["task_type"], r["rule_index"]),
-                                           f"{r['task_type']} / {r['rule_index']}"),
-                "original": r["prompt_response"],
-                "correct": mod["correct"],
-                "image_link": image_map.get(r["asset_id"], ""),
-                "date": mod["date"],
-            })
+            items.append(
+                {
+                    "asset_id": r["asset_id"],
+                    "feature": rule_titles.get(
+                        (r["task_type"], r["rule_index"]),
+                        f"{r['task_type']} / {r['rule_index']}",
+                    ),
+                    "original": r["prompt_response"],
+                    "correct": mod["correct"],
+                    "image_link": image_map.get(r["asset_id"], ""),
+                    "date": mod["date"],
+                }
+            )
 
     items.sort(key=lambda x: x["date"], reverse=True)
 
-    return render(request, "labeler_errors.html", {
-        "items": items,
-        "total": len(items),
-    })
+    return render(
+        request,
+        "labeler_errors.html",
+        {
+            "items": items,
+            "total": len(items),
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
 # Admin: labeler list with search/filter
 # ---------------------------------------------------------------------------
+
 
 @admin_required
 def admin_labeler_list(request):
@@ -2590,10 +3091,16 @@ def admin_labeler_list(request):
     qs = User.objects.filter(is_superuser=False)
 
     if search:
-        qs = qs.filter(Q(username__icontains=search) | Q(email__icontains=search)
-                       | Q(first_name__icontains=search) | Q(last_name__icontains=search))
+        qs = qs.filter(
+            Q(username__icontains=search)
+            | Q(email__icontains=search)
+            | Q(first_name__icontains=search)
+            | Q(last_name__icontains=search)
+        )
 
-    cutoff = timezone.now() - timedelta(days=getattr(settings, "LABELER_INACTIVE_DAYS", 30))
+    cutoff = timezone.now() - timedelta(
+        days=getattr(settings, "LABELER_INACTIVE_DAYS", 30)
+    )
 
     if status_filter == "real":
         qs = qs.filter(Q(is_staff=True) | Q(is_superuser=True))
@@ -2614,24 +3121,32 @@ def admin_labeler_list(request):
     labelers = []
     for u in qs.order_by("username"):
         total_assignments = u.batch_assignments.count()
-        completed_assignments = u.batch_assignments.filter(completed_at__isnull=False).count()
-        labelers.append({
-            "id": u.id,
-            "username": u.username,
-            "email": u.email,
-            "full_name": u.get_full_name(),
-            "is_staff": u.is_staff,
-            "is_active": u.is_active,
-            "total_assignments": total_assignments,
-            "completed_assignments": completed_assignments,
-        })
+        completed_assignments = u.batch_assignments.filter(
+            completed_at__isnull=False
+        ).count()
+        labelers.append(
+            {
+                "id": u.id,
+                "username": u.username,
+                "email": u.email,
+                "full_name": u.get_full_name(),
+                "is_staff": u.is_staff,
+                "is_active": u.is_active,
+                "total_assignments": total_assignments,
+                "completed_assignments": completed_assignments,
+            }
+        )
 
-    return render(request, "admin_labeler_list.html", {
-        "labelers": labelers,
-        "search": search,
-        "status_filter": status_filter,
-        "show_test": show_test,
-    })
+    return render(
+        request,
+        "admin_labeler_list.html",
+        {
+            "labelers": labelers,
+            "search": search,
+            "status_filter": status_filter,
+            "show_test": show_test,
+        },
+    )
 
 
 @admin_required_ajax
@@ -2666,34 +3181,46 @@ def admin_create_labeler(request):
     password = (data.get("password") or "").strip()
 
     if not username or not password:
-        return JsonResponse({"error": "Username and password are required."}, status=400)
+        return JsonResponse(
+            {"error": "Username and password are required."}, status=400
+        )
     if len(password) < 8:
-        return JsonResponse({"error": "Password must be at least 8 characters."}, status=400)
+        return JsonResponse(
+            {"error": "Password must be at least 8 characters."}, status=400
+        )
     if User.objects.filter(username=username).exists():
-        return JsonResponse({"error": f"Username '{username}' already exists."}, status=400)
+        return JsonResponse(
+            {"error": f"Username '{username}' already exists."}, status=400
+        )
 
     user = User.objects.create_user(username=username, email=email, password=password)
     user.is_staff = True
     user.save(update_fields=["is_staff"])
 
-    return JsonResponse({
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "is_staff": user.is_staff,
-    })
+    return JsonResponse(
+        {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "is_staff": user.is_staff,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Admin: bulk batch assignment
 # ---------------------------------------------------------------------------
 
+
 @admin_required
 def admin_bulk_assign(request):
     from django.contrib.auth.models import User
     from labeling_api.models import (
-        label_data_selected_assets_new, label_data_selected_pair_labels, labelling_rules,
+        label_data_selected_assets_new,
+        label_data_selected_pair_labels,
+        labelling_rules,
     )
+    from labeling_api.models import labelling_rules
 
     labeler_users = list(
         User.objects.filter(is_staff=True, is_superuser=False)
@@ -2703,20 +3230,19 @@ def admin_bulk_assign(request):
 
     batch_fields = ("task_type", "rule_index", "batch_id", "large_sub_batch")
     all_sub_batches = list(
-        label_data_selected_assets_new.objects
-        .values(*batch_fields)
+        label_data_selected_assets_new.objects.values(*batch_fields)
         .distinct()
         .order_by(*batch_fields)
     )
     # Pair tasks (same_style rule 2) are queued in selected_pair_labels, not
     # selected_assets_new.
     all_sub_batches += list(
-        label_data_selected_pair_labels.objects
-        .values(*batch_fields)
+        label_data_selected_pair_labels.objects.values(*batch_fields)
         .distinct()
         .order_by(*batch_fields)
     )
     all_sub_batches.sort(key=lambda sb: tuple(sb[f] for f in batch_fields))
+    all_sub_batches = _all_asset_sub_batches()
 
     all_rules = list(
         labelling_rules.objects.exclude(task_type="color_type")
@@ -2725,20 +3251,32 @@ def admin_bulk_assign(request):
     )
 
     existing = list(
-        BatchAssignment.objects
-        .select_related("user")
-        .values("id", "user_id", "user__username", "task_type", "rule_index",
-                "batch_id", "large_sub_batch", "payment_amount", "deadline",
-                "completed_at", "is_training")
+        BatchAssignment.objects.select_related("user").values(
+            "id",
+            "user_id",
+            "user__username",
+            "task_type",
+            "rule_index",
+            "batch_id",
+            "large_sub_batch",
+            "payment_amount",
+            "deadline",
+            "completed_at",
+            "is_training",
+        )
     )
 
-    return render(request, "admin_bulk_assign.html", {
-        "labeler_users_json": json.dumps(labeler_users, default=str),
-        "sub_batches_json": json.dumps(all_sub_batches, default=str),
-        "rules_json": json.dumps(all_rules, default=str),
-        "existing_json": json.dumps(existing, default=str),
-        "default_pay": settings.LABELER_PAY_PER_BATCH,
-    })
+    return render(
+        request,
+        "admin_bulk_assign.html",
+        {
+            "labeler_users_json": json.dumps(labeler_users, default=str),
+            "sub_batches_json": json.dumps(all_sub_batches, default=str),
+            "rules_json": json.dumps(all_rules, default=str),
+            "existing_json": json.dumps(existing, default=str),
+            "default_pay": settings.LABELER_PAY_PER_BATCH,
+        },
+    )
 
 
 @admin_required_ajax
@@ -2760,12 +3298,16 @@ def admin_bulk_assign_save(request):
     deadline_str = data.get("deadline")
 
     if not sub_batches or not labeler_ids or not deadline_str:
-        return JsonResponse({"error": "sub_batches, labeler_ids, and deadline are required"}, status=400)
+        return JsonResponse(
+            {"error": "sub_batches, labeler_ids, and deadline are required"}, status=400
+        )
 
     deadline_date = parse_date(deadline_str)
     if not deadline_date:
         return JsonResponse({"error": "invalid deadline"}, status=400)
-    deadline_dt = timezone.make_aware(datetime.combine(deadline_date, datetime.max.time().replace(microsecond=0)))
+    deadline_dt = timezone.make_aware(
+        datetime.combine(deadline_date, datetime.max.time().replace(microsecond=0))
+    )
 
     users = {u.id: u for u in User.objects.filter(pk__in=labeler_ids)}
     created = 0
@@ -2814,23 +3356,33 @@ def admin_remove_assignments(request):
 # Admin: payments tracking
 # ---------------------------------------------------------------------------
 
+
 @admin_required
 def admin_payments(request):
     from django.contrib.auth.models import User
     from labeling_api.models import labelling_rules as LR
 
     rule_titles = {}
-    for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
+    for r in LR.objects.exclude(task_type="color_type").values(
+        "task_type", "rule_index", "title"
+    ):
         rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
 
     labelers = list(
         User.objects.filter(is_staff=True, is_superuser=False)
-        .order_by("username").values_list("username", flat=True)
+        .order_by("username")
+        .values_list("username", flat=True)
     )
-    return render(request, "admin_payments.html", {
-        "labelers_json": json.dumps(labelers),
-        "rule_titles_json": json.dumps({f"{k[0]}|{k[1]}": v for k, v in rule_titles.items()}),
-    })
+    return render(
+        request,
+        "admin_payments.html",
+        {
+            "labelers_json": json.dumps(labelers),
+            "rule_titles_json": json.dumps(
+                {f"{k[0]}|{k[1]}": v for k, v in rule_titles.items()}
+            ),
+        },
+    )
 
 
 @admin_required_ajax
@@ -2859,27 +3411,33 @@ def admin_payments_data(request):
             total_paid += amount
         elif a.completed_at:
             total_owed += amount
-        rows.append({
-            "id": a.id,
-            "labeler": a.user.username,
-            "task_type": a.task_type,
-            "rule_index": a.rule_index,
-            "batch_id": a.batch_id,
-            "sub_batch": a.large_sub_batch,
-            "payment": float(a.payment_amount),
-            "bonus": float(a.bonus_amount),
-            "total": amount,
-            "assigned": a.assigned_at.strftime("%b %d, %Y"),
-            "completed": a.completed_at.strftime("%b %d, %Y") if a.completed_at else None,
-            "paid": a.paid,
-            "is_training": a.is_training,
-        })
+        rows.append(
+            {
+                "id": a.id,
+                "labeler": a.user.username,
+                "task_type": a.task_type,
+                "rule_index": a.rule_index,
+                "batch_id": a.batch_id,
+                "sub_batch": a.large_sub_batch,
+                "payment": float(a.payment_amount),
+                "bonus": float(a.bonus_amount),
+                "total": amount,
+                "assigned": a.assigned_at.strftime("%b %d, %Y"),
+                "completed": (
+                    a.completed_at.strftime("%b %d, %Y") if a.completed_at else None
+                ),
+                "paid": a.paid,
+                "is_training": a.is_training,
+            }
+        )
 
-    return JsonResponse({
-        "rows": rows,
-        "total_owed": round(total_owed, 2),
-        "total_paid": round(total_paid, 2),
-    })
+    return JsonResponse(
+        {
+            "rows": rows,
+            "total_owed": round(total_owed, 2),
+            "total_paid": round(total_paid, 2),
+        }
+    )
 
 
 @admin_required_ajax
@@ -2900,6 +3458,7 @@ def admin_payments_toggle(request):
 # Admin: performance dashboard
 # ---------------------------------------------------------------------------
 
+
 @admin_required
 def admin_performance(request):
     from django.contrib.auth.models import User
@@ -2909,9 +3468,13 @@ def admin_performance(request):
         .order_by("username")
         .values("id", "username")
     )
-    return render(request, "admin_performance.html", {
-        "labelers_json": json.dumps(labelers, default=str),
-    })
+    return render(
+        request,
+        "admin_performance.html",
+        {
+            "labelers_json": json.dumps(labelers, default=str),
+        },
+    )
 
 
 @admin_required_ajax
@@ -2930,7 +3493,9 @@ def admin_performance_data(request):
         return JsonResponse({"error": "user not found"}, status=404)
 
     rule_titles = {}
-    for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
+    for r in LR.objects.exclude(task_type="color_type").values(
+        "task_type", "rule_index", "title"
+    ):
         rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
 
     # --- Training results ---
@@ -2943,31 +3508,48 @@ def admin_performance_data(request):
         mins = round(tr.time_seconds / 60, 1)
         assignment_id = training_assignments.get((tr.task_type, tr.rule_index))
         has_detail = tr.label_responses.exists() if assignment_id else False
-        training_rows.append({
-            "task_type": tr.task_type,
-            "rule_index": tr.rule_index,
-            "feature": rule_titles.get((tr.task_type, tr.rule_index), ""),
-            "correct": tr.correct,
-            "total": tr.total,
-            "accuracy_pct": round(tr.correct / tr.total * 100, 1) if tr.total > 0 else 0,
-            "time_min": mins,
-            "per_image_sec": round(tr.time_seconds / tr.total, 1) if tr.total > 0 else 0,
-            "date": tr.completed_at.strftime("%b %d, %Y %I:%M %p") if tr.completed_at else "",
-            "assignment_id": assignment_id,
-            "training_result_id": tr.id,
-            "has_detail": has_detail,
-        })
+        training_rows.append(
+            {
+                "task_type": tr.task_type,
+                "rule_index": tr.rule_index,
+                "feature": rule_titles.get((tr.task_type, tr.rule_index), ""),
+                "correct": tr.correct,
+                "total": tr.total,
+                "accuracy_pct": (
+                    round(tr.correct / tr.total * 100, 1) if tr.total > 0 else 0
+                ),
+                "time_min": mins,
+                "per_image_sec": (
+                    round(tr.time_seconds / tr.total, 1) if tr.total > 0 else 0
+                ),
+                "date": (
+                    tr.completed_at.strftime("%b %d, %Y %I:%M %p")
+                    if tr.completed_at
+                    else ""
+                ),
+                "assignment_id": assignment_id,
+                "training_result_id": tr.id,
+                "has_detail": has_detail,
+            }
+        )
 
     # Training summary
     tr_qs = TrainingResult.objects.filter(user=user)
     tr_total_imgs = sum(t.total for t in tr_qs)
     tr_total_correct = sum(t.correct for t in tr_qs)
     tr_total_secs = sum(t.time_seconds for t in tr_qs)
-    tr_avg_accuracy = round(tr_total_correct / tr_total_imgs * 100, 1) if tr_total_imgs > 0 else None
+    tr_avg_accuracy = (
+        round(tr_total_correct / tr_total_imgs * 100, 1) if tr_total_imgs > 0 else None
+    )
     tr_count = tr_qs.count()
 
     # --- Work batch stats ---
-    from labeling_api.models import label_data_selected_assets_new, label_issues_table, line_width_sample_table
+    from labeling_api.models import (
+        label_data_selected_assets_new,
+        label_issues_table,
+        line_width_sample_table,
+    )
+
     work_assignments = BatchAssignment.objects.filter(user=user, is_training=False)
     work_rows = []
     total_work_labels = 0
@@ -2975,8 +3557,10 @@ def admin_performance_data(request):
     for a in work_assignments.order_by("-assigned_at"):
         batch_asset_ids = set(
             label_data_selected_assets_new.objects.filter(
-                task_type=a.task_type, rule_index=a.rule_index,
-                batch_id=a.batch_id, large_sub_batch=a.large_sub_batch,
+                task_type=a.task_type,
+                rule_index=a.rule_index,
+                batch_id=a.batch_id,
+                large_sub_batch=a.large_sub_batch,
             ).values_list("asset_id", flat=True)
         )
 
@@ -2985,14 +3569,20 @@ def admin_performance_data(request):
                 line_width_sample_table.objects.filter(
                     asset_id__in=batch_asset_ids,
                     labeler_id=user.username,
-                ).values_list("asset_id", flat=True).distinct()
+                )
+                .values_list("asset_id", flat=True)
+                .distinct()
             )
         else:
             labeled_ids = set(
                 prompt_responses.objects.filter(
-                    task_type=a.task_type, rule_index=a.rule_index,
-                    labeler_id=user.username, asset_id__in=batch_asset_ids,
-                ).values_list("asset_id", flat=True).distinct()
+                    task_type=a.task_type,
+                    rule_index=a.rule_index,
+                    labeler_id=user.username,
+                    asset_id__in=batch_asset_ids,
+                )
+                .values_list("asset_id", flat=True)
+                .distinct()
             )
         flagged_ids = set(
             label_issues_table.objects.filter(
@@ -3004,10 +3594,13 @@ def admin_performance_data(request):
         if a.completed_at is None and batch_asset_ids:
             if batch_asset_ids.issubset(labeled_ids | flagged_ids):
                 from django.utils import timezone as tz
+
                 a.completed_at = tz.now()
                 a.save(update_fields=["completed_at"])
 
-        sessions = list(LabelingSession.objects.filter(batch_assignment=a, ended_at__isnull=False))
+        sessions = list(
+            LabelingSession.objects.filter(batch_assignment=a, ended_at__isnull=False)
+        )
         labels_from_sessions = sum(s.labels_completed for s in sessions)
         if a.task_type == "line_width_type":
             labels = len(labeled_ids)
@@ -3021,63 +3614,81 @@ def admin_performance_data(request):
         hours = sum((s.duration_hours or 0) for s in sessions)
         total_work_labels += labels
         total_work_hours += hours
-        work_rows.append({
-            "task_type": a.task_type,
-            "rule_index": a.rule_index,
-            "feature": rule_titles.get((a.task_type, a.rule_index), ""),
-            "batch_id": a.batch_id,
-            "sub_batch": a.large_sub_batch,
-            "labels": labels,
-            "hours": round(hours, 2),
-            "throughput": round(labels / hours, 1) if hours > 0 else None,
-            "deadline": a.deadline.strftime("%b %d") if a.deadline else "",
-            "deadline_iso": a.deadline.strftime("%Y-%m-%d") if a.deadline else "",
-            "assignment_id": a.id,
-            "completed": a.completed_at is not None,
-            "on_time": a.completed_at <= a.deadline if a.completed_at and a.deadline else None,
-        })
+        work_rows.append(
+            {
+                "task_type": a.task_type,
+                "rule_index": a.rule_index,
+                "feature": rule_titles.get((a.task_type, a.rule_index), ""),
+                "batch_id": a.batch_id,
+                "sub_batch": a.large_sub_batch,
+                "labels": labels,
+                "hours": round(hours, 2),
+                "throughput": round(labels / hours, 1) if hours > 0 else None,
+                "deadline": a.deadline.strftime("%b %d") if a.deadline else "",
+                "deadline_iso": a.deadline.strftime("%Y-%m-%d") if a.deadline else "",
+                "assignment_id": a.id,
+                "completed": a.completed_at is not None,
+                "on_time": (
+                    a.completed_at <= a.deadline
+                    if a.completed_at and a.deadline
+                    else None
+                ),
+            }
+        )
 
     # Work summary — use accumulated totals so line_width batches are included
-    w_throughput = round(total_work_labels / total_work_hours, 1) if total_work_hours > 0 else None
+    w_throughput = (
+        round(total_work_labels / total_work_hours, 1) if total_work_hours > 0 else None
+    )
     w_completed = work_assignments.filter(completed_at__isnull=False)
     w_completed_count = w_completed.count()
     w_on_time = w_completed.filter(completed_at__lte=F("deadline")).count()
-    w_on_time_pct = round(w_on_time / w_completed_count * 100, 1) if w_completed_count > 0 else None
+    w_on_time_pct = (
+        round(w_on_time / w_completed_count * 100, 1) if w_completed_count > 0 else None
+    )
 
-    return JsonResponse({
-        "username": user.username,
-        "summary": {
-            "training_accuracy": tr_avg_accuracy,
-            "training_sessions": tr_count,
-            "training_total_imgs": tr_total_imgs,
-            "work_labels": total_work_labels,
-            "work_hours": round(total_work_hours, 1),
-            "work_throughput": w_throughput,
-            "work_on_time_pct": w_on_time_pct,
-            "work_completed": w_completed_count,
-            "work_assignments": work_assignments.count(),
-        },
-        "training": training_rows,
-        "work": work_rows,
-    })
+    return JsonResponse(
+        {
+            "username": user.username,
+            "summary": {
+                "training_accuracy": tr_avg_accuracy,
+                "training_sessions": tr_count,
+                "training_total_imgs": tr_total_imgs,
+                "work_labels": total_work_labels,
+                "work_hours": round(total_work_hours, 1),
+                "work_throughput": w_throughput,
+                "work_on_time_pct": w_on_time_pct,
+                "work_completed": w_completed_count,
+                "work_assignments": work_assignments.count(),
+            },
+            "training": training_rows,
+            "work": work_rows,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Admin: labeler label review
 # ---------------------------------------------------------------------------
 
+
 @admin_required_ajax
 def admin_labeler_labels(request):
     """Page: pick a labeler, browse their assignments, see every label they chose."""
     from django.contrib.auth.models import User
+
     labelers = list(
         User.objects.filter(is_staff=True, is_superuser=False)
         .order_by("username")
         .values("id", "username")
     )
-    return render(request, "admin_labeler_labels.html", {
-        "labelers_json": json.dumps(labelers, default=str),
-    })
+    return render(
+        request,
+        "admin_labeler_labels.html",
+        {
+            "labelers_json": json.dumps(labelers, default=str),
+        },
+    )
 
 
 @admin_required_ajax
@@ -3111,17 +3722,21 @@ def admin_labeler_labels_assignments(request):
             ).exists()
             completed = a.completed_at is not None or has_session
 
-        rows.append({
-            "id": a.id,
-            "task_type": a.task_type,
-            "rule_index": a.rule_index,
-            "feature": rule_titles.get((a.task_type, a.rule_index), ""),
-            "batch_id": a.batch_id,
-            "sub_batch": a.large_sub_batch,
-            "is_training": a.is_training,
-            "completed": completed,
-            "assigned_at": a.assigned_at.strftime("%b %d, %Y") if a.assigned_at else "",
-        })
+        rows.append(
+            {
+                "id": a.id,
+                "task_type": a.task_type,
+                "rule_index": a.rule_index,
+                "feature": rule_titles.get((a.task_type, a.rule_index), ""),
+                "batch_id": a.batch_id,
+                "sub_batch": a.large_sub_batch,
+                "is_training": a.is_training,
+                "completed": completed,
+                "assigned_at": (
+                    a.assigned_at.strftime("%b %d, %Y") if a.assigned_at else ""
+                ),
+            }
+        )
     return JsonResponse({"username": user.username, "assignments": rows})
 
 
@@ -3145,13 +3760,17 @@ def admin_labeler_labels_detail(request):
 
     if a.is_training:
         assets = {
-            ta.asset_id: {"image_link": ta.image_link, "correct_label": ta.correct_label}
+            ta.asset_id: {
+                "image_link": ta.image_link,
+                "correct_label": ta.correct_label,
+            }
             for ta in TrainingBatchAsset.objects.filter(assignment=a)
         }
         responses = {}
         if training_result_id:
             for r in TrainingLabelResponse.objects.filter(
-                assignment=a, training_result_id=training_result_id,
+                assignment=a,
+                training_result_id=training_result_id,
             ):
                 responses[r.asset_id] = r.user_answer
             if not responses:
@@ -3160,7 +3779,8 @@ def admin_labeler_labels_detail(request):
                     legacy_score = {"correct": tr.correct, "total": tr.total}
         else:
             for r in TrainingLabelResponse.objects.filter(assignment=a).order_by(
-                "-training_result__completed_at", "asset_id",
+                "-training_result__completed_at",
+                "asset_id",
             ):
                 if r.asset_id not in responses:
                     responses[r.asset_id] = r.user_answer
@@ -3176,7 +3796,9 @@ def admin_labeler_labels_detail(request):
                 batch_id=a.batch_id,
                 large_sub_batch=a.large_sub_batch,
             ).values("asset_id", "image_link")
-        assets = {row["asset_id"]: {"image_link": row["image_link"]} for row in assets_qs}
+        assets = {
+            row["asset_id"]: {"image_link": row["image_link"]} for row in assets_qs
+        }
 
         responses = {}
         if assets:
@@ -3209,40 +3831,49 @@ def admin_labeler_labels_detail(request):
     samples_by_asset = {}
     if not a.is_training and a.task_type == "line_width_type" and a.rule_index == 2:
         from labeling_api.models import line_width_sample_table
-        samples = line_width_sample_table.objects.filter(
-            asset_id__in=list(assets.keys()),
-            labeler_id=labeler_id
-        ).values("asset_id", "sample_index", "width", "image_width", "image_height").order_by("asset_id", "sample_index")
-        
+
+        samples = (
+            line_width_sample_table.objects.filter(
+                asset_id__in=list(assets.keys()), labeler_id=labeler_id
+            )
+            .values("asset_id", "sample_index", "width", "image_width", "image_height")
+            .order_by("asset_id", "sample_index")
+        )
+
         for sample in samples:
             asset_id = sample["asset_id"]
             if asset_id not in samples_by_asset:
                 samples_by_asset[asset_id] = []
-            samples_by_asset[asset_id].append({
-                "sample_index": sample["sample_index"],
-                "width": sample["width"],
-                "image_width": sample["image_width"],
-                "image_height": sample["image_height"]
-            })
-    
+            samples_by_asset[asset_id].append(
+                {
+                    "sample_index": sample["sample_index"],
+                    "width": sample["width"],
+                    "image_width": sample["image_width"],
+                    "image_height": sample["image_height"],
+                }
+            )
+
     # Add samples to each row
     for row in rows:
         if row["asset_id"] in samples_by_asset:
             row["samples"] = samples_by_asset[row["asset_id"]]
 
-    return JsonResponse({
-        "assignment_id": a.id,
-        "is_training": a.is_training,
-        "task_type": a.task_type,
-        "rule_index": a.rule_index,
-        "labels": rows,
-        "legacy_score": legacy_score,
-    })
+    return JsonResponse(
+        {
+            "assignment_id": a.id,
+            "is_training": a.is_training,
+            "task_type": a.task_type,
+            "rule_index": a.rule_index,
+            "labels": rows,
+            "legacy_score": legacy_score,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Admin: review line_width_type rule 2 measurement samples
 # ---------------------------------------------------------------------------
+
 
 @admin_required_ajax
 def admin_line_width_samples(request):
@@ -3252,7 +3883,10 @@ def admin_line_width_samples(request):
     labeler measured each line and the measured widths. Only meaningful for
     line_width_type rule 2 assignments.
     """
-    from labeling_api.models import label_data_selected_assets_new, line_width_sample_table
+    from labeling_api.models import (
+        label_data_selected_assets_new,
+        line_width_sample_table,
+    )
 
     assignment_id = request.GET.get("assignment_id")
     if not assignment_id:
@@ -3277,58 +3911,72 @@ def admin_line_width_samples(request):
     samples_by_asset = {}
     if assets:
         sample_rows = (
-            line_width_sample_table.objects
-            .filter(asset_id__in=list(assets.keys()), labeler_id=labeler_id)
+            line_width_sample_table.objects.filter(
+                asset_id__in=list(assets.keys()), labeler_id=labeler_id
+            )
             .values(
-                "asset_id", "sample_index", "width",
-                "x_coord", "y_coord", "collection_version",
-                "scaled_width", "scaled_height",
-                "image_width", "image_height",
+                "asset_id",
+                "sample_index",
+                "width",
+                "x_coord",
+                "y_coord",
+                "collection_version",
+                "scaled_width",
+                "scaled_height",
+                "image_width",
+                "image_height",
             )
             .order_by("asset_id", "sample_index")
         )
         for s in sample_rows:
-            samples_by_asset.setdefault(s["asset_id"], []).append({
-                "sample_index": s["sample_index"],
-                "width": s["width"],
-                "x_coord": s["x_coord"],
-                "y_coord": s["y_coord"],
-                "collection_version": s["collection_version"],
-                "scaled_width": s["scaled_width"],
-                "scaled_height": s["scaled_height"],
-                "image_width": s["image_width"],
-                "image_height": s["image_height"],
-            })
+            samples_by_asset.setdefault(s["asset_id"], []).append(
+                {
+                    "sample_index": s["sample_index"],
+                    "width": s["width"],
+                    "x_coord": s["x_coord"],
+                    "y_coord": s["y_coord"],
+                    "collection_version": s["collection_version"],
+                    "scaled_width": s["scaled_width"],
+                    "scaled_height": s["scaled_height"],
+                    "image_width": s["image_width"],
+                    "image_height": s["image_height"],
+                }
+            )
 
     # Only return assets that actually have samples, ordered by asset_id.
     rows = []
     for asset_id in sorted(samples_by_asset.keys()):
         samples = samples_by_asset[asset_id]
         widths = [s["width"] for s in samples if s["width"] is not None]
-        rows.append({
-            "asset_id": asset_id,
-            "image_link": assets[asset_id]["image_link"],
-            "image_width": samples[0]["image_width"],
-            "image_height": samples[0]["image_height"],
-            "samples": samples,
-            "sample_count": len(samples),
-            "avg_width": round(sum(widths) / len(widths), 1) if widths else None,
-        })
+        rows.append(
+            {
+                "asset_id": asset_id,
+                "image_link": assets[asset_id]["image_link"],
+                "image_width": samples[0]["image_width"],
+                "image_height": samples[0]["image_height"],
+                "samples": samples,
+                "sample_count": len(samples),
+                "avg_width": round(sum(widths) / len(widths), 1) if widths else None,
+            }
+        )
 
-    return JsonResponse({
-        "assignment_id": a.id,
-        "labeler_id": labeler_id,
-        "task_type": a.task_type,
-        "rule_index": a.rule_index,
-        "batch_id": a.batch_id,
-        "sub_batch": a.large_sub_batch,
-        "assets": rows,
-    })
+    return JsonResponse(
+        {
+            "assignment_id": a.id,
+            "labeler_id": labeler_id,
+            "task_type": a.task_type,
+            "rule_index": a.rule_index,
+            "batch_id": a.batch_id,
+            "sub_batch": a.large_sub_batch,
+            "assets": rows,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Admin: override a labeler's answer for a single asset
 # ---------------------------------------------------------------------------
+
 
 @admin_required_ajax
 def admin_override_label(request):
@@ -3345,7 +3993,9 @@ def admin_override_label(request):
     new_answer = body.get("answer")  # "yes", "no", or None/empty to clear
 
     if not assignment_id or not asset_id:
-        return JsonResponse({"error": "assignment_id and asset_id required"}, status=400)
+        return JsonResponse(
+            {"error": "assignment_id and asset_id required"}, status=400
+        )
 
     try:
         a = BatchAssignment.objects.select_related("user").get(pk=assignment_id)
@@ -3366,6 +4016,7 @@ def admin_override_label(request):
             qs.update(prompt_response=new_answer)
         else:
             from django.utils import timezone as tz
+
             prompt_responses(
                 datetime_created=tz.now(),
                 asset_id=asset_id,
@@ -3409,7 +4060,9 @@ def style_analysis(request):
     category = request.GET.get("category", "all")
     # Several buckets can be ticked at once (e.g. uncovered + weak), so the terms
     # for one labeling push can be pulled together.
-    priorities = [p for p in request.GET.getlist("priority") if p in STYLE_PRIORITY_ORDER]
+    priorities = [
+        p for p in request.GET.getlist("priority") if p in STYLE_PRIORITY_ORDER
+    ]
     sort_by = request.GET.get("sort_by", "priority")
     search = (request.GET.get("search") or "").strip().lower()
     cv_run = request.GET.get("cv_run") or None
@@ -3430,21 +4083,31 @@ def style_analysis(request):
     total_terms = len(terms_df)
 
     if not terms_df.empty and category != "all":
-        terms_df = terms_df[terms_df["categories"].apply(lambda c: category in (c or []))]
+        terms_df = terms_df[
+            terms_df["categories"].apply(lambda c: category in (c or []))
+        ]
     if not terms_df.empty and search:
-        terms_df = terms_df[terms_df["term"].str.lower().str.contains(search, regex=False)]
+        terms_df = terms_df[
+            terms_df["term"].str.lower().str.contains(search, regex=False)
+        ]
 
     # Bucket counts come from everything the type/search filters left, before the
     # bucket filter itself -- otherwise ticking one bucket would zero out the rest
     # and there'd be no way to see what else is there.
     if not terms_df.empty:
         counts = (
-            terms_df["priority"].value_counts().reindex(STYLE_PRIORITY_ORDER).fillna(0).astype(int)
+            terms_df["priority"]
+            .value_counts()
+            .reindex(STYLE_PRIORITY_ORDER)
+            .fillna(0)
+            .astype(int)
         )
     else:
         counts = pd.Series(0, index=STYLE_PRIORITY_ORDER)
     # A list rather than a dict so the template can loop it without a lookup filter.
-    priority_counts = [{"bucket": b, "count": int(counts[b])} for b in STYLE_PRIORITY_ORDER]
+    priority_counts = [
+        {"bucket": b, "count": int(counts[b])} for b in STYLE_PRIORITY_ORDER
+    ]
 
     if not terms_df.empty and priorities:
         terms_df = terms_df[terms_df["priority"].isin(priorities)]
@@ -3456,8 +4119,13 @@ def style_analysis(request):
     # Built before the NaN scrub below, which turns the numeric columns into
     # objects and would break the arithmetic.
     group_sql, sql_summary = _style_group_sql(
-        terms_df, int(payload.get("min_support", 20) or 20),
-        {"priority": ", ".join(priorities) or "all", "type": category, "search": search or "none"},
+        terms_df,
+        int(payload.get("min_support", 20) or 20),
+        {
+            "priority": ", ".join(priorities) or "all",
+            "type": category,
+            "search": search or "none",
+        },
     )
 
     if not terms_df.empty:
@@ -3570,7 +4238,9 @@ def model_coverage(request):
         for model in stage["models"]:
             model["status"] = _coverage_status(model)
             tally[model["status"]] += 1
-            if model["missing"] and (worst is None or model["missing"] > worst["missing"]):
+            if model["missing"] and (
+                worst is None or model["missing"] > worst["missing"]
+            ):
                 worst = {
                     **model,
                     "stage": stage["label"],
@@ -3578,19 +4248,25 @@ def model_coverage(request):
                 }
             groups.setdefault(model["task_type"], []).append(model)
 
-        stages.append({
-            **stage,
-            "depth": depth(stage["key"]),
-            "groups": [
-                {
-                    "task_type": task_type,
-                    "models": sorted(
-                        m, key=lambda x: (x["rule_index"] is None, x["rule_index"] or 0)
-                    ),
-                }
-                for task_type, m in sorted(groups.items())
-            ],
-        })
+        stages.append(
+            {
+                **stage,
+                "depth": depth(stage["key"]),
+                "groups": [
+                    {
+                        "task_type": task_type,
+                        "models": sorted(
+                            m,
+                            key=lambda x: (
+                                x["rule_index"] is None,
+                                x["rule_index"] or 0,
+                            ),
+                        ),
+                    }
+                    for task_type, m in sorted(groups.items())
+                ],
+            }
+        )
 
     data = {
         "stages": stages,
@@ -3621,8 +4297,16 @@ def _sql_quote(value):
 # trimmed value, since author_id carries stray surrounding whitespace; blank and
 # null authors are dropped by the query's own check rather than listed here.
 STYLE_BAD_AUTHORS = [
-    "Unknown", "None", "rawpixel", "PNGEgg", "Extra", "simpleline",
-    "rawpixel.com", "freepik", "Creators", "CleanPNG",
+    "Unknown",
+    "None",
+    "rawpixel",
+    "PNGEgg",
+    "Extra",
+    "simpleline",
+    "rawpixel.com",
+    "freepik",
+    "Creators",
+    "CleanPNG",
 ]
 
 # Two assets make a pair, so each chosen group hands over that many assets.
@@ -3783,18 +4467,23 @@ def _style_totals(terms_df, cv_run_id, header):
     """
     if terms_df.empty:
         return {
-            "terms": 0, "scored_terms": 0, "support": 0, "untapped_groups": 0,
-            "precision": None, "recall": None, "f1": None, "auc": None,
-            "auc_pairs": 0, "positives": 0, "negatives": 0,
+            "terms": 0,
+            "scored_terms": 0,
+            "support": 0,
+            "untapped_groups": 0,
+            "precision": None,
+            "recall": None,
+            "f1": None,
+            "auc": None,
+            "auc_pairs": 0,
+            "positives": 0,
+            "negatives": 0,
         }
 
     tp, fp, fn = (int(terms_df[c].sum()) for c in ("tp", "fp", "fn"))
     precision = tp / (tp + fp) if (tp + fp) else None
     recall = tp / (tp + fn) if (tp + fn) else None
-    f1 = (
-        2 * precision * recall / (precision + recall)
-        if precision and recall else None
-    )
+    f1 = 2 * precision * recall / (precision + recall) if precision and recall else None
 
     auc = {}
     try:
@@ -3828,9 +4517,11 @@ def _sort_style_terms(terms_df, sort_by):
         # The default view: what to label next. Worst bucket first, and inside a
         # bucket the terms with the most spare groups (cheapest to act on).
         rank = {b: i for i, b in enumerate(STYLE_PRIORITY_ORDER)}
-        return terms_df.assign(_rank=terms_df["priority"].map(rank)).sort_values(
-            ["_rank", "untapped_groups"], ascending=[True, False]
-        ).drop(columns="_rank")
+        return (
+            terms_df.assign(_rank=terms_df["priority"].map(rank))
+            .sort_values(["_rank", "untapped_groups"], ascending=[True, False])
+            .drop(columns="_rank")
+        )
 
     metric_sorts = {
         "f1_asc": ("f1", True),
@@ -3852,7 +4543,10 @@ def _sort_style_terms(terms_df, sort_by):
 @admin_required
 def admin_label_comparison(request):
     """Render the label comparison page."""
-    from labeling_api.models import label_data_selected_assets_new, labelling_rules as LR
+    from labeling_api.models import (
+        label_data_selected_assets_new,
+        labelling_rules as LR,
+    )
 
     features = list(
         LR.objects.exclude(task_type="color_type")
@@ -3860,22 +4554,29 @@ def admin_label_comparison(request):
         .order_by("task_type", "rule_index")
     )
     sub_batches = list(
-        label_data_selected_assets_new.objects
-        .values("task_type", "rule_index", "batch_id", "large_sub_batch")
+        label_data_selected_assets_new.objects.values(
+            "task_type", "rule_index", "batch_id", "large_sub_batch"
+        )
         .distinct()
         .order_by("task_type", "rule_index", "batch_id", "large_sub_batch")
     )
-    return render(request, "admin_label_comparison.html", {
-        "features_json": json.dumps(features, default=str),
-        "sub_batches_json": json.dumps(sub_batches, default=str),
-    })
+    return render(
+        request,
+        "admin_label_comparison.html",
+        {
+            "features_json": json.dumps(features, default=str),
+            "sub_batches_json": json.dumps(sub_batches, default=str),
+        },
+    )
 
 
 @admin_required_ajax
 def admin_label_comparison_data(request):
     """AJAX: return per-asset labels from all labelers for a given sub-batch."""
     from labeling_api.models import (
-        prompt_responses, label_data_selected_assets_new, label_issues_table,
+        prompt_responses,
+        label_data_selected_assets_new,
+        label_issues_table,
     )
 
     task_type = request.GET.get("task_type", "")
@@ -3893,8 +4594,10 @@ def admin_label_comparison_data(request):
     assets = {
         row["asset_id"]: row["image_link"]
         for row in label_data_selected_assets_new.objects.filter(
-            task_type=task_type, rule_index=rule_index,
-            batch_id=batch_id, large_sub_batch=large_sub_batch,
+            task_type=task_type,
+            rule_index=rule_index,
+            batch_id=batch_id,
+            large_sub_batch=large_sub_batch,
         ).values("asset_id", "image_link")
     }
 
@@ -3934,8 +4637,10 @@ def admin_label_comparison_data(request):
 
     # Load modified (overridden) responses — one per asset
     from labeling_api.models import modified_prompt_table
+
     mod_qs = modified_prompt_table.objects.filter(
-        task_type=task_type, rule_index=rule_index,
+        task_type=task_type,
+        rule_index=rule_index,
         asset_id__in=list(assets.keys()),
     ).values("asset_id", "modified_prompt_response")
 
@@ -3963,25 +4668,29 @@ def admin_label_comparison_data(request):
                 if orig and orig != correct_answer:
                     corrections[lid] = {"original": orig, "correct": correct_answer}
 
-        rows.append({
-            "asset_id": asset_id,
-            "image_link": image_link,
-            "labels": responses_list,
-            "flagged": asset_id in flagged_ids,
-            "disagreement": len(unique_answers) > 1,
-            "num_labeled": sum(1 for v in responses_list.values() if v),
-            "corrected": correct_answer is not None,
-            "correct_answer": correct_answer,
-            "corrections": corrections,
-        })
+        rows.append(
+            {
+                "asset_id": asset_id,
+                "image_link": image_link,
+                "labels": responses_list,
+                "flagged": asset_id in flagged_ids,
+                "disagreement": len(unique_answers) > 1,
+                "num_labeled": sum(1 for v in responses_list.values() if v),
+                "corrected": correct_answer is not None,
+                "correct_answer": correct_answer,
+                "corrections": corrections,
+            }
+        )
 
-    return JsonResponse({
-        "labelers": labelers_sorted,
-        "total": len(rows),
-        "assets": rows,
-        "task_type": task_type,
-        "rule_index": rule_index,
-    })
+    return JsonResponse(
+        {
+            "labelers": labelers_sorted,
+            "total": len(rows),
+            "assets": rows,
+            "task_type": task_type,
+            "rule_index": rule_index,
+        }
+    )
 
 
 @admin_required_ajax
@@ -4002,7 +4711,9 @@ def admin_comparison_override(request):
     answer_yesno = body.get("answer")  # "yes" or "no" from frontend
 
     if not task_type or rule_index is None or not asset_id or not answer_yesno:
-        return JsonResponse({"error": "task_type, rule_index, asset_id, answer required"}, status=400)
+        return JsonResponse(
+            {"error": "task_type, rule_index, asset_id, answer required"}, status=400
+        )
 
     rule_index = int(rule_index)
     mod_val = "1" if answer_yesno == "yes" else "0"
@@ -4010,7 +4721,9 @@ def admin_comparison_override(request):
 
     # Upsert a single row for this asset
     existing = modified_prompt_table.objects.filter(
-        asset_id=asset_id, task_type=task_type, rule_index=rule_index,
+        asset_id=asset_id,
+        task_type=task_type,
+        rule_index=rule_index,
     )
     if existing.exists():
         existing.update(
@@ -4030,11 +4743,19 @@ def admin_comparison_override(request):
         ).save()
 
     # Determine which labelers had the wrong answer
-    responses = list(prompt_responses.objects.filter(
-        asset_id=asset_id, task_type=task_type, rule_index=rule_index,
-    ).exclude(labeler_id="admin_override").values("labeler_id", "prompt_response"))
+    responses = list(
+        prompt_responses.objects.filter(
+            asset_id=asset_id,
+            task_type=task_type,
+            rule_index=rule_index,
+        )
+        .exclude(labeler_id="admin_override")
+        .values("labeler_id", "prompt_response")
+    )
 
-    wrong_labelers = [r["labeler_id"] for r in responses if r["prompt_response"] != answer_yesno]
+    wrong_labelers = [
+        r["labeler_id"] for r in responses if r["prompt_response"] != answer_yesno
+    ]
 
     return JsonResponse({"status": "ok", "corrected": wrong_labelers})
 
@@ -4043,6 +4764,7 @@ def admin_comparison_override(request):
 # Admin: update batch assignment deadline
 # ---------------------------------------------------------------------------
 
+
 @admin_required_ajax
 def admin_update_deadline(request):
     """AJAX: update the deadline on a BatchAssignment."""
@@ -4050,19 +4772,24 @@ def admin_update_deadline(request):
         return JsonResponse({"error": "POST required"}, status=405)
 
     import json as _json
+
     body = _json.loads(request.body)
     assignment_id = body.get("assignment_id")
     new_deadline = body.get("deadline")
     if not assignment_id or not new_deadline:
-        return JsonResponse({"error": "assignment_id and deadline required"}, status=400)
+        return JsonResponse(
+            {"error": "assignment_id and deadline required"}, status=400
+        )
 
     from django.utils.dateparse import parse_date
+
     d = parse_date(new_deadline)
     if not d:
         return JsonResponse({"error": "invalid date format"}, status=400)
 
     from datetime import datetime, time
     from django.utils import timezone as tz
+
     deadline_dt = tz.make_aware(datetime.combine(d, time(23, 59, 59)))
 
     try:
@@ -4078,6 +4805,7 @@ def admin_update_deadline(request):
 # ---------------------------------------------------------------------------
 # Admin: gold-standard import from reconciled labels
 # ---------------------------------------------------------------------------
+
 
 @admin_required_ajax
 def admin_import_gold(request):
@@ -4117,6 +4845,7 @@ def admin_import_gold(request):
 # Admin: sub-batch completion stats (AJAX, scoped by task_type for speed)
 # ---------------------------------------------------------------------------
 
+
 @admin_required_ajax
 def admin_subbatch_completion(request):
     """Return completion stats for sub-batches filtered by task_type."""
@@ -4131,8 +4860,7 @@ def admin_subbatch_completion(request):
 
     # Assets with at least 1 response for this task_type (any labeler)
     done_ids = set(
-        prompt_responses.objects
-        .filter(task_type=task_type)
+        prompt_responses.objects.filter(task_type=task_type)
         .values_list("asset_id", flat=True)
         .distinct()
     )
@@ -4141,24 +4869,21 @@ def admin_subbatch_completion(request):
     # considered done. Mirror the labeling-flow logic so counts line up.
     if task_type == "line_width_type":
         from labeling_api.models import line_width_sample_table
+
         done_ids = done_ids | set(
-            line_width_sample_table.objects
-            .values_list("asset_id", flat=True)
-            .distinct()
+            line_width_sample_table.objects.values_list(
+                "asset_id", flat=True
+            ).distinct()
         )
     # Flagged assets also count as done
-    flagged_ids = set(
-        label_issues_table.objects.values_list("asset_id", flat=True)
-    )
+    flagged_ids = set(label_issues_table.objects.values_list("asset_id", flat=True))
     done_ids = done_ids | flagged_ids
 
     # Tally per sub-batch
     stats = defaultdict(lambda: [0, 0])  # [total, done]
-    for row in (
-        label_data_selected_assets_new.objects
-        .filter(task_type=task_type)
-        .values_list("asset_id", "rule_index", "batch_id", "large_sub_batch")
-    ):
+    for row in label_data_selected_assets_new.objects.filter(
+        task_type=task_type
+    ).values_list("asset_id", "rule_index", "batch_id", "large_sub_batch"):
         key = f"{task_type}|{row[1]}|{row[2]}|{row[3]}"
         stats[key][0] += 1
         if row[0] in done_ids:
@@ -4166,17 +4891,20 @@ def admin_subbatch_completion(request):
 
     # Pair tasks (same_style rule 2) live in selected_pair_labels; a pair is done
     # once it has a response in style_prompt_responses.
-    from labeling_api.models import label_data_selected_pair_labels, style_prompt_responses
+    from labeling_api.models import (
+        label_data_selected_pair_labels,
+        style_prompt_responses,
+    )
+
     done_pairs = set(
-        style_prompt_responses.objects
-        .filter(task_type=task_type)
+        style_prompt_responses.objects.filter(task_type=task_type)
         .values_list("asset_id_1", "asset_id_2", "rule_index")
         .distinct()
     )
-    for a1, a2, ri, bid, lsb in (
-        label_data_selected_pair_labels.objects
-        .filter(task_type=task_type)
-        .values_list("asset_id_1", "asset_id_2", "rule_index", "batch_id", "large_sub_batch")
+    for a1, a2, ri, bid, lsb in label_data_selected_pair_labels.objects.filter(
+        task_type=task_type
+    ).values_list(
+        "asset_id_1", "asset_id_2", "rule_index", "batch_id", "large_sub_batch"
     ):
         key = f"{task_type}|{ri}|{bid}|{lsb}"
         stats[key][0] += 1
@@ -4185,7 +4913,11 @@ def admin_subbatch_completion(request):
 
     result = {}
     for key, (total, done) in stats.items():
-        result[key] = {"total": total, "done": done, "complete": done >= total and total > 0}
+        result[key] = {
+            "total": total,
+            "done": done,
+            "complete": done >= total and total > 0,
+        }
 
     return JsonResponse(result)
 
@@ -4194,9 +4926,11 @@ def admin_subbatch_completion(request):
 # Rule Guide — Reference pages
 # ===========================================================================
 
+
 @login_required
 def rule_guide(request):
     from .models import RuleGuide
+
     guides = RuleGuide.objects.prefetch_related("directives", "reference_images").all()
     categories = []
     seen = set()
@@ -4208,12 +4942,16 @@ def rule_guide(request):
     selected = request.GET.get("category", categories[0] if categories else "")
     filtered = [g for g in guides if g.category == selected]
 
-    return render(request, "rule_guide.html", {
-        "categories": categories,
-        "selected_category": selected,
-        "guides": filtered,
-        "user_is_admin": is_admin(request),
-    })
+    return render(
+        request,
+        "rule_guide.html",
+        {
+            "categories": categories,
+            "selected_category": selected,
+            "guides": filtered,
+            "user_is_admin": is_admin(request),
+        },
+    )
 
 
 @login_required
@@ -4258,7 +4996,12 @@ def rule_guide_api(request):
             d.save()
         else:
             guide = RuleGuide.objects.get(id=request.POST["guide_id"])
-            max_num = guide.directives.order_by("-number").values_list("number", flat=True).first() or 0
+            max_num = (
+                guide.directives.order_by("-number")
+                .values_list("number", flat=True)
+                .first()
+                or 0
+            )
             d = RuleDirective.objects.create(
                 guide=guide,
                 number=int(request.POST.get("number", max_num + 1)),
@@ -4307,6 +5050,7 @@ def complete_training(request):
         return JsonResponse({"error": "POST required"}, status=405)
 
     from .models import BatchAssignment, TrainingResult, TrainingLabelResponse
+
     task_type = request.POST.get("task_type")
     rule_index = int(request.POST.get("rule_index"))
     correct = int(request.POST.get("correct", 0))
@@ -4320,6 +5064,7 @@ def complete_training(request):
         answers = []
 
     from django.utils import timezone as tz
+
     assignment = BatchAssignment.objects.filter(
         user=request.user,
         task_type=task_type,
@@ -4344,17 +5089,19 @@ def complete_training(request):
     )
 
     if assignment and answers:
-        TrainingLabelResponse.objects.bulk_create([
-            TrainingLabelResponse(
-                assignment=assignment,
-                training_result=training_result,
-                asset_id=int(item["asset_id"]),
-                user_answer=item.get("answer") or "none",
-                is_correct=bool(item.get("is_correct")),
-            )
-            for item in answers
-            if item.get("asset_id") is not None
-        ])
+        TrainingLabelResponse.objects.bulk_create(
+            [
+                TrainingLabelResponse(
+                    assignment=assignment,
+                    training_result=training_result,
+                    asset_id=int(item["asset_id"]),
+                    user_answer=item.get("answer") or "none",
+                    is_correct=bool(item.get("is_correct")),
+                )
+                for item in answers
+                if item.get("asset_id") is not None
+            ]
+        )
 
     return JsonResponse({"ok": True})
 
@@ -4372,11 +5119,17 @@ def admin_manage_training(request):
     )
 
     from labeling_api.models import labelling_rules as LR
+
     rules = list(
-        LR.objects.filter(task_type__in=[
-            "asset_type", "clip_art_type", "color_fill_type",
-            "mono_color_type", "multi_color_type",
-        ])
+        LR.objects.filter(
+            task_type__in=[
+                "asset_type",
+                "clip_art_type",
+                "color_fill_type",
+                "mono_color_type",
+                "multi_color_type",
+            ]
+        )
         .values("task_type", "rule_index", "title")
         .order_by("task_type", "rule_index")
     )
@@ -4389,7 +5142,9 @@ def admin_manage_training(request):
     )
     exemptions = list(
         TrainingExemption.objects.select_related("user")
-        .values("id", "user__username", "task_type", "rule_index", "reason", "granted_at")
+        .values(
+            "id", "user__username", "task_type", "rule_index", "reason", "granted_at"
+        )
         .order_by("user__username", "task_type", "rule_index")
     )
 
@@ -4397,25 +5152,35 @@ def admin_manage_training(request):
         BatchAssignment.objects.filter(is_training=True)
         .select_related("user")
         .values(
-            "id", "user__username", "task_type", "rule_index",
-            "completed_at", "payment_amount",
+            "id",
+            "user__username",
+            "task_type",
+            "rule_index",
+            "completed_at",
+            "payment_amount",
         )
     )
 
     training_asset_counts = {}
-    for ta in TrainingBatchAsset.objects.values("assignment_id").annotate(cnt=Count("id")):
+    for ta in TrainingBatchAsset.objects.values("assignment_id").annotate(
+        cnt=Count("id")
+    ):
         training_asset_counts[ta["assignment_id"]] = ta["cnt"]
 
     for a in training_assignments:
         a["asset_count"] = training_asset_counts.get(a["id"], 0)
 
-    return render(request, "admin_manage_training.html", {
-        "labeler_users_json": json.dumps(labeler_users),
-        "rules_json": json.dumps(rules, default=str),
-        "all_rules_json": json.dumps(all_rules, default=str),
-        "training_assignments_json": json.dumps(training_assignments, default=str),
-        "exemptions_json": json.dumps(exemptions, default=str),
-    })
+    return render(
+        request,
+        "admin_manage_training.html",
+        {
+            "labeler_users_json": json.dumps(labeler_users),
+            "rules_json": json.dumps(rules, default=str),
+            "all_rules_json": json.dumps(all_rules, default=str),
+            "training_assignments_json": json.dumps(training_assignments, default=str),
+            "exemptions_json": json.dumps(exemptions, default=str),
+        },
+    )
 
 
 @admin_required_ajax
@@ -4441,6 +5206,7 @@ def admin_training_create(request):
 
     from django.utils import timezone
     from datetime import timedelta
+
     deadline = timezone.now() + timedelta(days=30)
 
     assignment, created = BatchAssignment.objects.get_or_create(
@@ -4457,27 +5223,30 @@ def admin_training_create(request):
     )
 
     reconciled = list(
-        assets_w_rule_labels.objects
-        .filter(task_type=task_type, rule_index=rule_index)
-        .values_list("asset_id", "label")
+        assets_w_rule_labels.objects.filter(
+            task_type=task_type, rule_index=rule_index
+        ).values_list("asset_id", "label")
     )
 
     if not reconciled:
-        return JsonResponse({"error": "No reconciled assets found for this rule"}, status=400)
+        return JsonResponse(
+            {"error": "No reconciled assets found for this rule"}, status=400
+        )
 
     sampled = random.sample(reconciled, min(asset_count, len(reconciled)))
     sampled_ids = [a[0] for a in sampled]
     label_map = {a[0]: a[1] for a in sampled}
 
     image_links = dict(
-        label_data_selected_assets_new.objects
-        .filter(asset_id__in=sampled_ids)
-        .values_list("asset_id", "image_link")
+        label_data_selected_assets_new.objects.filter(
+            asset_id__in=sampled_ids
+        ).values_list("asset_id", "image_link")
     )
 
     assets_with_links = [
         (aid, image_links[aid], label_map[aid])
-        for aid in sampled_ids if aid in image_links
+        for aid in sampled_ids
+        if aid in image_links
     ]
 
     if not assets_with_links:
@@ -4498,16 +5267,18 @@ def admin_training_create(request):
 
     total_count = TrainingBatchAsset.objects.filter(assignment=assignment).count()
 
-    return JsonResponse({
-        "ok": True,
-        "assignment_id": assignment.id,
-        "username": username,
-        "task_type": task_type,
-        "rule_index": rule_index,
-        "assets_added": len(assets_with_links),
-        "total_assets": total_count,
-        "created": created,
-    })
+    return JsonResponse(
+        {
+            "ok": True,
+            "assignment_id": assignment.id,
+            "username": username,
+            "task_type": task_type,
+            "rule_index": rule_index,
+            "assets_added": len(assets_with_links),
+            "total_assets": total_count,
+            "created": created,
+        }
+    )
 
 
 @admin_required_ajax
@@ -4552,7 +5323,9 @@ def admin_training_exempt(request):
         return JsonResponse({"error": "A rule is required"}, status=400)
 
     if not username or not task_type:
-        return JsonResponse({"error": "A labeler and task type are required"}, status=400)
+        return JsonResponse(
+            {"error": "A labeler and task type are required"}, status=400
+        )
 
     try:
         user = User.objects.get(username=username)
@@ -4560,23 +5333,27 @@ def admin_training_exempt(request):
         return JsonResponse({"error": f"User '{username}' not found"}, status=404)
 
     exemption, created = TrainingExemption.objects.get_or_create(
-        user=user, task_type=task_type, rule_index=rule_index,
+        user=user,
+        task_type=task_type,
+        rule_index=rule_index,
         defaults={"reason": reason},
     )
     if not created and reason and exemption.reason != reason:
         exemption.reason = reason
         exemption.save(update_fields=["reason"])
 
-    return JsonResponse({
-        "ok": True,
-        "created": created,
-        "id": exemption.id,
-        "username": username,
-        "task_type": task_type,
-        "rule_index": rule_index,
-        "reason": exemption.reason,
-        "granted_at": exemption.granted_at.strftime("%Y-%m-%d %H:%M"),
-    })
+    return JsonResponse(
+        {
+            "ok": True,
+            "created": created,
+            "id": exemption.id,
+            "username": username,
+            "task_type": task_type,
+            "rule_index": rule_index,
+            "reason": exemption.reason,
+            "granted_at": exemption.granted_at.strftime("%Y-%m-%d %H:%M"),
+        }
+    )
 
 
 @admin_required_ajax
@@ -4650,7 +5427,9 @@ def image_proxy(request):
         return HttpResponse("Missing url param", status=400)
 
     split = urlsplit(url)
-    referer = f"{split.scheme}://{split.netloc}/" if split.scheme and split.netloc else ""
+    referer = (
+        f"{split.scheme}://{split.netloc}/" if split.scheme and split.netloc else ""
+    )
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

@@ -18,6 +18,7 @@
 
     <div class="labeling-layout">
 
+        {% if not single_image_mode %}
         <!-- Rules toggle button — outside sidebar so it's never clipped -->
         <button class="rules-toggle-btn" id="sidebarToggleBtn" onclick="document.getElementById('rulesSidebar').classList.toggle('open'); this.classList.toggle('open');">
             &#9776; Rules
@@ -98,6 +99,7 @@
             {% endfor %}
             {% endif %}
         </div>
+        {% endif %}
 
         <!-- Main labeling content -->
         <div class="labeling-main">
