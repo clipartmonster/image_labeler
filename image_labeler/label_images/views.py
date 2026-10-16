@@ -41,11 +41,15 @@ def _all_asset_sub_batches():
     from django.db.utils import OperationalError, ProgrammingError
     from labeling_api.models import (
         label_data_selected_assets_new,
+        label_data_selected_pair_labels,
         select_content_assets,
     )
 
     fields = ("task_type", "rule_index", "batch_id", "large_sub_batch")
     rows = list(label_data_selected_assets_new.objects.values(*fields).distinct())
+    # Pair tasks (same_style rule 2) are queued in selected_pair_labels, not
+    # selected_assets_new.
+    rows.extend(label_data_selected_pair_labels.objects.values(*fields).distinct())
     try:
         rows.extend(select_content_assets.objects.values(*fields).distinct())
     except (OperationalError, ProgrammingError):
@@ -3215,11 +3219,6 @@ def admin_create_labeler(request):
 @admin_required
 def admin_bulk_assign(request):
     from django.contrib.auth.models import User
-    from labeling_api.models import (
-        label_data_selected_assets_new,
-        label_data_selected_pair_labels,
-        labelling_rules,
-    )
     from labeling_api.models import labelling_rules
 
     labeler_users = list(
@@ -3228,20 +3227,6 @@ def admin_bulk_assign(request):
         .values("id", "username")
     )
 
-    batch_fields = ("task_type", "rule_index", "batch_id", "large_sub_batch")
-    all_sub_batches = list(
-        label_data_selected_assets_new.objects.values(*batch_fields)
-        .distinct()
-        .order_by(*batch_fields)
-    )
-    # Pair tasks (same_style rule 2) are queued in selected_pair_labels, not
-    # selected_assets_new.
-    all_sub_batches += list(
-        label_data_selected_pair_labels.objects.values(*batch_fields)
-        .distinct()
-        .order_by(*batch_fields)
-    )
-    all_sub_batches.sort(key=lambda sb: tuple(sb[f] for f in batch_fields))
     all_sub_batches = _all_asset_sub_batches()
 
     all_rules = list(
