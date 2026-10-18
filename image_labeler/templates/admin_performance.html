@@ -169,6 +169,8 @@
 .ll-card img {
     width:100%; aspect-ratio:1/1; object-fit:contain; background:#f0f0f0; display:block;
 }
+.ll-grid-pair { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.ll-pair { display:grid; grid-template-columns:1fr 1fr; gap:2px; background:#dae2e2; }
 .ll-card-body { padding:6px 8px; }
 .ll-card-id { font-size:10px; color:#6f7a7a; }
 .ll-answer { font-weight:700; font-size:13px; margin:2px 0; }
@@ -472,11 +474,18 @@ function loadWorkDetail(assignmentId, title) {
         _workDetailData = d;
         var labels = d.labels || [];
         var answered = labels.filter(function(l) { return l.answer; });
+        var options = d.answer_options || ['yes', 'no'];
         document.getElementById('workDetailStats').innerHTML =
-            makeCard('Total Assets', labels.length)
+            makeCard(d.is_pair ? 'Total Pairs' : 'Total Assets', labels.length)
             + makeCard('Labeled', answered.length)
-            + makeCard('Yes', labels.filter(function(l) { return l.answer === 'yes'; }).length)
-            + makeCard('No', labels.filter(function(l) { return l.answer === 'no'; }).length);
+            + options.map(function(o) {
+                return makeCard(o.charAt(0).toUpperCase() + o.slice(1),
+                    labels.filter(function(l) { return l.answer === o; }).length);
+            }).join('');
+        document.getElementById('workDetailFilter').innerHTML =
+            '<option value="all">All</option>'
+            + options.map(function(o) { return '<option value="' + o + '">' + o + ' only</option>'; }).join('')
+            + '<option value="unlabeled">Unlabeled</option>';
         renderWorkDetailGrid();
     });
 }
@@ -485,24 +494,32 @@ function renderWorkDetailGrid() {
     if (!_workDetailData) return;
     var filter = document.getElementById('workDetailFilter').value;
     var labels = (_workDetailData.labels || []).filter(function(l) {
-        if (filter === 'yes') return l.answer === 'yes';
-        if (filter === 'no') return l.answer === 'no';
+        if (filter === 'all') return true;
         if (filter === 'unlabeled') return !l.answer;
-        return true;
+        return l.answer === filter;
     });
+    var isPair = !!_workDetailData.is_pair;
     var grid = document.getElementById('workDetailGrid');
     grid.innerHTML = '';
+    grid.classList.toggle('ll-grid-pair', isPair);
     document.getElementById('workDetailEmpty').style.display = labels.length ? 'none' : '';
     labels.forEach(function(l) {
         var answerHtml = l.answer
             ? '<div class="ll-answer">' + l.answer + '</div>'
             : '<div class="ll-answer ll-none">\u2014</div>';
-        var overrideHtml = makeOverrideHtml(_workDetailAssignmentId, l.asset_id, l.answer, 'work');
+        var overrideHtml = makeOverrideHtml(_workDetailAssignmentId, l.asset_id, l.answer, 'work',
+                                            _workDetailData.answer_options);
+        var imgHtml = function(src) {
+            return '<img src="' + (src || '') + '" loading="lazy" onerror="this.style.display=\'none\'">';
+        };
         var card = document.createElement('div');
         card.className = 'll-card';
         card.id = 'll-card-work-' + l.asset_id;
-        card.innerHTML = '<img src="' + (l.image_link || '') + '" loading="lazy" onerror="this.style.display=\'none\'">'
-            + '<div class="ll-card-body"><div class="ll-card-id">' + l.asset_id + '</div>'
+        card.innerHTML = (isPair
+                ? '<div class="ll-pair">' + imgHtml(l.image_link) + imgHtml(l.image_link_2) + '</div>'
+                : imgHtml(l.image_link))
+            + '<div class="ll-card-body"><div class="ll-card-id">'
+            + (isPair ? l.asset_id_1 + ' / ' + l.asset_id_2 : l.asset_id) + '</div>'
             + answerHtml + overrideHtml + '</div>';
         grid.appendChild(card);
     });
@@ -682,14 +699,14 @@ function saveDeadline(id) {
     });
 }
 
-function makeOverrideHtml(assignmentId, assetId, currentAnswer, prefix) {
-    var opts = ['yes','no',''].map(function(v) {
+function makeOverrideHtml(assignmentId, assetId, currentAnswer, prefix, answerOptions) {
+    var opts = (answerOptions || ['yes','no']).concat(['']).map(function(v) {
         var label = v === '' ? 'clear' : v;
         var sel = (v === (currentAnswer || '')) ? ' selected' : '';
         return '<option value="' + v + '"' + sel + '>' + label + '</option>';
     }).join('');
     return '<div style="margin-top:4px;">'
-        + '<select onchange="overrideLabel(this,' + assignmentId + ',' + assetId + ',\'' + prefix + '\')" '
+        + '<select onchange="overrideLabel(this,' + assignmentId + ',\'' + assetId + '\',\'' + prefix + '\')" '
         + 'style="font-size:10px;padding:1px 3px;border-radius:3px;border:1px solid #aaa;background:#f4f8f8;width:100%;">'
         + opts + '</select></div>';
 }

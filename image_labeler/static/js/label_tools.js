@@ -480,6 +480,7 @@ function collect_style_prompt(el, response) {
 
     if (!window._trainingAnswers) {
         api_collect_style_prompt(data)
+        _incrementSessionCount()
     }
 
     advance_after_prompt(rv)

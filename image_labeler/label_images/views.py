@@ -65,6 +65,58 @@ def _all_asset_sub_batches():
     )
 
 
+# Pair-comparison answers (same_style rule 2), in display order.
+PAIR_ANSWERS = ["same", "similar", "different", "duplicate"]
+
+
+def _is_pair_assignment(a):
+    """True for a pair-comparison assignment (same_style rule 2)."""
+    return a.task_type == "same_style" and a.rule_index == 2
+
+
+def _pair_batch_rows(a):
+    """Pairs in an assignment's sub-batch, keyed on ``(asset_id_1, asset_id_2)``.
+
+    ``selected_pair_labels`` can list a pair more than once, so the first row wins.
+    """
+    from labeling_api.models import label_data_selected_pair_labels
+
+    pairs = {}
+    for row in (
+        label_data_selected_pair_labels.objects.filter(
+            task_type=a.task_type,
+            rule_index=a.rule_index,
+            batch_id=a.batch_id,
+            large_sub_batch=a.large_sub_batch,
+        )
+        .values("asset_id_1", "asset_id_2", "image_link_1", "image_link_2")
+        .order_by("sub_batch", "asset_id_1", "asset_id_2")
+    ):
+        pairs.setdefault((row["asset_id_1"], row["asset_id_2"]), row)
+    return pairs
+
+
+def _pair_responses(a, batch=None):
+    """The assignment labeler's latest answer per pair in its sub-batch."""
+    from labeling_api.models import style_prompt_responses
+
+    if batch is None:
+        batch = _pair_batch_rows(a)
+    answers = {}
+    for a1, a2, answer in (
+        style_prompt_responses.objects.filter(
+            task_type=a.task_type,
+            rule_index=a.rule_index,
+            labeler_id__iexact=a.user.username,
+        )
+        .order_by("datetime_created")
+        .values_list("asset_id_1", "asset_id_2", "prompt_response")
+    ):
+        if (a1, a2) in batch:
+            answers[(a1, a2)] = answer
+    return answers
+
+
 @login_required
 def change_password(request):
     """Force new users to set their own password on first login."""
@@ -3540,40 +3592,47 @@ def admin_performance_data(request):
     total_work_labels = 0
     total_work_hours = 0.0
     for a in work_assignments.order_by("-assigned_at"):
-        batch_asset_ids = set(
-            label_data_selected_assets_new.objects.filter(
-                task_type=a.task_type,
-                rule_index=a.rule_index,
-                batch_id=a.batch_id,
-                large_sub_batch=a.large_sub_batch,
-            ).values_list("asset_id", flat=True)
-        )
-
-        if a.task_type == "line_width_type":
-            labeled_ids = set(
-                line_width_sample_table.objects.filter(
-                    asset_id__in=batch_asset_ids,
-                    labeler_id=user.username,
-                )
-                .values_list("asset_id", flat=True)
-                .distinct()
-            )
+        is_pair = _is_pair_assignment(a)
+        if is_pair:
+            # Pairs are keyed on (asset_id_1, asset_id_2); asset flags don't apply.
+            pair_batch = _pair_batch_rows(a)
+            batch_asset_ids = set(pair_batch)
+            labeled_ids = set(_pair_responses(a, pair_batch))
+            flagged_ids = set()
         else:
-            labeled_ids = set(
-                prompt_responses.objects.filter(
+            batch_asset_ids = set(
+                label_data_selected_assets_new.objects.filter(
                     task_type=a.task_type,
                     rule_index=a.rule_index,
-                    labeler_id=user.username,
-                    asset_id__in=batch_asset_ids,
-                )
-                .values_list("asset_id", flat=True)
-                .distinct()
+                    batch_id=a.batch_id,
+                    large_sub_batch=a.large_sub_batch,
+                ).values_list("asset_id", flat=True)
             )
-        flagged_ids = set(
-            label_issues_table.objects.filter(
-                asset_id__in=batch_asset_ids,
-            ).values_list("asset_id", flat=True)
-        )
+            if a.task_type == "line_width_type":
+                labeled_ids = set(
+                    line_width_sample_table.objects.filter(
+                        asset_id__in=batch_asset_ids,
+                        labeler_id=user.username,
+                    )
+                    .values_list("asset_id", flat=True)
+                    .distinct()
+                )
+            else:
+                labeled_ids = set(
+                    prompt_responses.objects.filter(
+                        task_type=a.task_type,
+                        rule_index=a.rule_index,
+                        labeler_id=user.username,
+                        asset_id__in=batch_asset_ids,
+                    )
+                    .values_list("asset_id", flat=True)
+                    .distinct()
+                )
+            flagged_ids = set(
+                label_issues_table.objects.filter(
+                    asset_id__in=batch_asset_ids,
+                ).values_list("asset_id", flat=True)
+            )
 
         # Backfill: if completed_at is not set, check actual progress
         if a.completed_at is None and batch_asset_ids:
@@ -3587,7 +3646,7 @@ def admin_performance_data(request):
             LabelingSession.objects.filter(batch_assignment=a, ended_at__isnull=False)
         )
         labels_from_sessions = sum(s.labels_completed for s in sessions)
-        if a.task_type == "line_width_type":
+        if a.task_type == "line_width_type" or is_pair:
             labels = len(labeled_ids)
         elif sessions:
             labels = labels_from_sessions
@@ -3742,6 +3801,32 @@ def admin_labeler_labels_detail(request):
 
     labeler_id = a.user.username
     legacy_score = None
+
+    if not a.is_training and _is_pair_assignment(a):
+        batch = _pair_batch_rows(a)
+        answers = _pair_responses(a, batch)
+        return JsonResponse(
+            {
+                "assignment_id": a.id,
+                "is_training": False,
+                "task_type": a.task_type,
+                "rule_index": a.rule_index,
+                "is_pair": True,
+                "answer_options": PAIR_ANSWERS,
+                "labels": [
+                    {
+                        "asset_id": f"{a1}_{a2}",
+                        "asset_id_1": a1,
+                        "asset_id_2": a2,
+                        "image_link": row["image_link_1"],
+                        "image_link_2": row["image_link_2"],
+                        "answer": answers.get((a1, a2)),
+                    }
+                    for (a1, a2), row in batch.items()
+                ],
+                "legacy_score": None,
+            }
+        )
 
     if a.is_training:
         assets = {
@@ -3988,6 +4073,42 @@ def admin_override_label(request):
         return JsonResponse({"error": "not found"}, status=404)
 
     labeler_id = a.user.username
+
+    if _is_pair_assignment(a):
+        from labeling_api.models import style_prompt_responses
+
+        try:
+            a1, a2 = (int(x) for x in str(asset_id).split("_"))
+        except ValueError:
+            return JsonResponse({"error": "pair asset_id must be id1_id2"}, status=400)
+        if new_answer and new_answer not in PAIR_ANSWERS:
+            return JsonResponse({"error": "invalid pair answer"}, status=400)
+        qs = style_prompt_responses.objects.filter(
+            asset_id_1=a1,
+            asset_id_2=a2,
+            task_type=a.task_type,
+            rule_index=a.rule_index,
+            labeler_id__iexact=labeler_id,
+        )
+        if not new_answer:
+            qs.delete()
+        elif qs.exists():
+            qs.update(prompt_response=new_answer)
+        else:
+            from django.utils import timezone as tz
+
+            style_prompt_responses(
+                datetime_created=tz.now(),
+                asset_id_1=a1,
+                asset_id_2=a2,
+                labeler_source="admin_override",
+                labeler_id=labeler_id,
+                labeler_count=1,
+                task_type=a.task_type,
+                rule_index=a.rule_index,
+                prompt_response=new_answer,
+            ).save()
+        return JsonResponse({"status": "ok"})
 
     if new_answer:
         # Update existing row if present, else insert
