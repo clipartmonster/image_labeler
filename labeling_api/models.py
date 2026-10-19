@@ -401,6 +401,157 @@ class prompt_responses(models.Model):
         db_table = "label_data.prompt_responses"
 
 
+class label_data_selected_pair_labels(models.Model):
+    """Image pairs queued for pair-comparison labeling (e.g. same_style rule 2).
+
+    **Table:** ``label_data.selected_pair_labels``
+
+    Mirrors ``label_data_selected_assets_new`` but holds two assets per row so the
+    labeler compares them side by side. Queried only via ``.values(...)`` (the
+    implicit ``id`` is never selected).
+    """
+
+    pair_id = models.CharField()
+    asset_id_1 = models.BigIntegerField()
+    asset_id_2 = models.BigIntegerField()
+    image_link_1 = models.CharField()
+    image_link_2 = models.CharField()
+    batch_id = models.SmallIntegerField()
+    large_sub_batch = models.IntegerField()
+    sub_batch = models.IntegerField()
+    task_type = models.CharField()
+    rule_index = models.SmallIntegerField()
+
+    class Meta:
+        managed = False
+        db_table = "label_data.selected_pair_labels"
+
+
+class style_prompt_responses(models.Model):
+    """Stored responses for pair-comparison labeling (e.g. same_style rule 2).
+
+    **Table:** ``label_data.style_prompt_responses``
+
+    Same columns as :class:`prompt_responses` except ``asset_id`` is replaced by
+    ``asset_id_1`` and ``asset_id_2`` (the compared pair). ``prompt_response`` is
+    one of ``same``, ``similar``, ``different``, ``duplicate``.
+    """
+
+    datetime_created = models.DateTimeField()
+    pair_id = models.CharField(null=True)
+    asset_id_1 = models.BigIntegerField()
+    asset_id_2 = models.BigIntegerField()
+    labeler_source = models.CharField()
+    labeler_id = models.CharField()
+    labeler_count = models.IntegerField()
+    task_type = models.CharField()
+    rule_index = models.SmallIntegerField()
+    prompt_response = models.CharField()
+
+    class Meta:
+        managed = False
+        db_table = "label_data.style_prompt_responses"
+
+
+class label_data_same_style_rule_labels(models.Model):
+    """Reconciled pair labels for pair-comparison tasks (same_style rule 2).
+
+    **Table:** ``label_data.same_style.rule.labels``
+
+    Pair analog of ``assets_w_rule_labels``/``label_data.asset_type.rule.labels``:
+    keys on the pair (``pair_id``, ``asset_id_1``, ``asset_id_2``) and stores the
+    consensus ``label`` (``same``/``similar``/``different``/``duplicate``). Written
+    by ``new_labels/reconcile.py`` and by admin corrections. Queried only via
+    ``.values(...)`` (the implicit ``id`` is never selected); corrections upsert via
+    raw SQL since the table has no primary key.
+    """
+
+    pair_id = models.CharField(null=True)
+    asset_id_1 = models.BigIntegerField()
+    asset_id_2 = models.BigIntegerField()
+    task_type = models.CharField()
+    rule_index = models.IntegerField()
+    label = models.CharField()
+    percent_agree = models.FloatField(null=True)
+    label_strength = models.CharField(null=True)
+    label_source = models.CharField(null=True)
+
+    class Meta:
+        managed = False
+        db_table = "label_data.same_style.rule.labels"
+
+
+class label_data_style_cv_scores(models.Model):
+    """Cross-validated model scores for labeled pairs (same_style rule 2).
+
+    **Table:** ``label_data.style_cv_scores``
+
+    One row per ``pair_id``: ``prob``/``pred`` are the model's output, ``y`` and
+    ``prompt_response`` are the human label it was scored against, ``correct``
+    flags agreement, and ``flag`` buckets the row as ``ok``, ``uncertain``,
+    ``suspect_fp`` or ``suspect_fn``. Joined into the batch-labels view so
+    reviewers can sort by model confidence and find model/human disagreements.
+    Queried only via ``.values(...)`` (the table has no primary key).
+    """
+
+    pair_id = models.CharField()
+    asset_id_1 = models.CharField()
+    asset_id_2 = models.CharField()
+    prompt_response = models.CharField(null=True)
+    y = models.BigIntegerField(null=True)
+    prob = models.FloatField(null=True)
+    pred = models.BigIntegerField(null=True)
+    correct = models.BooleanField(null=True)
+    suspicion = models.FloatField(null=True)
+    flag = models.CharField(null=True)
+    fold = models.BigIntegerField(null=True)
+    component_id = models.CharField(null=True)
+    cv_run_id = models.CharField(null=True)
+    date_scored = models.CharField(null=True)
+
+    class Meta:
+        managed = False
+        db_table = "label_data.style_cv_scores"
+
+
+class label_data_cv_scores(models.Model):
+    """Cross-validated model scores for single-asset rules (the yes/no rules).
+
+    **Table:** ``label_data.cv_scores``
+
+    The per-asset counterpart of :class:`label_data_style_cv_scores`: one row per
+    ``asset_id`` per run, keyed on ``task_type`` + ``rule_index`` because a run
+    scores one rule. ``prob``/``pred`` are the model's output, ``label`` is the
+    human label it was scored against, ``correct`` flags agreement, and ``flag``
+    buckets the row as ``ok``, ``uncertain``, ``suspect_fp`` or ``suspect_fn``.
+    ``bucket`` is the finer-grained band the scoring script assigned (for example
+    ``high_conf_FN``) and ``threshold`` is the decision threshold that run used.
+
+    Written by the cross-validation script (pandas ``to_sql``), which is why
+    ``asset_id`` is text and every column is nullable. Queried only via
+    ``.values(...)`` (the table has no primary key).
+    """
+
+    asset_id = models.CharField()
+    task_type = models.CharField()
+    rule_index = models.BigIntegerField(null=True)
+    label = models.BigIntegerField(null=True)
+    prob = models.FloatField(null=True)
+    pred = models.BigIntegerField(null=True)
+    correct = models.BooleanField(null=True)
+    suspicion = models.FloatField(null=True)
+    flag = models.CharField(null=True)
+    bucket = models.CharField(null=True)
+    threshold = models.FloatField(null=True)
+    fold = models.BigIntegerField(null=True)
+    cv_run_id = models.CharField(null=True)
+    date_scored = models.CharField(null=True)
+
+    class Meta:
+        managed = False
+        db_table = "label_data.cv_scores"
+
+
 class search_term_table(models.Model):
     """Search-topic terms and selection state for asset discovery.
 
@@ -694,6 +845,10 @@ class model_results_table(models.Model):
     outcome_type = models.CharField()
     val_mae = models.FloatField()
     pretrained_model = models.CharField()
+    # Macro-averaged F1, for graded/ordinal targets where a single precision and
+    # recall pair says little. NULL on every row trained before the column
+    # existed; added by the add_macro_f1_column management command.
+    val_f1 = models.FloatField(null=True, blank=True)
 
     class Meta:
         managed = False
@@ -924,6 +1079,38 @@ class line_width_sample_table(models.Model):
     class Meta:
         managed = False
         db_table = "label_data.line_width_responses"
+
+
+class color_depth_scale_responses(models.Model):
+    """Flood-fill layer samples for Color Depth (Scale) labeling.
+
+    **Table:** ``label_data.color_depth_scale_responses``
+
+    Each row is one shade/highlight selection (or a skip marker). Seed color,
+    tolerance, native click coords, and image/display sizes are enough to
+    recreate the whole-image similar-color fill.
+    """
+
+    id = models.AutoField(primary_key=True)
+    asset_id = models.BigIntegerField()
+    sample_index = models.IntegerField()
+    labeler_id = models.CharField()
+    datetime_created = models.DateTimeField(auto_now_add=True)
+    color_hex = models.CharField(max_length=7, null=True, blank=True)
+    label_type = models.CharField()  # sampled | skip
+    layer_type = models.CharField(null=True, blank=True)  # shade | highlight
+    x_coord = models.IntegerField(null=True, blank=True)
+    y_coord = models.IntegerField(null=True, blank=True)
+    pixel_count = models.IntegerField(null=True, blank=True)
+    tolerance = models.IntegerField(null=True, blank=True)
+    image_width = models.IntegerField(null=True, blank=True)
+    image_height = models.IntegerField(null=True, blank=True)
+    scaled_width = models.IntegerField(null=True, blank=True)
+    scaled_height = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "label_data.color_depth_scale_responses"
 
 
 class mismatched_labels_table(models.Model):

@@ -26,8 +26,13 @@ print(f"current_data: {len(current_data)} rows in {time.time()-t:.1f}s")
 _COLS = ["asset_id", "task_type", "rule_index", "label", "percent_agree",
          "label_strength", "label_source"]
 
-# color_fill_type rule 5 is an ordinal 0-3 scale (graded Color Depth), not yes/no.
-# It reuses the same tables but is reconciled by median instead of yes-rate.
+# color_fill_type rule 5 is a graded Color Depth scale, not yes/no. Responses are
+# "0" (Flat), an integer >= 1 (counted depth layers), or "gradient" (continuous
+# shading). It reuses the same tables and is reconciled by plurality (majority
+# vote), exactly like the yes/no rules -- assets with no clear winner are left
+# out here and resolved by a human in the reconcile review UI. "gradient" is
+# encoded as 99 so it sorts above any countable depth.
+GRADIENT_CODE = 99
 ordinal_mask = (prompt_data.task_type == "color_fill_type") & (prompt_data.rule_index == 5)
 binary_data = prompt_data[~ordinal_mask]
 ordinal_data = prompt_data[ordinal_mask]
@@ -54,27 +59,46 @@ binary_label_set = (
     .reset_index()
 )[_COLS]
 
-print("loading ordinal label set (color_fill_type rule 5)")
+print("loading graded label set (color_fill_type rule 5)")
 if len(ordinal_data):
     _o = ordinal_data.assign(
-        val=lambda x: pd.to_numeric(x.prompt_response, errors="coerce")
+        val=lambda x: pd.to_numeric(
+            x.prompt_response.astype(str).str.strip().str.lower()
+            .replace({"gradient": str(GRADIENT_CODE)}),
+            errors="coerce",
+        )
     ).dropna(subset=["val"])
-    _grp = _o.groupby(["asset_id", "task_type", "rule_index"])["val"]
-    _med = _grp.median().round().astype(int).rename("label")
-    _samples = _grp.size().rename("samples")
-    _tmp = _o.merge(_med.reset_index(), on=["asset_id", "task_type", "rule_index"])
-    _tmp["match"] = _tmp.val.round().astype(int) == _tmp.label
-    _agree = (
-        _tmp.groupby(["asset_id", "task_type", "rule_index"])["match"]
-        .mean()
-        .rename("percent_agree")
+    _o["val"] = _o["val"].astype(int)
+
+    # Reconcile by plurality (majority vote), matching the binary rules. Assets
+    # with no strict winner (a tie for the top vote count) are left out here so
+    # they surface in the reconcile review UI, just like the 50/50 ties do for
+    # yes/no rules.
+    _counts = (
+        _o.groupby(["asset_id", "task_type", "rule_index", "val"])
+        .size().rename("n").reset_index()
+    )
+    _counts["max_n"] = _counts.groupby(
+        ["asset_id", "task_type", "rule_index"]
+    )["n"].transform("max")
+    _top = _counts[_counts.n == _counts.max_n]
+    _agg = (
+        _top.groupby(["asset_id", "task_type", "rule_index"])
+        .agg(label=("val", "min"), n_top=("val", "size"), max_n=("n", "max"))
+        .reset_index()
+    )
+    _samples = (
+        _counts.groupby(["asset_id", "task_type", "rule_index"])["n"]
+        .sum().rename("samples").reset_index()
     )
     ordinal_label_set = (
-        pd.concat([_med, _samples, _agree], axis=1)
-        .reset_index()
+        _agg.merge(_samples, on=["asset_id", "task_type", "rule_index"])
         .query("samples > 1")
+        .query("n_top == 1")
         .assign(
-            label_strength=lambda x: np.where(x.percent_agree == 1, "strong", "weak"),
+            label=lambda x: x.label.astype(int),
+            percent_agree=lambda x: x.max_n / x.samples,
+            label_strength=lambda x: np.where(x.max_n == x.samples, "strong", "weak"),
             label_source="Internal",
         )
     )[_COLS]
@@ -123,6 +147,96 @@ new_rows.to_sql(
     chunksize=1000,
 )
 print(f"saved in {time.time()-t:.1f}s")
+
+# ── Pair-comparison reconciliation: same_style rule 2 ────────────────────────
+# Pair labels live in label_data.style_prompt_responses (keyed on a pair:
+# pair_id, asset_id_1, asset_id_2) with the categorical responses
+# same / similar / different / duplicate. They reconcile by plurality, exactly
+# like the yes/no and ordinal rules above: a strict winner becomes the label and
+# ties are left out for human review. Output mirrors label_data.asset_type.rule.labels
+# but keys on the pair, going to label_data.same_style.rule.labels.
+PAIR_COLS = [
+    "pair_id", "asset_id_1", "asset_id_2", "task_type", "rule_index",
+    "label", "percent_agree", "label_strength", "label_source",
+]
+PAIR_KEY = ["asset_id_1", "asset_id_2", "task_type", "rule_index"]
+VALID_STYLE_RESPONSES = ["same", "similar", "different", "duplicate"]
+
+try:
+    t = time.time()
+    style_data = pd.read_sql(
+        'SELECT * FROM "label_data.style_prompt_responses"', connection_dev
+    )
+    print(f"style_data: {len(style_data)} rows in {time.time()-t:.1f}s")
+
+    pair_current = pd.read_sql(
+        'SELECT * FROM "label_data.same_style.rule.labels"', connection_dev
+    )
+    print(f"pair_current: {len(pair_current)} rows")
+
+    print("loading pair label set (same_style rule 2)")
+    _p = style_data.assign(
+        resp=lambda x: x.prompt_response.astype(str).str.strip().str.lower()
+    )
+    _p = _p[_p.resp.isin(VALID_STYLE_RESPONSES)]
+
+    if len(_p):
+        _pc = _p.groupby(PAIR_KEY + ["resp"]).size().rename("n").reset_index()
+        _pc["max_n"] = _pc.groupby(PAIR_KEY)["n"].transform("max")
+        _ptop = _pc[_pc.n == _pc.max_n]
+        _pagg = (
+            _ptop.groupby(PAIR_KEY)
+            .agg(label=("resp", "first"), n_top=("resp", "size"), max_n=("n", "max"))
+            .reset_index()
+        )
+        _psamples = _pc.groupby(PAIR_KEY)["n"].sum().rename("samples").reset_index()
+        # Carry pair_id (constant per pair) through to the output.
+        _pid = _p.groupby(PAIR_KEY)["pair_id"].first().reset_index()
+        pair_label_set = (
+            _pagg.merge(_psamples, on=PAIR_KEY)
+            .merge(_pid, on=PAIR_KEY)
+            .query("samples > 1")
+            .query("n_top == 1")
+            .assign(
+                percent_agree=lambda x: x.max_n / x.samples,
+                label_strength=lambda x: np.where(
+                    x.max_n == x.samples, "strong", "weak"
+                ),
+                label_source="Internal",
+            )
+        )[PAIR_COLS]
+    else:
+        pair_label_set = pd.DataFrame(columns=PAIR_COLS)
+
+    if len(pair_current):
+        pair_new_rows = (
+            pair_label_set.merge(
+                pair_current[["asset_id_1", "asset_id_2", "task_type", "rule_index"]],
+                on=PAIR_KEY,
+                how="left",
+                indicator=True,
+            )
+            .query('_merge == "left_only"')
+            .drop(columns="_merge")
+        )
+    else:
+        pair_new_rows = pair_label_set
+
+    print(f"new pair rows to insert: {len(pair_new_rows)} of {len(pair_label_set)} total")
+
+    if len(pair_new_rows):
+        t = time.time()
+        pair_new_rows.to_sql(
+            "label_data.same_style.rule.labels",
+            con=engine_dev,
+            if_exists="append",
+            index=False,
+            method="multi",
+            chunksize=1000,
+        )
+        print(f"saved pair labels in {time.time()-t:.1f}s")
+except Exception as e:
+    print(f"skipped pair reconciliation (same_style rule 2): {e}")
 
 print("done")
 # prompt_data \

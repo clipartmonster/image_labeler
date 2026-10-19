@@ -68,6 +68,9 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Ships with Django; only registers template filters (intcomma for the large
+    # asset counts on the model coverage page).
+    "django.contrib.humanize",
     "corsheaders",
     "rest_framework",
     "labeling_api",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from django.views.decorators.csrf import csrf_exempt
 
@@ -13,6 +14,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Subquery, OuterRef
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
+from django.db import connection
 from rest_framework.decorators import api_view
 
 import requests
@@ -763,6 +765,86 @@ def collect_prompt_internal_source(request: Request) -> JsonResponse:
     return JsonResponse(result, safe=False)
 
 
+@csrf_exempt
+@api_authorization
+@api_view(["POST"])
+def collect_style_prompt(request: Request) -> JsonResponse:
+    """Append a pair-comparison response (same_style rule 2) to style_prompt_responses.
+
+    Mirrors :func:`collect_prompt_internal_source` but keys on the pair
+    ``(asset_id_1, asset_id_2)`` instead of a single ``asset_id``.
+
+    Args:
+        request (Request): POST body. ``asset_id_1``, ``asset_id_2``, ``labeler_id``,
+        ``task_type``, ``rule_index``, ``prompt_response`` (same/similar/different/
+        duplicate); optional ``labeler_source`` (default ``Internal``).
+
+    Returns:
+        JsonResponse: ``status`` and ``explanation`` after saving.
+    """
+
+    # selected_pair_labels has no pair_id column yet, so the served pair may not
+    # carry one. Store NULL rather than an empty string (pair_id is a nullable
+    # bigint) so submits never fail.
+    pair_id = request.data.get("pair_id") or None
+    asset_id_1 = request.data.get("asset_id_1", None)
+    asset_id_2 = request.data.get("asset_id_2", None)
+    labeler_source = request.data.get("labeler_source", "Internal")
+    labeler_id = request.data.get("labeler_id", None)
+    task_type = request.data.get("task_type", None)
+    rule_index = request.data.get("rule_index", None)
+    prompt_response = request.data.get("prompt_response", None)
+
+    # Prevent duplicate labels for this labeler + pair. Admins and reconcile
+    # labels are exempt so they can re-label.
+    is_admin = hasattr(request, "user") and request.user.is_authenticated and request.user.is_superuser
+    is_reconcile = labeler_source == "reconcile_label"
+    if not is_admin and not is_reconcile:
+        already_exists = style_prompt_responses.objects.filter(
+            asset_id_1=asset_id_1, asset_id_2=asset_id_2,
+            task_type=task_type, rule_index=rule_index, labeler_id=labeler_id,
+        ).exists()
+        if already_exists:
+            return JsonResponse({"status": "skipped", "explanation": "already labeled"}, safe=False)
+
+    labeler_count = (
+        style_prompt_responses.objects.filter(
+            asset_id_1=asset_id_1, asset_id_2=asset_id_2,
+            task_type=task_type, labeler_id=labeler_id, rule_index=rule_index,
+        )
+        .order_by("-labeler_count")
+        .values_list("labeler_count", flat=True)
+        .first()
+    ) or 0
+
+    labeler_count += 1
+
+    new_entry = style_prompt_responses(
+        datetime_created=timezone.now(),
+        pair_id=pair_id,
+        asset_id_1=asset_id_1,
+        asset_id_2=asset_id_2,
+        labeler_source=labeler_source,
+        labeler_id=labeler_id,
+        labeler_count=labeler_count,
+        task_type=task_type,
+        rule_index=rule_index,
+        prompt_response=prompt_response,
+    )
+
+    new_entry.save()
+
+    _check_batch_complete(labeler_id, task_type, rule_index)
+
+    return JsonResponse(
+        {
+            "status": "success",
+            "explanation": f"added style prompt for pair ({asset_id_1}, {asset_id_2})",
+        },
+        safe=False,
+    )
+
+
 def _check_batch_complete(labeler_id, task_type, rule_index):
     """Mark the labeler's BatchAssignment as completed when every asset is
     labeled or flagged.  Called after each prompt response and flag."""
@@ -786,6 +868,31 @@ def _check_batch_complete(labeler_id, task_type, rule_index):
         completed_at__isnull=True,
     )
     for a in assignments:
+        # Pair-comparison assignments (same_style rule 2): compare labeled pairs
+        # in style_prompt_responses against the pairs in selected_pair_labels.
+        if _is_pair_task(a.task_type, a.rule_index):
+            batch_pairs = set(
+                label_data_selected_pair_labels.objects.filter(
+                    task_type=a.task_type,
+                    rule_index=a.rule_index,
+                    batch_id=a.batch_id,
+                    large_sub_batch=a.large_sub_batch,
+                ).values_list("asset_id_1", "asset_id_2")
+            )
+            if not batch_pairs:
+                continue
+            labeled_pairs = set(
+                style_prompt_responses.objects.filter(
+                    task_type=a.task_type,
+                    rule_index=a.rule_index,
+                    labeler_id=labeler_id,
+                ).values_list("asset_id_1", "asset_id_2")
+            )
+            if batch_pairs.issubset(labeled_pairs):
+                a.completed_at = tz.now()
+                a.save(update_fields=["completed_at"])
+            continue
+
         asset_model = task_asset_model(a.task_type)
         batch_asset_ids = set(
             asset_model.objects.filter(
@@ -930,14 +1037,14 @@ def collect_prompt(request: Request) -> JsonResponse:
 @api_authorization
 @api_view(["POST"])
 def remove_prompt_responses(request: Request) -> JsonResponse:
-    """Delete the most recent Internal ``prompt_responses`` row for an asset/rule.
+    """Delete this labeler's ``prompt_responses`` rows for an asset/rule.
 
     Args:
         request (Request): POST body. ``asset_id``, ``labeler_id``, ``rule_index``, ``task_type``;
         ``labeler_source`` (default ``Internal``).
 
     Returns:
-        JsonResponse: ``status`` and ``explanation`` (success or missing entry).
+        JsonResponse: ``status`` and ``explanation`` (how many rows went, or missing entry).
 
     Frontend:
         ``image_labeler.static.js.api_calls.js`` (undo/remove last prompt), ``label_content.html``.
@@ -949,7 +1056,9 @@ def remove_prompt_responses(request: Request) -> JsonResponse:
     rule_index = request.data.get("rule_index")
     task_type = request.data.get("task_type")
 
-    if labeler_source == "Internal":
+    # ``reconcile_label`` rows are written to this same table by
+    # ``collect_prompt_internal_source``, so they are cleared the same way.
+    if labeler_source in ("Internal", "reconcile_label"):
 
         entries = prompt_responses.objects.filter(
             asset_id=asset_id,
@@ -958,14 +1067,20 @@ def remove_prompt_responses(request: Request) -> JsonResponse:
             task_type=task_type,
         )
 
-        most_recent_entry = entries.order_by("-datetime_created").first()
+        # Every row for this labeler goes, not just the newest. Admins and
+        # reconcile labelers are exempt from the duplicate guard in
+        # ``collect_prompt_internal_source``, so they can hold several rows for
+        # one asset and rule; deleting one at a time left the old answer in
+        # place and made Clear Responses look like it did nothing. The filter is
+        # scoped to this labeler, so other labelers' answers are untouched.
+        removed, _ = entries.delete()
 
-        if most_recent_entry:
-            most_recent_entry.delete()
-
+        if removed:
             result = {
                 "status": "success",
-                "explanation": "removed prompt response from rule "
+                "explanation": "removed "
+                + str(removed)
+                + " prompt response(s) from rule "
                 + str(rule_index)
                 + " for asset "
                 + str(asset_id)
@@ -975,7 +1090,13 @@ def remove_prompt_responses(request: Request) -> JsonResponse:
         else:
             result = {"status": "failure", "explanation": "Entry does not exist."}
 
-    # else:
+    else:
+        result = {
+            "status": "failure",
+            "explanation": "unsupported labeler_source " + str(labeler_source),
+        }
+
+    # Previous MTurk handling, kept for reference:
 
     #     if rule_index == None:
 
@@ -1003,6 +1124,51 @@ def remove_prompt_responses(request: Request) -> JsonResponse:
     #             + str(rule_index)
     #             + ' for asset '
     #             + str(asset_id)}
+
+    return JsonResponse(result, safe=False)
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["POST"])
+def remove_style_prompt(request: Request) -> JsonResponse:
+    """Delete the most recent ``style_prompt_responses`` row for a pair/rule.
+
+    Pair-comparison counterpart of :func:`remove_prompt_responses` (same_style
+    rule 2 Clear button): keyed on ``asset_id_1``/``asset_id_2``.
+
+    Args:
+        request (Request): POST body. ``asset_id_1``, ``asset_id_2``, ``labeler_id``,
+        ``rule_index``, ``task_type``; ``labeler_source`` (default ``Internal``).
+
+    Returns:
+        JsonResponse: ``status`` and ``explanation``.
+    """
+
+    asset_id_1 = request.data.get("asset_id_1")
+    asset_id_2 = request.data.get("asset_id_2")
+    labeler_id = request.data.get("labeler_id")
+    rule_index = request.data.get("rule_index")
+    task_type = request.data.get("task_type")
+
+    entries = style_prompt_responses.objects.filter(
+        asset_id_1=asset_id_1,
+        asset_id_2=asset_id_2,
+        labeler_id=labeler_id,
+        rule_index=rule_index,
+        task_type=task_type,
+    )
+
+    most_recent_entry = entries.order_by("-datetime_created").first()
+
+    if most_recent_entry:
+        most_recent_entry.delete()
+        result = {
+            "status": "success",
+            "explanation": f"removed style prompt for pair ({asset_id_1}, {asset_id_2}).",
+        }
+    else:
+        result = {"status": "failure", "explanation": "Entry does not exist."}
 
     return JsonResponse(result, safe=False)
 
@@ -1296,6 +1462,16 @@ def get_batch_for_viewing(request: Request) -> JsonResponse:
     rule_index = int(request.data.get("rule_index", None))
     batch_index = request.data.get("batch_index", None)
 
+    # Pair-comparison tasks (same_style rule 2) are keyed on a pair, not a single
+    # asset, so aggregate style_prompt_responses by pair instead.
+    if _is_pair_task(task_type, rule_index):
+        return JsonResponse(
+            _pair_batch_for_viewing(
+                task_type, rule_index, batch_index, request.data.get("cv_run_id")
+            ),
+            safe=False,
+        )
+
     corrected_labels = pd.DataFrame(
         list(
             modified_prompt_table.objects.filter(
@@ -1403,6 +1579,1586 @@ def get_batch_for_viewing(request: Request) -> JsonResponse:
     return JsonResponse({"assets_w_labels": assets_w_labels}, safe=False)
 
 
+# Valid pair-comparison responses (same_style rule 2), in display order.
+PAIR_CHOICES = ["same", "similar", "different", "duplicate"]
+
+
+def _style_cv_runs():
+    """Available scoring runs in label_data.style_cv_scores, most recent first.
+
+    ``date_scored`` only records the day, so same-day runs would tie; ``cv_run_id``
+    embeds the timestamp (``cv_YYYYMMDD_HHMM``) and breaks those ties.
+
+    Returns:
+        list[dict]: ``cv_run_id``, ``last_scored`` and the distinct ``pairs`` count
+        per run, newest first.
+    """
+    runs = list(
+        label_data_style_cv_scores.objects.values("cv_run_id").annotate(
+            last_scored=Max("date_scored"),
+            pairs=Count("pair_id", distinct=True),
+        )
+    )
+    runs.sort(
+        key=lambda r: (r["last_scored"] or "", r["cv_run_id"] or ""), reverse=True
+    )
+    return runs
+
+
+def _rule_cv_runs(task_type, rule_index):
+    """Available scoring runs in label_data.cv_scores for one rule, newest first.
+
+    Same shape as :func:`_style_cv_runs` but scoped to a rule, because that table
+    holds runs for every yes/no rule. ``date_scored`` only records the day, so
+    ``cv_run_id`` (``cv_YYYYMMDD_HHMM``) breaks same-day ties.
+
+    Returns:
+        list[dict]: ``cv_run_id``, ``last_scored``, ``assets`` per run.
+    """
+    runs = list(
+        label_data_cv_scores.objects.filter(
+            task_type=task_type, rule_index=rule_index
+        )
+        .values("cv_run_id")
+        .annotate(
+            last_scored=Max("date_scored"),
+            assets=Count("asset_id", distinct=True),
+        )
+    )
+    runs.sort(
+        key=lambda r: (r["last_scored"] or "", r["cv_run_id"] or ""), reverse=True
+    )
+    return runs
+
+
+def _rule_cv_for_viewing(
+    task_type,
+    rule_index,
+    cv_run_id=None,
+    flag_filter="all",
+    bucket_filter="all",
+    label_filter="all",
+    sort_by="suspicion_desc",
+    limit=300,
+):
+    """Build the cross-validation review rows for a single-asset (yes/no) rule.
+
+    Reads one scoring run from ``label_data.cv_scores``, attaches each asset's
+    image, and compares the label the model was scored against with the label that
+    stands now in ``label_data.asset_type.rule.labels`` -- so a label edited since
+    scoring shows up as stale rather than silently making the model look wrong.
+
+    Labels and predictions are stored as 0/1; they are surfaced as ``yes``/``no``
+    to match the rest of the labeling UI.
+
+    Filtering, sorting and the row cap all happen here rather than in the page
+    view: a run holds thousands of assets, and shipping the whole thing as JSON on
+    every page load is enough to exhaust the server's memory.
+
+    Args:
+        task_type: Task the run scored.
+        rule_index: Rule the run scored.
+        cv_run_id: Which run to read. Unknown or omitted uses the most recent.
+        flag_filter: A ``flag`` value, or ``disagree``/``stale``, or ``all``.
+        bucket_filter: A ``bucket`` value, or ``all``.
+        label_filter: ``only_yes``/``only_no`` on the scored label, or ``all``.
+        sort_by: One of ``suspicion_desc``, ``label_desc``/``label_asc``,
+            ``pred_desc``/``pred_asc``, ``prob_desc``/``prob_asc``.
+        limit: Most rows to return. The counts describe the full match, so the
+            page can say how much it is not showing.
+
+    Returns:
+        dict: ``assets_w_cv`` (at most ``limit`` records), ``cv_runs``, the
+        resolved ``cv_run_id``, ``bucket_counts`` and ``flag_counts`` for the whole
+        run, ``label_counts`` for the match, ``scored_total`` and
+        ``matched_total``.
+    """
+    cv_runs = _rule_cv_runs(task_type, rule_index)
+    run_ids = [r["cv_run_id"] for r in cv_runs]
+    selected_run = cv_run_id if cv_run_id in run_ids else (run_ids[0] if run_ids else None)
+
+    def payload(rows, **counts):
+        out = {
+            "assets_w_cv": rows,
+            "cv_runs": cv_runs,
+            "cv_run_id": selected_run,
+            "bucket_counts": [],
+            "flag_counts": [],
+            "label_counts": [],
+            "scored_total": 0,
+            "matched_total": len(rows),
+        }
+        out.update(counts)
+        return out
+
+    if selected_run is None:
+        return payload([])
+
+    scores = pd.DataFrame(
+        list(
+            label_data_cv_scores.objects.filter(
+                task_type=task_type, rule_index=rule_index, cv_run_id=selected_run
+            ).values(
+                "asset_id", "label", "prob", "pred", "correct", "suspicion",
+                "flag", "bucket", "threshold", "fold", "date_scored",
+            )
+        )
+    )
+    if scores.empty:
+        return payload([])
+
+    # asset_id is text in cv_scores but bigint everywhere else, so every join here
+    # goes through strings.
+    scores["asset_id"] = scores["asset_id"].astype(str)
+    scores = scores.drop_duplicates(subset=["asset_id"])
+
+    # The label that stands now, to catch scores made against a since-corrected
+    # label. Left join: an asset can be scored before it is reconciled.
+    current = pd.DataFrame(
+        list(
+            assets_w_rule_labels.objects.filter(
+                task_type=task_type, rule_index=rule_index
+            ).values("asset_id", "label")
+        )
+    )
+    if current.empty:
+        scores["current_label_raw"] = None
+    else:
+        current["asset_id"] = current["asset_id"].astype(str)
+        current = current.drop_duplicates(subset=["asset_id"]).rename(
+            columns={"label": "current_label_raw"}
+        )
+        scores = scores.merge(current, on="asset_id", how="left")
+
+    # Same override the batch-labels slider writes: a later
+    # ``modified_prompt_response`` wins over the reconciled label, so a flip
+    # made here (or on the labels page) shows up without waiting for reconcile.
+    # The slider stores 0/1; the prediction-labels page stores yes/no.
+    corrected = pd.DataFrame(
+        list(
+            modified_prompt_table.objects.filter(
+                task_type=task_type, rule_index=rule_index
+            ).values("asset_id", "modified_prompt_response", "date_time_created")
+        )
+    )
+    if not corrected.empty:
+        corrected["asset_id"] = corrected["asset_id"].astype(str)
+        corrected = (
+            corrected.sort_values("date_time_created")
+            .drop_duplicates(subset=["asset_id"], keep="last")
+        )
+        yes_vals = {"1", "yes", "1.0"}
+        no_vals = {"0", "no", "0.0"}
+        raw = corrected["modified_prompt_response"].astype(str).str.lower()
+        corrected["current_label_raw"] = np.where(
+            raw.isin(yes_vals), 1, np.where(raw.isin(no_vals), 0, np.nan)
+        )
+        corrected = corrected.dropna(subset=["current_label_raw"])[["asset_id", "current_label_raw"]]
+        if not corrected.empty:
+            scores = scores.merge(
+                corrected, on="asset_id", how="left", suffixes=("", "_mod")
+            )
+            scores["current_label_raw"] = scores["current_label_raw_mod"].combine_first(
+                scores["current_label_raw"]
+            )
+            scores = scores.drop(columns=["current_label_raw_mod"])
+
+    scores["disagrees"] = scores["correct"] == False  # noqa: E712
+    scores["stale"] = (
+        scores["current_label_raw"].notna()
+        & scores["label"].notna()
+        & (scores["current_label_raw"] != scores["label"])
+    )
+
+    scored_total = len(scores)
+    # Counted before filtering, so the dropdowns show what is available rather
+    # than only what the current filters left.
+    bucket_counts = (
+        scores.groupby("bucket").agg(count=("asset_id", "count")).reset_index()
+        .sort_values("count", ascending=False).to_dict(orient="records")
+    )
+    flag_counts = (
+        scores.groupby("flag").agg(count=("asset_id", "count")).reset_index()
+        .sort_values("count", ascending=False).to_dict(orient="records")
+    )
+
+    if flag_filter == "disagree":
+        scores = scores[scores["disagrees"]]
+    elif flag_filter == "stale":
+        scores = scores[scores["stale"]]
+    elif flag_filter != "all":
+        scores = scores[scores["flag"] == flag_filter]
+
+    if bucket_filter != "all":
+        scores = scores[scores["bucket"] == bucket_filter]
+
+    # Filters on the label the model was scored against, which is what a reviewer
+    # is judging -- not on the model's own prediction.
+    if label_filter in ("only_yes", "only_no"):
+        scores = scores[scores["label"] == (1 if label_filter == "only_yes" else 0)]
+
+    label_counts = (
+        scores.groupby("label").agg(count=("asset_id", "count")).reset_index()
+        .to_dict(orient="records")
+    ) if not scores.empty else []
+
+    if not scores.empty:
+        if sort_by in ("prob_desc", "prob_asc"):
+            scores = scores.sort_values(
+                "prob", ascending=(sort_by == "prob_asc"), na_position="last"
+            )
+        elif sort_by in ("label_desc", "label_asc"):
+            # Groups the two labels together, most suspicious first inside each,
+            # which is how you review one label's mistakes at a time.
+            scores = scores.sort_values(
+                ["label", "suspicion"],
+                ascending=[sort_by == "label_asc", False], na_position="last",
+            )
+        elif sort_by in ("pred_desc", "pred_asc"):
+            scores = scores.sort_values(
+                ["pred", "suspicion"],
+                ascending=[sort_by == "pred_asc", False], na_position="last",
+            )
+        else:
+            scores = scores.sort_values("suspicion", ascending=False, na_position="last")
+
+    matched_total = len(scores)
+    counts = {
+        "bucket_counts": bucket_counts,
+        "flag_counts": flag_counts,
+        "label_counts": label_counts,
+        "scored_total": scored_total,
+        "matched_total": matched_total,
+    }
+    if scores.empty:
+        return payload([], **counts)
+
+    # Images are fetched after the cap, so a run of thousands costs one small
+    # lookup instead of a full-table join.
+    scores = scores.head(int(limit))
+    images = pd.DataFrame(
+        list(
+            label_data_selected_assets_new.objects.filter(
+                asset_id__in=[int(a) for a in scores["asset_id"] if a.isdigit()]
+            ).values("asset_id", "image_link", "batch_id")
+        )
+    )
+    if images.empty:
+        scores["image_link"] = None
+        scores["batch_id"] = None
+    else:
+        images["asset_id"] = images["asset_id"].astype(str)
+        images = images.drop_duplicates(subset=["asset_id"])
+        scores = scores.merge(images, on="asset_id", how="left")
+
+    def as_yes_no(series):
+        return np.where(series.isna(), None, np.where(series == 1, "yes", "no"))
+
+    scores["scored_label"] = as_yes_no(scores["label"])
+    scores["model_label"] = as_yes_no(scores["pred"])
+    scores["current_label"] = as_yes_no(scores["current_label_raw"])
+
+    scores = scores.rename(
+        columns={
+            "prob": "cv_prob", "pred": "cv_pred", "correct": "cv_correct",
+            "suspicion": "cv_suspicion", "flag": "cv_flag", "bucket": "cv_bucket",
+            "threshold": "cv_threshold", "fold": "cv_fold",
+            "date_scored": "cv_date_scored", "scored_label": "cv_scored_label",
+            "model_label": "cv_model_label", "disagrees": "cv_disagrees",
+            "stale": "cv_stale",
+        }
+    )
+    scores = scores.replace({np.nan: None})
+
+    return payload(
+        scores[
+            [
+                "asset_id", "image_link", "batch_id",
+                "current_label", "cv_scored_label", "cv_model_label",
+                "cv_prob", "cv_pred", "cv_correct", "cv_suspicion",
+                "cv_flag", "cv_bucket", "cv_threshold", "cv_fold",
+                "cv_date_scored", "cv_disagrees", "cv_stale",
+            ]
+        ].to_dict(orient="records"),
+        **counts,
+    )
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["GET"])
+def get_cv_scores_for_viewing(request: Request) -> JsonResponse:
+    """Return one page of a cross-validation run for a yes/no rule.
+
+    Args:
+        request (Request): GET body/data. ``task_type`` and ``rule_index`` are
+        required. Optional ``cv_run_id`` (omitted uses the most recent run for
+        that rule), ``flag_filter``, ``bucket_filter``, ``label_filter``,
+        ``sort_by`` and ``limit``.
+
+    Returns:
+        JsonResponse: ``assets_w_cv``, ``cv_runs``, resolved ``cv_run_id``,
+        ``bucket_counts``, ``flag_counts``, ``label_counts``, ``scored_total``,
+        ``matched_total``.
+
+    Frontend:
+        ``image_labeler.label_images.views.view_batch_labels`` with ``view=cv``
+        → ``view_batch_cv_labels.html``.
+    """
+    task_type = request.data.get("task_type", None)
+    rule_index = int(request.data.get("rule_index", None))
+
+    return JsonResponse(
+        _rule_cv_for_viewing(
+            task_type,
+            rule_index,
+            cv_run_id=request.data.get("cv_run_id"),
+            flag_filter=request.data.get("flag_filter", "all"),
+            bucket_filter=request.data.get("bucket_filter", "all"),
+            label_filter=request.data.get("label_filter", "all"),
+            sort_by=request.data.get("sort_by", "suspicion_desc"),
+            limit=request.data.get("limit", 300),
+        ),
+        safe=False,
+    )
+
+
+def _pair_terms():
+    """Style terms behind each pair, keyed by pair_id.
+
+    A pair is drawn from a style group and the group carries the term, so joining
+    through ``group_id`` is the only link from a pair back to what it's a pair of.
+    A few hundred pairs sit in more than one group, hence a list per pair.
+
+    Cached: this only moves when new pairs are selected, and every filter change on
+    the batch-labels page is a full reload.
+
+    Returns:
+        dict: pair_id -> sorted list of terms.
+    """
+    from django.core.cache import cache
+
+    cache_key = "style_pair_terms_v1"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with connection.cursor() as c:
+        c.execute(
+            """
+            SELECT DISTINCT s.pair_id, g.term
+            FROM "label_data.selected_pair_labels" s
+            JOIN "label_data.style_groups" g ON g.group_id = s.group_id
+            WHERE s.group_id IS NOT NULL
+            """
+        )
+        terms = {}
+        for pair_id, term in c.fetchall():
+            terms.setdefault(str(pair_id), []).append(term)
+
+    terms = {pair_id: sorted(v) for pair_id, v in terms.items()}
+    cache.set(cache_key, terms, timeout=60 * 60)
+    return terms
+
+
+def _pair_batch_for_viewing(task_type, rule_index, batch_index, cv_run_id=None):
+    """Build the batch-labels rows for a pair task (same_style rule 2).
+
+    Aggregates ``style_prompt_responses`` by pair (plurality vote), attaches the
+    pair metadata + both image links from ``selected_pair_labels``, and lets any
+    reconciled/corrected label in ``label_data.same_style.rule.labels`` override
+    the live plurality (mirroring how ``modified_prompt_responses`` overrides the
+    yes/no view).
+
+    Args:
+        cv_run_id: Which scoring run in ``label_data.style_cv_scores`` to attach.
+            Unknown or omitted falls back to the most recent run.
+
+    Returns:
+        dict: ``assets_w_labels`` (one record per labeled pair with ``pair_id``,
+        ``asset_id_1``, ``asset_id_2``, ``image_link_1``, ``image_link_2``,
+        ``label``, ``agree_status``, ``samples``, ``date_labeled``, the ``cv_*``
+        score fields, and the ``terms``/``categories`` the pair came from), plus
+        ``cv_runs`` and the resolved ``cv_run_id``.
+    """
+    key = ["asset_id_1", "asset_id_2"]
+
+    cv_runs = _style_cv_runs()
+    run_ids = [r["cv_run_id"] for r in cv_runs]
+    selected_run = cv_run_id if cv_run_id in run_ids else (run_ids[0] if run_ids else None)
+
+    def payload(rows):
+        return {"assets_w_labels": rows, "cv_runs": cv_runs, "cv_run_id": selected_run}
+
+    responses = pd.DataFrame(
+        list(
+            style_prompt_responses.objects.filter(
+                task_type=task_type, rule_index=rule_index
+            ).values("asset_id_1", "asset_id_2", "prompt_response", "datetime_created")
+        )
+    )
+    if responses.empty:
+        return payload([])
+
+    responses["resp"] = responses["prompt_response"].astype(str).str.strip().str.lower()
+    responses = responses[responses["resp"].isin(PAIR_CHOICES)]
+    if responses.empty:
+        return payload([])
+
+    counts = responses.groupby(key + ["resp"]).size().rename("n").reset_index()
+    counts["max_n"] = counts.groupby(key)["n"].transform("max")
+    top = counts[counts["n"] == counts["max_n"]]
+    agg = (
+        top.groupby(key)
+        .agg(label=("resp", "min"), n_top=("resp", "size"), max_n=("n", "max"))
+        .reset_index()
+    )
+    extras = (
+        responses.groupby(key)
+        .agg(samples=("resp", "count"), date_labeled=("datetime_created", "max"))
+        .reset_index()
+    )
+    labels = agg.merge(extras, on=key)
+    labels["percent_agree"] = labels["max_n"] / labels["samples"]
+    labels["agree_status"] = np.where(labels["n_top"] > 1, "disagree", "agree")
+    labels["agree_status"] = np.where(
+        labels["max_n"] == labels["samples"], "strongly_agree", labels["agree_status"]
+    )
+    labels["agree_status"] = np.where(
+        labels["samples"] == 1, "indeterminate", labels["agree_status"]
+    )
+
+    # Pair metadata (pair_id, image links, batch) — inner join keeps only pairs
+    # that exist in the current pair set for this task/rule.
+    meta = pd.DataFrame(
+        list(
+            label_data_selected_pair_labels.objects.filter(
+                task_type=task_type, rule_index=rule_index
+            ).values(
+                "pair_id", "asset_id_1", "asset_id_2",
+                "image_link_1", "image_link_2", "batch_id",
+            )
+        )
+    )
+    if meta.empty:
+        return payload([])
+    # selected_pair_labels can contain the same pair more than once; dedupe so the
+    # join doesn't multiply rows.
+    meta = meta.drop_duplicates(subset=key)
+    labels = labels.merge(meta, on=key, how="inner")
+    labels["pair_id"] = labels["pair_id"].astype(str)
+
+    # Model scores (joined on pair_id) so reviewers can sort by confidence and
+    # spot model/human disagreements. Scoped to one run, since a pair can be
+    # scored by several runs.
+    cv_qs = label_data_style_cv_scores.objects.all()
+    if selected_run is not None:
+        cv_qs = cv_qs.filter(cv_run_id=selected_run)
+    cv = pd.DataFrame(
+        list(
+            cv_qs.values(
+                "pair_id", "prob", "pred", "correct", "suspicion", "flag",
+                "prompt_response",
+            )
+        )
+    )
+    if not cv.empty:
+        # A run can still repeat a pair; keep one row per pair.
+        cv = cv.drop_duplicates(subset=["pair_id"]).rename(
+            columns={
+                "prob": "cv_prob",
+                "pred": "cv_pred",
+                "correct": "cv_correct",
+                "suspicion": "cv_suspicion",
+                "flag": "cv_flag",
+                "prompt_response": "cv_scored_label",
+            }
+        )
+        cv["pair_id"] = cv["pair_id"].astype(str)
+        labels = labels.merge(cv, on="pair_id", how="left")
+    else:
+        for col in ["cv_prob", "cv_pred", "cv_correct", "cv_suspicion", "cv_flag",
+                    "cv_scored_label"]:
+            labels[col] = None
+
+    # Reconciled/corrected override from the pair labels table.
+    overrides = pd.DataFrame(
+        list(
+            label_data_same_style_rule_labels.objects.filter(
+                task_type=task_type, rule_index=rule_index
+            ).values("asset_id_1", "asset_id_2", "label")
+        )
+    )
+    if not overrides.empty:
+        overrides = overrides.rename(columns={"label": "override_label"})
+        labels = labels.merge(overrides, on=key, how="left")
+        labels["agree_status"] = np.where(
+            labels["override_label"].notna(), "potentially_corrected", labels["agree_status"]
+        )
+        labels["label"] = np.where(
+            labels["override_label"].notna(), labels["override_label"], labels["label"]
+        )
+        labels = labels.drop(columns=["override_label"])
+
+    if batch_index is not None:
+        labels = labels.query("batch_id == @batch_index")
+
+    labels["date_labeled"] = labels["date_labeled"].astype(str)
+
+    # The model is binary (1 = same, 0 = different); surface it as a readable
+    # label plus a disagreement flag against the label it was scored on.
+    labels["cv_model_label"] = np.where(
+        labels["cv_pred"].isna(), None,
+        np.where(labels["cv_pred"] == 1, "same", "different"),
+    )
+    labels["cv_disagrees"] = labels["cv_correct"] == False  # noqa: E712
+    # A label edited after scoring makes the stored score stale.
+    labels["cv_stale"] = (
+        labels["cv_scored_label"].notna()
+        & (labels["cv_scored_label"] != labels["label"])
+    )
+
+    labels = labels.replace({np.nan: None})
+
+    # What each pair is a pair *of*, so the page can be narrowed to one style type.
+    # Added after the NaN scrub, which would otherwise have to reason about lists.
+    from label_images.text import categories_for_term
+
+    pair_terms = _pair_terms()
+    labels["terms"] = labels["pair_id"].map(lambda p: pair_terms.get(p, []))
+    labels["categories"] = labels["terms"].map(
+        lambda terms: sorted({c for t in terms for c in categories_for_term(t)})
+    )
+
+    return payload(
+        labels[
+            [
+                "pair_id", "asset_id_1", "asset_id_2", "image_link_1", "image_link_2",
+                "label", "agree_status", "samples", "date_labeled",
+                "cv_prob", "cv_pred", "cv_model_label", "cv_flag", "cv_correct",
+                "cv_suspicion", "cv_scored_label", "cv_disagrees", "cv_stale",
+                "terms", "categories",
+            ]
+        ].to_dict(orient="records")
+    )
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["POST"])
+def set_pair_label(request: Request) -> JsonResponse:
+    """Upsert an admin-corrected pair label into label_data.same_style.rule.labels.
+
+    Used by the batch-labels view to switch a pair's label (same_style rule 2).
+    The table has no primary key, so this deletes any existing row for the pair
+    and inserts the corrected one.
+
+    Args:
+        request (Request): POST body. ``pair_id``, ``asset_id_1``, ``asset_id_2``,
+        ``task_type``, ``rule_index``, ``label``.
+
+    Returns:
+        JsonResponse: ``status`` and ``explanation``.
+    """
+    pair_id = request.data.get("pair_id") or None
+    asset_id_1 = request.data.get("asset_id_1")
+    asset_id_2 = request.data.get("asset_id_2")
+    task_type = request.data.get("task_type")
+    rule_index = request.data.get("rule_index")
+    label = request.data.get("label")
+
+    if label not in PAIR_CHOICES:
+        return JsonResponse(
+            {"status": "failure", "explanation": f"invalid label '{label}'"}, safe=False
+        )
+
+    from django.db import connection
+
+    table = '"label_data.same_style.rule.labels"'
+    with connection.cursor() as c:
+        c.execute(
+            f"DELETE FROM {table} WHERE asset_id_1=%s AND asset_id_2=%s "
+            "AND task_type=%s AND rule_index=%s",
+            [asset_id_1, asset_id_2, task_type, rule_index],
+        )
+        c.execute(
+            f"INSERT INTO {table} "
+            "(pair_id, asset_id_1, asset_id_2, task_type, rule_index, label, "
+            "percent_agree, label_strength, label_source) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            [pair_id, asset_id_1, asset_id_2, task_type, rule_index, label,
+             1.0, "strong", "corrected"],
+        )
+
+    return JsonResponse(
+        {"status": "success", "explanation": f"set pair ({asset_id_1}, {asset_id_2}) to {label}"},
+        safe=False,
+    )
+
+
+# Style analysis: how each style term in label_data.style_groups is doing, so
+# reviewers can spot which terms need more labeled pairs.
+#
+# The three tables link on ids rather than on the term itself:
+#   style_cv_scores.pair_id -> selected_pair_labels.pair_id
+#   selected_pair_labels.group_id -> style_groups.group_id -> term
+# Both pair tables can repeat a pair_id, so every join collapses to one row per
+# pair first; otherwise support counts (and therefore P/R/F1) come out inflated.
+
+# One group per pair and one term per group. group_id maps to exactly one term,
+# so MIN() just guarantees a single row rather than picking between values.
+_PAIR_GROUP_SQL = """
+    SELECT pair_id, MIN(group_id) AS group_id
+    FROM "label_data.selected_pair_labels"
+    WHERE group_id IS NOT NULL
+    GROUP BY pair_id
+"""
+_GROUP_TERM_SQL = 'SELECT DISTINCT group_id, term FROM "label_data.style_groups"'
+
+
+def _style_term_supply():
+    """Per-term catalog supply from label_data.style_groups.
+
+    Scanning ~6.5M rows takes ~10s, and style_groups only changes when groups are
+    rebuilt, so the result is cached.
+
+    Returns:
+        dict: term -> ``{"groups", "assets", "pairable_groups"}``, where
+        ``pairable_groups`` counts groups holding at least 2 assets (the minimum
+        needed to build a pair).
+    """
+    from django.core.cache import cache
+
+    cache_key = "style_term_supply_v1"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with connection.cursor() as c:
+        c.execute(
+            """
+            SELECT term,
+                   COUNT(DISTINCT group_id) AS groups,
+                   COUNT(DISTINCT asset_id) AS assets,
+                   COUNT(DISTINCT CASE WHEN group_size >= 2 THEN group_id END)
+                       AS pairable_groups
+            FROM "label_data.style_groups"
+            GROUP BY term
+            """
+        )
+        supply = {
+            row[0]: {"groups": row[1], "assets": row[2], "pairable_groups": row[3]}
+            for row in c.fetchall()
+        }
+
+    cache.set(cache_key, supply, timeout=60 * 60)
+    return supply
+
+
+def _style_term_coverage():
+    """Per-term counts of pairs already pulled into batches.
+
+    Cached briefly: every filter change on the page is a full reload, and this
+    only moves when new pairs are selected.
+
+    Returns:
+        dict: term -> ``{"pairs_selected", "groups_used"}``.
+    """
+    from django.core.cache import cache
+
+    cache_key = "style_term_coverage_v2"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with connection.cursor() as c:
+        # COUNT(DISTINCT ...) makes repeated pair rows harmless here, so this can
+        # read selected_pair_labels directly. groups_used deliberately counts every
+        # group that appears: once a group has been drawn from it is spent, which is
+        # exactly what the "pull these groups" SQL assumes when it excludes them.
+        c.execute(
+            f"""
+            WITH group_term AS ({_GROUP_TERM_SQL})
+            SELECT gt.term,
+                   COUNT(DISTINCT spl.pair_id) AS pairs_selected,
+                   COUNT(DISTINCT spl.group_id) AS groups_used
+            FROM "label_data.selected_pair_labels" spl
+            JOIN group_term gt ON gt.group_id = spl.group_id
+            WHERE spl.group_id IS NOT NULL
+            GROUP BY gt.term
+            """
+        )
+        coverage = {
+            row[0]: {"pairs_selected": row[1], "groups_used": row[2]}
+            for row in c.fetchall()
+        }
+
+    cache.set(cache_key, coverage, timeout=10 * 60)
+    return coverage
+
+
+def _style_term_cv_counts(cv_run_id):
+    """Per-term confusion-matrix counts for one scoring run.
+
+    The positive class is the run's own ``y`` (1 = the pair really is the same
+    style), compared against its ``pred``. A finished run never changes, so the
+    result is cached per run.
+
+    Returns:
+        dict: term -> ``{"support", "tp", "fp", "fn", "tn"}``.
+    """
+    if not cv_run_id:
+        return {}
+
+    from django.core.cache import cache
+
+    cache_key = f"style_term_cv_counts_v1::{cv_run_id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with connection.cursor() as c:
+        c.execute(
+            f"""
+            WITH cv AS (
+                SELECT DISTINCT ON (pair_id) pair_id, y, pred
+                FROM "label_data.style_cv_scores"
+                WHERE cv_run_id = %s
+                ORDER BY pair_id
+            ),
+            pair_group AS ({_PAIR_GROUP_SQL}),
+            group_term AS ({_GROUP_TERM_SQL})
+            SELECT gt.term,
+                   COUNT(*) AS support,
+                   SUM(CASE WHEN cv.pred = 1 AND cv.y = 1 THEN 1 ELSE 0 END) AS tp,
+                   SUM(CASE WHEN cv.pred = 1 AND cv.y = 0 THEN 1 ELSE 0 END) AS fp,
+                   SUM(CASE WHEN cv.pred = 0 AND cv.y = 1 THEN 1 ELSE 0 END) AS fn,
+                   SUM(CASE WHEN cv.pred = 0 AND cv.y = 0 THEN 1 ELSE 0 END) AS tn
+            FROM cv
+            JOIN pair_group pg ON pg.pair_id = cv.pair_id
+            JOIN group_term gt ON gt.group_id = pg.group_id
+            GROUP BY gt.term
+            """,
+            [cv_run_id],
+        )
+        counts = {
+            row[0]: {
+                "support": row[1], "tp": row[2], "fp": row[3],
+                "fn": row[4], "tn": row[5],
+            }
+            for row in c.fetchall()
+        }
+
+    cache.set(cache_key, counts, timeout=30 * 60)
+    return counts
+
+
+def _style_pair_scores(cv_run_id):
+    """Per-term ``(prob, y)`` for every pair one run scored.
+
+    AUC can't be pooled from per-term AUCs, so the raw scores are needed to answer
+    it for an arbitrary group of terms. Only ~10k pairs per run, and a finished run
+    never changes, so the whole thing is cached per run.
+
+    Returns:
+        dict: term -> list of ``[prob, y]``, skipping pairs missing either value.
+    """
+    if not cv_run_id:
+        return {}
+
+    from django.core.cache import cache
+
+    cache_key = f"style_pair_scores_v1::{cv_run_id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with connection.cursor() as c:
+        c.execute(
+            f"""
+            WITH cv AS (
+                SELECT DISTINCT ON (pair_id) pair_id, prob, y
+                FROM "label_data.style_cv_scores"
+                WHERE cv_run_id = %s AND prob IS NOT NULL AND y IS NOT NULL
+                ORDER BY pair_id
+            ),
+            pair_group AS ({_PAIR_GROUP_SQL}),
+            group_term AS ({_GROUP_TERM_SQL})
+            SELECT gt.term, cv.prob, cv.y
+            FROM cv
+            JOIN pair_group pg ON pg.pair_id = cv.pair_id
+            JOIN group_term gt ON gt.group_id = pg.group_id
+            """,
+            [cv_run_id],
+        )
+        scores = {}
+        for term, prob, y in c.fetchall():
+            scores.setdefault(term, []).append([float(prob), int(y)])
+
+    cache.set(cache_key, scores, timeout=30 * 60)
+    return scores
+
+
+def _auc(scores):
+    """Area under the ROC curve, by rank (Mann-Whitney U), ties averaged.
+
+    Args:
+        scores: iterable of ``(prob, y)`` where y is 1 for the positive class.
+
+    Returns:
+        float or None: None when either class is absent, since a ranking of one
+        class against nothing has no meaning.
+    """
+    positives = sum(1 for _, y in scores if y == 1)
+    negatives = len(scores) - positives
+    if not positives or not negatives:
+        return None
+
+    values = sorted(prob for prob, _ in scores)
+    # Tied scores all take the mean of the ranks they span, otherwise an
+    # uninformative model that outputs one constant would score 0 or 1.
+    average_rank, i = {}, 0
+    while i < len(values):
+        j = i
+        while j + 1 < len(values) and values[j + 1] == values[i]:
+            j += 1
+        average_rank[values[i]] = (i + j) / 2 + 1
+        i = j + 1
+
+    rank_sum = sum(average_rank[prob] for prob, y in scores if y == 1)
+    return (rank_sum - positives * (positives + 1) / 2) / (positives * negatives)
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["GET", "POST"])
+def get_style_auc(request: Request) -> JsonResponse:
+    """AUC for one scoring run over an explicit set of terms.
+
+    Kept separate from ``get_style_analysis`` because the page decides which terms
+    are in scope (type, priority bucket, search) and AUC has to be recomputed from
+    the underlying pair scores for whatever that scope turns out to be.
+
+    Args:
+        request (Request): ``cv_run_id`` and ``terms`` (list; omitted or empty
+            means every term the run scored).
+
+    Returns:
+        JsonResponse: ``auc`` (null when a class is missing), plus the ``pairs``,
+        ``positives`` and ``negatives`` it was measured on.
+
+    Frontend:
+        ``image_labeler.label_images.views.style_analysis`` -> ``style_analysis.html``.
+    """
+    data = request.data or request.GET
+    cv_run_id = data.get("cv_run_id")
+    terms = data.get("terms")
+    if isinstance(terms, str):
+        terms = [terms]
+
+    by_term = _style_pair_scores(cv_run_id)
+    wanted = by_term if not terms else {t: by_term.get(t, []) for t in set(terms)}
+
+    # A pair maps to exactly one term here (pair_group collapses to one group per
+    # pair), so pooling across terms counts every pair once.
+    scores = [pair for pairs in wanted.values() for pair in pairs]
+    positives = sum(1 for _, y in scores if y == 1)
+
+    return JsonResponse({
+        "auc": _auc(scores),
+        "pairs": len(scores),
+        "positives": positives,
+        "negatives": len(scores) - positives,
+    })
+
+
+def _ratio(numerator, denominator):
+    """Safe divide; None when there's nothing to divide by (rather than 0.0)."""
+    return (numerator / denominator) if denominator else None
+
+
+def _style_term_priority(support, f1, untapped, min_support):
+    """Bucket a term by what it needs next.
+
+    ``uncovered``  supply exists but the run never scored it -- label some pairs.
+    ``thin``       scored, but on too few pairs to trust the metrics.
+    ``weak``       enough pairs to trust, and the model is doing badly.
+    ``ok``         enough pairs, model doing well.
+    ``exhausted``  nothing left to pull from, so more labeling isn't an option.
+    """
+    if support == 0:
+        return "uncovered" if untapped > 0 else "exhausted"
+    if support < min_support:
+        return "thin"
+    if f1 is not None and f1 < 0.7:
+        return "weak"
+    return "ok"
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["GET", "POST"])
+def get_style_analysis(request: Request) -> JsonResponse:
+    """Per-term style model performance and labeling coverage.
+
+    Combines catalog supply (``label_data.style_groups``), how many pairs have
+    already been selected (``label_data.selected_pair_labels``) and the model's
+    scores for one run (``label_data.style_cv_scores``) into one row per term.
+
+    Args:
+        request (Request): ``cv_run_id`` (defaults to the most recent run) and
+            ``min_support`` (pairs needed before metrics are treated as
+            trustworthy; default 20).
+
+    Returns:
+        JsonResponse: ``terms``, ``cv_runs``, the resolved ``cv_run_id``,
+        ``min_support`` and the available ``categories``.
+
+    Frontend:
+        ``image_labeler.label_images.views.style_analysis`` -> ``style_analysis.html``.
+    """
+    from label_images.text import STYLE_TERM_CATEGORIES, categories_for_term
+
+    # The page sends its filters as a JSON body on a GET, so request.data is the
+    # real source; the query-string fallback keeps hand-built URLs working.
+    data = request.data or request.GET
+    try:
+        min_support = int(data.get("min_support") or 20)
+    except (TypeError, ValueError):
+        min_support = 20
+
+    cv_runs = _style_cv_runs()
+    run_ids = [r["cv_run_id"] for r in cv_runs]
+    requested = data.get("cv_run_id")
+    selected_run = requested if requested in run_ids else (run_ids[0] if run_ids else None)
+
+    supply = _style_term_supply()
+    coverage = _style_term_coverage()
+    counts = _style_term_cv_counts(selected_run)
+
+    terms = []
+    for term in sorted(set(supply) | set(coverage) | set(counts)):
+        sup = supply.get(term, {})
+        cov = coverage.get(term, {})
+        cnt = counts.get(term, {})
+
+        tp, fp, fn = cnt.get("tp", 0), cnt.get("fp", 0), cnt.get("fn", 0)
+        support = cnt.get("support", 0)
+        precision = _ratio(tp, tp + fp)
+        recall = _ratio(tp, tp + fn)
+        f1 = (
+            _ratio(2 * precision * recall, precision + recall)
+            if precision and recall
+            else (0.0 if support else None)
+        )
+
+        pairable = sup.get("pairable_groups", 0)
+        groups_used = cov.get("groups_used", 0)
+        untapped = max(pairable - groups_used, 0)
+
+        terms.append({
+            "term": term,
+            "categories": categories_for_term(term),
+            "groups": sup.get("groups", 0),
+            "assets": sup.get("assets", 0),
+            "pairable_groups": pairable,
+            "pairs_selected": cov.get("pairs_selected", 0),
+            "groups_used": groups_used,
+            "untapped_groups": untapped,
+            "support": support,
+            "tp": tp, "fp": fp, "fn": fn, "tn": cnt.get("tn", 0),
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "accuracy": _ratio(tp + cnt.get("tn", 0), support),
+            "priority": _style_term_priority(support, f1, untapped, min_support),
+        })
+
+    return JsonResponse(
+        {
+            "terms": terms,
+            "cv_runs": cv_runs,
+            "cv_run_id": selected_run,
+            "min_support": min_support,
+            "categories": sorted(STYLE_TERM_CATEGORIES) + ["UNCATEGORIZED"],
+        },
+        safe=False,
+    )
+
+
+# Coverage counting depends on this index existing in prod:
+#
+#   CREATE INDEX CONCURRENTLY ix_rule_labels_version_asset
+#       ON model_predictions.rule_labels (model_version, asset_id);
+#
+# The table's other indexes lead with asset_id or task_type, so filtering by
+# model_version means walking all 113M entries -- 80 to 300 seconds per model instead
+# of a few. Leading with model_version gives a range scan already ordered by asset_id,
+# which merge-joins straight against a stage view. Roughly 3.5GB.
+
+# The prediction pipeline, as the stage_* materialized views in prod already define
+# it. Each stage names the view holding the assets that reached it; a stage's view is
+# built from the thresholded output of the stage above, so "eligible" here means the
+# same thing it means to the pipeline. The root has no view: every asset is a
+# candidate for asset_type.
+MODEL_STAGES = (
+    {"key": "asset_type", "label": "All assets", "gate": None, "parent": None},
+    {"key": "clip_art", "label": "Clip art", "gate": "stage_clip_art",
+     "parent": "asset_type"},
+    {"key": "mono_color", "label": "Mono-color clip art", "gate": "stage_mono_color",
+     "parent": "clip_art"},
+    {"key": "multi_color", "label": "Multi-color clip art", "gate": "stage_multi_color",
+     "parent": "clip_art"},
+)
+
+# Which stage each task type's models run at. Taken from the view definitions rather
+# than assumed: dark_ratio_score sits under mono_color and roughness_score under
+# multi_color because their output covers exactly those populations.
+TASK_TYPE_STAGES = {
+    "asset_type": "asset_type",
+    "clip_art_type": "clip_art",
+    "select_primary_colors": "clip_art",
+    "color_fill_type": "clip_art",
+    # Grouped with clip art on the page. Its denominator is not that stage:
+    # see LINE_WIDTH_GATES.
+    "line_width_type": "clip_art",
+    "mono_color_type": "mono_color",
+    "dark_ratio_score": "mono_color",
+    "color_complexity": "mono_color",
+    "multi_color_type": "multi_color",
+    "roughness_score": "multi_color",
+    "color_richness": "multi_color",
+    "color_pixel_density": "clip_art",
+}
+
+# color_fill_type is clip art, except these rules, which run on multi-color
+# assets: Paint Fill (1), Color Depth (2), Color Depth scale (5),
+# Watercolor (6), Gradient (8).
+MULTI_COLOR_FILL_RULES = frozenset({1, 2, 5, 6, 8})
+
+# Continuous scores write nothing to rule_labels; their predictions land in a
+# table of their own. Counting them from rule_labels would report every one as
+# 0% run. The last three are not rows in model_results_prod — coverage picks
+# their versions up from the prediction table.
+TASK_TYPE_TABLES = {
+    "select_primary_colors": "primary_colors",
+    "dark_ratio_score": "dark_ratio_scores",
+    "roughness_score": "roughness",
+    "line_width_type": "line_width",
+    "color_pixel_density": "color_pixel_density",
+    "color_richness": "color_richness",
+    "color_complexity": "color_complexity",
+}
+
+# These scores are continuous. A row in rule_index_thresholds does not mean
+# the model was thresholded.
+NO_THRESHOLD_TASKS = frozenset({
+    "select_primary_colors",
+    "dark_ratio_score",
+    "roughness_score",
+    "line_width_type",
+    "color_pixel_density",
+    "color_richness",
+    "color_complexity",
+})
+
+# Not registered in model_results_prod. One row per distinct model_version
+# in the prediction table, placed on the stage named here.
+EXTRA_CONTINUOUS = (
+    {"task_type": "color_pixel_density", "title": "Color pixel density"},
+    {"task_type": "color_richness", "title": "Color richness"},
+    {"task_type": "color_complexity", "title": "Color complexity"},
+)
+CONTINUOUS_TITLES = {spec["task_type"]: spec["title"] for spec in EXTRA_CONTINUOUS}
+
+# color_complexity.asset_id is text; the stage views are bigint.
+TEXT_ASSET_ID_TABLES = frozenset({"color_complexity"})
+
+# Line width is scored against both line-segmentation populations. The
+# denominator is the sum of the two view counts, not stage_clip_art.
+LINE_WIDTH_GATES = (
+    "stage_mono_line_segmentation",
+    "stage_multi_line_segmentation",
+)
+
+# Not a model. Coverage asks whether every clip-art asset has a listing row.
+LISTING_DATA_TABLE = "model_generated_listing_data"
+LISTING_COVERAGE_KEY = "model_coverage_listing_data_v1"
+
+
+def _rule_index_from_version(version_id):
+    """Rule index encoded in the version id (``LW2_0.02`` -> 2).
+
+    ``model_results_prod.rule_index`` is wrong for at least one active model
+    (``LW2_0.02`` is stored as rule 1, whose title is Dynamic Line Width, while
+    ``model_predictions.line_width`` holds the numeric widths of rule 2). The
+    version string is the name the pipeline actually ran under, so it wins when
+    the two disagree.
+    """
+    import re
+
+    match = re.match(r"^[A-Z]+(\d+)_", version_id or "")
+    return int(match.group(1)) if match else None
+
+
+def _stage_key_for(task_type, rule_index):
+    """Pipeline stage a model is scored against.
+
+    Paint fill, color depth, watercolor, and gradient use the multi-color population.
+    Everything else uses the stage mapped for its task type.
+    """
+    if task_type == "color_fill_type" and rule_index in MULTI_COLOR_FILL_RULES:
+        return "multi_color"
+    return TASK_TYPE_STAGES.get(task_type)
+
+
+def _coverage_gates(task_type, rule_index=None):
+    """Views whose rows make up this task's coverage denominator.
+
+    Line width sums the two line-segmentation stages. Every other task uses the
+    single stage view it sits under, or none at the root.
+    """
+    if task_type == "line_width_type":
+        return LINE_WIDTH_GATES
+    stage_key = _stage_key_for(task_type, rule_index)
+    for stage in MODEL_STAGES:
+        if stage["key"] == stage_key:
+            return (stage["gate"],) if stage["gate"] else ()
+    return ()
+
+
+def _coverage_counts_key(version_id, task_type, rule_index=None):
+    rule_index = _rule_index_from_version(version_id) or rule_index
+    gates = _coverage_gates(task_type, rule_index)
+    cache_gate = "+".join(gates) if gates else None
+    return f"model_coverage_counts_v1::{version_id}::{cache_gate}"
+
+
+def _prod_cursor():
+    """Cursor on the prod database, which is where every prediction table lives."""
+    from django.db import connections
+
+    db = "prod" if "prod" in settings.DATABASES else "default"
+    return connections[db].cursor()
+
+
+ROOT_ASSETS_KEY = "model_coverage_root_assets_v1"
+
+# Time to allow before attempting the root asset count, which takes ~2.5 minutes.
+# A page load asks for far less than this and simply leaves it uncounted.
+ROOT_COUNT_SECONDS = 180
+
+
+def _root_asset_count(compute=True):
+    """Assets the pipeline could run on at all: everything with an image in S3.
+
+    Roughly 2.5 minutes -- 21M rows out of a 25GB table, and Postgres prefers a
+    parallel sequential scan over the partial index. The number barely moves day to
+    day, so it is cached for a week and, with ``compute=False``, skipped entirely
+    rather than made a page load wait for it.
+    """
+    from django.core.cache import cache
+
+    cached = cache.get(ROOT_ASSETS_KEY)
+    if cached is not None or not compute:
+        return cached
+
+    with _prod_cursor() as c:
+        c.execute("SET statement_timeout = '600s'")
+        c.execute('SELECT COUNT(*) FROM "content"."assets" WHERE s3')
+        count = c.fetchone()[0]
+
+    cache.set(ROOT_ASSETS_KEY, count, timeout=7 * 24 * 60 * 60)
+    return count
+
+
+def _stage_sizes():
+    """How many assets reached each stage, straight off the materialized views."""
+    sizes = {}
+    with _prod_cursor() as c:
+        for stage in MODEL_STAGES:
+            if not stage["gate"]:
+                continue
+            c.execute(f'SELECT COUNT(*) FROM "model_predictions"."{stage["gate"]}"')
+            sizes[stage["key"]] = c.fetchone()[0]
+    return sizes
+
+
+def _extra_continuous_models():
+    """Versions of continuous scores that are not in ``model_results_prod``.
+
+    Returns:
+        list[tuple]: ``(version_id, task_type, rule_index)``. Rule index is left
+        empty; the version string (``CD1_0.01``) carries it.
+    """
+    found = []
+    with _prod_cursor() as c:
+        c.execute("SET statement_timeout = '120s'")
+        for spec in EXTRA_CONTINUOUS:
+            table = TASK_TYPE_TABLES[spec["task_type"]]
+            c.execute(
+                f'SELECT DISTINCT model_version FROM "model_predictions"."{table}" '
+                "WHERE model_version IS NOT NULL"
+            )
+            for (version_id,) in c.fetchall():
+                found.append((version_id, spec["task_type"], None))
+    return found
+
+
+def _sum_view_counts(views):
+    """Sum of ``COUNT(*)`` over materialized views in ``model_predictions``."""
+    total = 0
+    with _prod_cursor() as c:
+        for view in views:
+            c.execute(f'SELECT COUNT(*) FROM "model_predictions"."{view}"')
+            total += c.fetchone()[0]
+    return total
+
+
+def _model_coverage_counts(version_id, task_type, rule_index=None):
+    """Assets this model has predicted, both overall and within its stage.
+
+    The in-stage count is a semi-join driven off the stage view. For rule_labels
+    that is two index-only scans merged on asset_id, which is why the index
+    leading with model_version matters -- without it Postgres walks all 113M
+    index entries. Line width sums that count across both line-segmentation
+    views, matching a denominator that is the sum of those two view sizes.
+
+    At the root there is nothing to intersect with, so the overall count is the
+    answer.
+
+    Cached per version: a few seconds each, and they only change when the pipeline
+    runs again.
+
+    Returns:
+        tuple[int, int]: (predicted overall, predicted within the stage).
+    """
+    from django.core.cache import cache
+
+    rule_index = _rule_index_from_version(version_id) or rule_index
+    gates = _coverage_gates(task_type, rule_index)
+    cache_key = _coverage_counts_key(version_id, task_type, rule_index)
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return tuple(cached)
+
+    table = TASK_TYPE_TABLES.get(task_type)
+    source = (
+        f'"model_predictions"."{table}"' if table
+        else '"model_predictions"."rule_labels"'
+    )
+    asset_match = (
+        "s.asset_id::bigint = g.asset_id"
+        if table in TEXT_ASSET_ID_TABLES
+        else "s.asset_id = g.asset_id"
+    )
+    with _prod_cursor() as c:
+        c.execute("SET statement_timeout = '300s'")
+        if table:
+            c.execute(
+                f'SELECT COUNT(DISTINCT asset_id) FROM "model_predictions"."{table}" '
+                f"WHERE model_version = %s",
+                [version_id],
+            )
+        else:
+            c.execute(
+                'SELECT COUNT(*) FROM "model_predictions"."rule_labels" '
+                "WHERE model_version = %s",
+                [version_id],
+            )
+        total = c.fetchone()[0]
+
+        if len(gates) == 1:
+            c.execute(
+                f"""
+                SELECT COUNT(*) FROM "model_predictions"."{gates[0]}" g
+                WHERE EXISTS (
+                    SELECT 1 FROM {source} s
+                    WHERE s.model_version = %s AND {asset_match}
+                )
+                """,
+                [version_id],
+            )
+            covered = c.fetchone()[0]
+        elif gates:
+            # Same population as the denominator: a hit in each view counts once
+            # per view, then the two counts are added.
+            parts = []
+            params = []
+            for gate in gates:
+                parts.append(
+                    f"""(SELECT COUNT(*) FROM "model_predictions"."{gate}" g
+                         WHERE EXISTS (
+                             SELECT 1 FROM {source} s
+                             WHERE s.model_version = %s AND {asset_match}
+                         ))"""
+                )
+                params.append(version_id)
+            c.execute("SELECT " + " + ".join(parts), params)
+            covered = c.fetchone()[0]
+        else:
+            covered = total
+
+    cache.set(cache_key, (total, covered), timeout=6 * 60 * 60)
+    return total, covered
+
+
+def _listing_coverage_counts():
+    """Clip-art assets that have a generated listing, and listings overall.
+
+    The listing table is one row per asset. Covered is the clip-art assets
+    present in it. The overall count is every listing row, so the difference
+    is listings for assets that are no longer clip art.
+
+    Returns:
+        tuple[int, int]: (listing rows, clip-art assets with a listing).
+    """
+    from django.core.cache import cache
+
+    cached = cache.get(LISTING_COVERAGE_KEY)
+    if cached is not None:
+        return tuple(cached)
+
+    with _prod_cursor() as c:
+        c.execute("SET statement_timeout = '300s'")
+        c.execute(
+            f'SELECT COUNT(*) FROM "model_predictions"."{LISTING_DATA_TABLE}"'
+        )
+        total = c.fetchone()[0]
+        c.execute(
+            f"""
+            SELECT COUNT(*) FROM "model_predictions"."stage_clip_art" g
+            WHERE EXISTS (
+                SELECT 1 FROM "model_predictions"."{LISTING_DATA_TABLE}" s
+                WHERE s.asset_id = g.asset_id
+            )
+            """
+        )
+        covered = c.fetchone()[0]
+
+    cache.set(LISTING_COVERAGE_KEY, (total, covered), timeout=6 * 60 * 60)
+    return total, covered
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["GET", "POST"])
+def get_model_coverage(request: Request) -> JsonResponse:
+    """Per-model prediction coverage across the pipeline, and what's missing.
+
+    For every model marked active in ``models.model_results_prod``, counts the assets
+    its version has predicted and compares that to the assets that reached its stage,
+    so a downstream model that hasn't run over everything its upstream models cleared
+    shows up as a gap. Line width uses the sum of
+    ``stage_mono_line_segmentation`` and ``stage_multi_line_segmentation`` as that
+    denominator. Color pixel density, color richness, and color complexity are
+    read from their own prediction tables, since they are not in
+    ``model_results_prod``. ``has_threshold`` is true when ``version_id`` appears
+    in ``models.rule_index_thresholds``, except for the continuous scores, which
+    never have a threshold. Generated listing data is not a model: the clip-art
+    stage also reports how many of its assets have a row in
+    ``model_predictions.model_generated_listing_data``.
+
+    Each count is cached on its own and the request stops starting new ones once
+    ``budget_seconds`` is spent, so no single call has to sit through all of them.
+    Whatever is unfinished comes back in ``pending`` for the caller to ask again.
+
+    Args:
+        request (Request): ``refresh`` (truthy discards the cached counts and starts
+            over) and ``budget_seconds`` (default 20).
+
+    Returns:
+        JsonResponse: ``stages`` (each with its eligible count and models),
+        ``root_assets``, ``pending``, ``root_pending``, ``generated_at`` and
+        ``took_seconds``.
+
+    Frontend:
+        ``image_labeler.label_images.views.model_coverage`` -> ``model_coverage.html``.
+    """
+    from django.core.cache import cache
+
+    data = request.data or request.GET
+    refresh = str(data.get("refresh") or "").lower() in ("1", "true", "yes")
+    try:
+        budget = float(data.get("budget_seconds") or 20)
+    except (TypeError, ValueError):
+        budget = 20.0
+
+    started = time.time()
+
+    rule_titles = {}
+    for rule in labelling_rules.objects.values("task_type", "rule_index", "title"):
+        rule_titles[(rule["task_type"], rule["rule_index"])] = rule["title"]
+
+    with _prod_cursor() as c:
+        c.execute(
+            """
+            SELECT version_id, task_type, rule_index
+            FROM "models"."model_results_prod"
+            WHERE active
+            ORDER BY task_type, rule_index
+            """
+        )
+        active = c.fetchall()
+        c.execute(
+            'SELECT model_version FROM "models"."rule_index_thresholds"'
+        )
+        thresholded_versions = {row[0] for row in c.fetchall()}
+
+    registered = {(version_id, task_type) for version_id, task_type, _ in active}
+    active = list(active)
+    for row in _extra_continuous_models():
+        if (row[0], row[1]) not in registered:
+            active.append(row)
+
+    if refresh:
+        cache.delete(ROOT_ASSETS_KEY)
+        cache.delete(LISTING_COVERAGE_KEY)
+        cache.delete_many([
+            _coverage_counts_key(version_id, task_type, rule_index)
+            for version_id, task_type, rule_index in active
+        ])
+
+    # The root count alone takes ~2.5 minutes, so it only runs when the caller has
+    # allowed enough time for it to finish. Until then the root stage has no
+    # denominator and its models show a prediction count without a percentage.
+    root_assets = _root_asset_count(compute=budget >= ROOT_COUNT_SECONDS)
+    stage_sizes = _stage_sizes()
+    line_width_eligible = (
+        _sum_view_counts(LINE_WIDTH_GATES)
+        if any(task_type == "line_width_type" for _, task_type, _ in active)
+        else None
+    )
+
+    stages = {}
+    for stage in MODEL_STAGES:
+        stages[stage["key"]] = {
+            **stage,
+            "eligible": stage_sizes.get(stage["key"], root_assets),
+            "models": [],
+        }
+    # Anything whose task type we haven't placed still has to be visible, or a newly
+    # added model would silently vanish from the page.
+    unplaced = {
+        "key": "unplaced", "label": "Not yet placed in the pipeline",
+        "gate": None, "parent": None, "eligible": None, "models": [],
+    }
+
+    # Kept apart from `pending`: the model counts finish on their own across a few
+    # requests, whereas the root count needs someone to ask for it, so only the
+    # former should make the page keep reloading.
+    root_pending = root_assets is None
+
+    pending = 0
+    for version_id, task_type, rule_index in active:
+        display_ri = _rule_index_from_version(version_id) or rule_index
+        stage_key = _stage_key_for(task_type, display_ri)
+        stage = stages.get(stage_key) or unplaced
+
+        counts_key = _coverage_counts_key(version_id, task_type, display_ri)
+        counts = cache.get(counts_key)
+        if counts is None and time.time() - started < budget:
+            counts = _model_coverage_counts(version_id, task_type, display_ri)
+        if counts is None:
+            pending += 1
+
+        total, covered = counts if counts else (None, None)
+        # Line width's population is the two segmentation views added together,
+        # not the clip-art stage it is grouped under on the page.
+        eligible = (
+            line_width_eligible if task_type == "line_width_type"
+            else stage["eligible"]
+        )
+        measurable = covered is not None and eligible
+        stage["models"].append({
+            "task_type": task_type,
+            "rule_index": display_ri,
+            "title": (
+                rule_titles.get((task_type, display_ri))
+                or rule_titles.get((task_type, rule_index), "")
+                or CONTINUOUS_TITLES.get(task_type, "")
+            ),
+            "version_id": version_id,
+            "source": TASK_TYPE_TABLES.get(task_type) or "rule_labels",
+            "has_threshold": (
+                False if task_type in NO_THRESHOLD_TASKS
+                else version_id in thresholded_versions
+            ),
+            "eligible": eligible,
+            "total": total,
+            "covered": covered,
+            "missing": max(eligible - covered, 0) if measurable else None,
+            "percent": round(100 * covered / eligible, 1) if measurable else None,
+            # Predictions for assets that no longer reach this stage, i.e. work the
+            # model did before the upstream thresholds moved.
+            "stale": max(total - covered, 0) if covered is not None else None,
+        })
+
+    listing_counts = cache.get(LISTING_COVERAGE_KEY)
+    if listing_counts is None and time.time() - started < budget:
+        listing_counts = _listing_coverage_counts()
+    if listing_counts is None:
+        pending += 1
+    listing_total, listing_covered = listing_counts if listing_counts else (None, None)
+    clip_art = stages["clip_art"]
+    listing_eligible = clip_art["eligible"]
+    listing_measurable = listing_covered is not None and listing_eligible
+    clip_art["models"].append({
+        "task_type": "listing data",
+        "rule_index": None,
+        "title": "Generated listing data",
+        "version_id": None,
+        "source": LISTING_DATA_TABLE,
+        "is_model": False,
+        "has_threshold": None,
+        "eligible": listing_eligible,
+        "total": listing_total,
+        "covered": listing_covered,
+        "missing": (
+            max(listing_eligible - listing_covered, 0) if listing_measurable else None
+        ),
+        "percent": (
+            round(100 * listing_covered / listing_eligible, 1)
+            if listing_measurable else None
+        ),
+        "stale": (
+            max(listing_total - listing_covered, 0)
+            if listing_covered is not None and listing_total is not None else None
+        ),
+    })
+
+    ordered = [stages[s["key"]] for s in MODEL_STAGES]
+    if unplaced["models"]:
+        ordered.append(unplaced)
+
+    return JsonResponse({
+        "stages": ordered,
+        "root_assets": root_assets,
+        "pending": pending,
+        "root_pending": root_pending,
+        "generated_at": timezone.now().isoformat(),
+        "took_seconds": round(time.time() - started, 1),
+    })
+
+
+def _is_pair_task(task_type, rule_index):
+    """True for pair-comparison labeling (currently same_style rule 2).
+
+    Pair tasks serve two images per card from ``label_data.selected_pair_labels``
+    and store answers in ``label_data.style_prompt_responses`` (keyed by
+    ``asset_id_1``/``asset_id_2``) instead of the single-asset pipeline.
+    """
+    try:
+        return str(task_type) == "same_style" and int(rule_index) == 2
+    except (TypeError, ValueError):
+        return False
+
+
+def _is_pair_task_type(task_type):
+    """True for task types that are pair-based (used for session-setup stats)."""
+    return str(task_type) == "same_style"
+
+
 @csrf_exempt
 @api_authorization
 @api_view(["GET"])
@@ -1460,6 +3216,48 @@ def get_asset_batch(request: Request) -> JsonResponse:
     # Fallback: accept labeler_id from the request data (used by internal API calls)
     if not labeler_username:
         labeler_username = request.data.get("labeler_id") or request.GET.get("labeler_id")
+
+    # Pair-comparison tasks (same_style rule 2) serve image pairs instead of
+    # single assets: pull from selected_pair_labels and exclude pairs this labeler
+    # already answered in style_prompt_responses.
+    if _is_pair_task(task_type, rule_index):
+        pair_rows = list(
+            label_data_selected_pair_labels.objects.filter(
+                task_type=task_type,
+                rule_index=rule_index,
+                batch_id=batch_id,
+                large_sub_batch__in=large_sub_batch,
+            ).values(
+                "pair_id",
+                "asset_id_1",
+                "image_link_1",
+                "asset_id_2",
+                "image_link_2",
+            )
+        )
+
+        if labeler_username:
+            already_labeled_pairs = set(
+                style_prompt_responses.objects.filter(
+                    task_type=task_type,
+                    rule_index=rule_index,
+                    labeler_id=labeler_username,
+                ).values_list("asset_id_1", "asset_id_2")
+            )
+        else:
+            already_labeled_pairs = set()
+
+        asset_batch = [
+            row
+            for row in pair_rows
+            if (row["asset_id_1"], row["asset_id_2"]) not in already_labeled_pairs
+        ]
+
+        logger.debug("get_asset_batch: %d pairs in batch", len(asset_batch))
+        return JsonResponse(
+            {"batch_index": large_sub_batch, "asset_batch": asset_batch},
+            safe=False,
+        )
 
     asset_model = task_asset_model(task_type)
     batch_asset_ids = set(
@@ -1628,6 +3426,40 @@ def get_lure_questions(request: Request) -> JsonResponse:
     return JsonResponse(grouped_result, safe=False)
 
 
+def _plurality_tie_asset_ids(pr_df):
+    """asset_ids (samples > 1) with no strict plurality winner among responses.
+
+    Generalizes the yes/no 50/50 dispute to multi-value rules (color_fill_type
+    rule 5): an asset is disputed when two or more distinct responses tie for the
+    highest vote count. Responses are compared case-insensitively as strings, so
+    "0", "gradient", "2", etc. are each their own value.
+
+    Args:
+        pr_df (pd.DataFrame): rows with ``asset_id`` and ``prompt_response``.
+
+    Returns:
+        set: disputed ``asset_id`` values.
+    """
+    if pr_df is None or pr_df.empty:
+        return set()
+
+    df = pr_df.copy()
+    df["resp"] = df["prompt_response"].astype(str).str.strip().str.lower()
+    counts = df.groupby(["asset_id", "resp"]).size().rename("n").reset_index()
+    counts["max_n"] = counts.groupby("asset_id")["n"].transform("max")
+    samples = counts.groupby("asset_id")["n"].sum()
+    n_top = (
+        counts[counts.n == counts.max_n]
+        .groupby("asset_id")["resp"]
+        .nunique()
+    )
+    return {
+        aid
+        for aid, ties in n_top.items()
+        if ties > 1 and samples.get(aid, 0) > 1
+    }
+
+
 @csrf_exempt
 @api_authorization
 @api_view(["GET"])
@@ -1694,6 +3526,15 @@ def get_disputed_assets(request: Request) -> JsonResponse:
         )
         dispusted_assets = (
             pd.DataFrame({"asset_id": disputed_ids})
+            .merge(asset_links, on="asset_id", how="left")
+            .filter(["asset_id", "image_link"])
+        )
+    # color_fill_type rule 5 is graded (Flat / N layers / gradient), so a dispute
+    # is a plurality tie rather than a yes/no 50/50 split.
+    elif str(task_type) == "color_fill_type" and int(rule_index) == 5:
+        disputed_ids = _plurality_tie_asset_ids(response_df)
+        dispusted_assets = (
+            pd.DataFrame({"asset_id": list(disputed_ids)})
             .merge(asset_links, on="asset_id", how="left")
             .filter(["asset_id", "image_link"])
         )
@@ -1802,6 +3643,121 @@ def get_assets_w_rule_labels(request: Request) -> JsonResponse:
     return JsonResponse(data, safe=False)
 
 
+def _build_pair_session_options(task_type, task_types, labeler_ids, labeling_rule_options):
+    """Session-setup stats for pair-comparison tasks (same_style rule 2).
+
+    Mirrors the output shape of :func:`_build_session_options` but each row is an
+    image pair from ``label_data.selected_pair_labels``. A pair is "completed"
+    once >= 2 labelers have answered it in ``label_data.style_prompt_responses``.
+
+    Args:
+        task_type: The pair task type (e.g. ``same_style``).
+        task_types, labeler_ids, labeling_rule_options: Shared menu data already
+            built by :func:`_build_session_options`.
+
+    Returns:
+        dict with the same keys as :func:`_build_session_options`.
+    """
+    pairs_df = pd.DataFrame(
+        list(
+            label_data_selected_pair_labels.objects.filter(task_type=task_type).values(
+                "asset_id_1", "asset_id_2", "batch_id", "large_sub_batch", "rule_index"
+            )
+        )
+    )
+
+    empty = {
+        "task_types": task_types,
+        "labeler_ids": labeler_ids,
+        "batch_options": [],
+        "labeling_rule_options": labeling_rule_options.to_dict(orient="records"),
+        "rule_summary": labeling_rule_options.assign(
+            completed_labels=0, samples=0
+        ).to_dict(orient="records"),
+        "rule_index_stats": [],
+        "sub_batch_stats": [],
+    }
+    if pairs_df.empty:
+        return empty
+
+    pairs_df["task_type"] = task_type
+
+    # Per-pair completion counts: distinct labelers per (pair, rule).
+    resp_qs = (
+        style_prompt_responses.objects.filter(task_type=task_type)
+        .values("asset_id_1", "asset_id_2", "rule_index")
+        .annotate(_cnt=Count("labeler_id", distinct=True))
+    )
+    resp_df = pd.DataFrame(list(resp_qs))
+
+    if not resp_df.empty:
+        resp_df = resp_df.rename(columns={"_cnt": "count"})
+        pair_list = pairs_df.merge(
+            resp_df, on=["asset_id_1", "asset_id_2", "rule_index"], how="left"
+        ).fillna({"count": 0})
+    else:
+        pair_list = pairs_df.assign(count=0)
+
+    pair_list["completed"] = (pair_list["count"] >= 2).astype(int)
+    pair_list["one_label"] = (pair_list["count"] == 1).astype(int)
+
+    batch_options = (
+        pair_list[["batch_id"]]
+        .drop_duplicates()
+        .sort_values("batch_id")
+        .to_dict(orient="records")
+    )
+
+    rule_index_stats = (
+        pair_list.groupby(["task_type", "batch_id", "rule_index"])
+        .agg(completed_labels=("completed", "sum"), samples=("asset_id_1", "count"))
+        .astype({"completed_labels": "int"})
+        .reset_index()
+        .merge(labeling_rule_options, on=["task_type", "rule_index"], how="left")
+    )
+
+    rule_summary = (
+        rule_index_stats.groupby(["task_type", "rule_index"])
+        .agg(completed_labels=("completed_labels", "sum"), samples=("samples", "sum"))
+        .astype({"completed_labels": "int"})
+        .reset_index()
+        .merge(labeling_rule_options, on=["task_type", "rule_index"], how="left")
+    )
+
+    sub_batch_stats = (
+        pair_list.groupby(["task_type", "batch_id", "large_sub_batch", "rule_index"])
+        .agg(
+            completed_labels=("completed", "sum"),
+            one_label=("one_label", "sum"),
+            samples=("asset_id_1", "count"),
+        )
+        .astype({"completed_labels": "int"})
+        .reset_index()
+        .assign(no_labels=lambda x: x.samples - (x.completed_labels + x.one_label))
+        .assign(
+            percent_complete=lambda x: np.round(
+                (x["completed_labels"] / x["samples"]) * 100, 2
+            )
+        )
+        .assign(
+            percent_remaining=lambda x: np.round(
+                ((x["samples"] - x["completed_labels"]) / x["samples"]) * 100, 2
+            )
+        )
+        .astype({"no_labels": "int", "one_label": "int"})
+    )
+
+    return {
+        "task_types": task_types,
+        "labeler_ids": labeler_ids,
+        "batch_options": batch_options,
+        "labeling_rule_options": labeling_rule_options.to_dict(orient="records"),
+        "rule_summary": rule_summary.to_dict(orient="records"),
+        "rule_index_stats": rule_index_stats.to_dict(orient="records"),
+        "sub_batch_stats": sub_batch_stats.to_dict(orient="records"),
+    }
+
+
 def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -> dict:
     """Core data-building logic for the setup_session page.
 
@@ -1847,6 +3803,16 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
     labeling_rule_options = selected_rules.sort_values("rule_index").reset_index(
         drop=True
     )
+
+    # ── pair-comparison tasks (same_style rule 2) ────────────────────────────
+    # Source batch/sub-batch metadata and completion from the pair tables so
+    # admins can see and assign pair batches in Bulk Assign.
+    if _is_pair_task_type(task_type):
+        data = _build_pair_session_options(
+            task_type, task_types, labeler_ids, labeling_rule_options
+        )
+        cache.set(cache_key, data, timeout=120)
+        return data
 
     # ── selected assets (batch/sub-batch metadata) ──────────────────────────
     asset_model = task_asset_model(task_type)
@@ -3129,6 +5095,111 @@ def remove_line_width_sample(request: Request) -> JsonResponse:
 @csrf_exempt
 @api_authorization
 @api_view(["POST"])
+def collect_color_depth_sample(request: Request) -> JsonResponse:
+    """Save one Color Depth (Scale) flood-fill sample (or a skip marker).
+
+    Args:
+        request (Request): POST body. ``asset_id``, ``sample_index``, ``labeler_id``,
+        ``label_type`` (``sampled`` | ``skip``), optional ``layer_type``
+        (``shade`` | ``highlight``), ``color_hex``, ``x_coord``, ``y_coord``,
+        ``pixel_count``, ``tolerance``, ``image_width``, ``image_height``,
+        ``scaled_width``, ``scaled_height``.
+
+    Returns:
+        JsonResponse: ``status``, ``saved_id``, ``explanation``.
+    """
+    label_type = (request.data.get("label_type") or "sampled").strip().lower()
+    if label_type not in ("sampled", "skip"):
+        return JsonResponse(
+            {"status": "failed", "explanation": "label_type must be sampled or skip"},
+            status=400,
+        )
+
+    entry = color_depth_scale_responses(
+        asset_id=request.data.get("asset_id"),
+        sample_index=request.data.get("sample_index"),
+        labeler_id=request.data.get("labeler_id"),
+        color_hex=request.data.get("color_hex"),
+        label_type=label_type,
+        layer_type=request.data.get("layer_type"),
+        x_coord=request.data.get("x_coord"),
+        y_coord=request.data.get("y_coord"),
+        pixel_count=request.data.get("pixel_count"),
+        tolerance=request.data.get("tolerance"),
+        image_width=request.data.get("image_width"),
+        image_height=request.data.get("image_height"),
+        scaled_width=request.data.get("scaled_width"),
+        scaled_height=request.data.get("scaled_height"),
+    )
+    entry.save()
+
+    return JsonResponse(
+        {
+            "status": "success",
+            "saved_id": entry.id,
+            "explanation": f"recorded color depth sample for asset {entry.asset_id}",
+        },
+        safe=False,
+    )
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["POST"])
+def remove_color_depth_sample(request: Request) -> JsonResponse:
+    """Delete Color Depth samples by row id, or all samples for an asset/labeler.
+
+    Args:
+        request (Request): POST body. Either ``saved_id``, or
+        ``asset_id`` + ``labeler_id`` + optional ``sample_index``. If
+        ``sample_index`` is omitted, all rows for that asset/labeler are removed.
+
+    Returns:
+        JsonResponse: ``status``, ``deleted``, ``explanation``.
+    """
+    saved_id = request.data.get("saved_id")
+    if saved_id is not None:
+        deleted, _ = color_depth_scale_responses.objects.filter(id=saved_id).delete()
+        return JsonResponse(
+            {
+                "status": "success",
+                "deleted": deleted,
+                "explanation": f"removed color depth sample id={saved_id}",
+            },
+            safe=False,
+        )
+
+    asset_id = request.data.get("asset_id")
+    labeler_id = request.data.get("labeler_id")
+    sample_index = request.data.get("sample_index", None)
+    if asset_id is None or not labeler_id:
+        return JsonResponse(
+            {
+                "status": "failed",
+                "explanation": "saved_id or asset_id+labeler_id required",
+            },
+            status=400,
+        )
+
+    qs = color_depth_scale_responses.objects.filter(
+        asset_id=asset_id, labeler_id=labeler_id
+    )
+    if sample_index is not None:
+        qs = qs.filter(sample_index=sample_index)
+    deleted, _ = qs.delete()
+    return JsonResponse(
+        {
+            "status": "success",
+            "deleted": deleted,
+            "explanation": f"removed {deleted} color depth sample(s)",
+        },
+        safe=False,
+    )
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["POST"])
 def label_line_width_as_invalid(request: Request) -> JsonResponse:
     """Clear samples for an asset/labeler and record an invalid line-width placeholder row.
 
@@ -4346,6 +6417,16 @@ def get_reconcile_count(request):
 
         if pr_df.empty:
             return JsonResponse({"disputed_count": 0})
+
+        # color_fill_type rule 5 is graded, so a dispute is a plurality tie rather
+        # than a yes/no 50/50 split.
+        if task_type == "color_fill_type" and rule_index == 5:
+            disputed_ids = {
+                aid
+                for aid in _plurality_tie_asset_ids(pr_df)
+                if aid not in flagged_ids
+            }
+            return JsonResponse({"disputed_count": len(disputed_ids)})
 
         if task_type == "select_content":
             vote_counts = (

@@ -1,0 +1,288 @@
+/* Phone and tablet layout for the labeling pages.
+
+   Everything lives inside the single media query below, so a desktop browser
+   with a mouse never sees any of it. The query matches when either:
+     - the device has no hover and a coarse pointer (any phone or tablet,
+       including a 1366px iPad, which needs big tap targets regardless of
+       how wide it is), or
+     - the window is under 900px (a narrow desktop window is effectively a
+       phone as far as this layout is concerned).
+   A touch laptop reports a fine pointer while a mouse is attached, so it
+   stays on the desktop layout.
+
+   label_tools.js and label_content.html gate their mobile behaviour on this
+   same condition string; keep them in sync. */
+
+@media (hover: none) and (pointer: coarse), (max-width: 900px) {
+
+    body {
+        -webkit-text-size-adjust: 100%;
+    }
+
+    /* --- One column: image on top, answer controls directly beneath it --- */
+
+    /* The two-column grid is an inline style on every listing container, so
+       this needs !important. It cannot leak past the media query. */
+    div.listing.light.container {
+        grid-template-columns: 1fr !important;
+        width: auto;
+        margin: 8px;
+        padding: 6px;
+    }
+
+    div.design.container {
+        margin-right: 0;
+        padding: 4px;
+    }
+
+    /* The image gets most of the screen, but has to leave the answer control
+       visible: scrollIntoView centres the whole listing, so image plus
+       controls need to fit in one viewport. */
+    img.design {
+        max-height: 48vh;
+    }
+
+    /* Two columns so Clear Responses and Flag Asset Issue sit side by side
+       instead of eating two rows of vertical space. */
+    div.listing_info.container {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto;
+        min-height: 0;
+        padding: 4px;
+    }
+
+    div.listing_info.container > div.label_option.prompt.container {
+        grid-column: 1 / -1;
+    }
+
+    div.listing_info.container > div.label_option.reset.button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        justify-self: center;
+        margin-top: 12px;
+    }
+
+    div.listing_info.container > div.label_option.reset.button img {
+        height: 30px;
+        width: auto;
+    }
+
+    /* The rule text takes its own full-width line above the control, and the
+       vertical divider bar between them stops making sense once stacked. */
+    div.label_option.rule_validator {
+        flex-wrap: wrap;
+        justify-content: center;
+        margin: 4px;
+    }
+
+    div.label_option.rule_validator > h1.label_option.rule {
+        flex-basis: 100%;
+        order: -1;
+        margin-left: 0;
+        text-align: center;
+        line-height: 1.4;
+    }
+
+    div.label_option.rule_validator > div.separator {
+        display: none;
+    }
+
+    /* --- Tap targets ---
+
+       The depth and style buttons are declared in <style> blocks inside
+       label_art_type.html and label_style_pair.html, which the browser reads
+       after this file. These selectors are scoped through the surrounding
+       control so they outrank those declarations without !important. */
+
+    .depth-controls .depth-btn {
+        min-height: 58px;
+        padding: 10px 16px;
+    }
+
+    .depth-controls .depth-btn.depth-num {
+        min-width: 58px;
+        padding: 10px 6px;
+    }
+
+    .style-controls .style-btn {
+        min-height: 62px;
+        min-width: 96px;
+        padding: 12px 16px;
+    }
+
+    /* A tapped button keeps its :hover state on touch, which reads as a stuck
+       selection, so hover is flattened back to the resting style. */
+    .depth-controls .depth-btn:hover,
+    .style-controls .style-btn:hover {
+        border-color: #a0b4b4;
+        background: #fff;
+    }
+
+    .sidebar-example-img:hover {
+        transform: none;
+        box-shadow: none;
+    }
+
+    /* The yes/no switch is a read-only indicator (the radios have no click
+       handler); it just needs to be legible at arm's length. */
+    .switch3 {
+        width: 108px;
+        height: 48px;
+        border-radius: 30px;
+    }
+
+    .switch3::before {
+        width: 42px;
+        height: 42px;
+        top: 1px;
+    }
+
+    .switch3:has(#switch3-radio1:checked)::before { left: 2px; }
+    .switch3:has(#switch3-radio2:checked)::before { left: 31px; }
+    .switch3:has(#switch3-radio3:checked)::before { left: 60px; }
+
+    img.key.icon {
+        height: 32px;
+    }
+
+    /* --- On-screen keypad standing in for the 1/2 hotkeys --- */
+
+    div.listing.light.container.mobile_keyboard {
+        width: auto;
+        height: auto;
+        margin: 12px 0 0;
+        padding: 8px;
+    }
+
+    div.button.mobile_keyboard {
+        width: 92px;
+        height: 92px;
+        flex-direction: column;
+        cursor: pointer;
+    }
+
+    div.button.mobile_keyboard.key-yes {
+        background-color: #a7c79f;
+        border-color: #7f9c78;
+    }
+
+    div.button.mobile_keyboard.key-no {
+        background-color: #d79a9a;
+        border-color: #b07575;
+    }
+
+    div.button.mobile_keyboard:active {
+        background-color: #8ba7a7;
+    }
+
+    h1.button.text.mobile_keyboard {
+        font-size: 30px;
+        margin: 0;
+        line-height: 1.1;
+    }
+
+    .mobile-key-name {
+        font-family: roboto, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        color: #46514f;
+    }
+
+    /* --- Opening an image full size (no hover, so no magnifier) --- */
+
+    /* Pinned to the viewport so it stays reachable once the lightbox image is
+       zoomed past the edges of the screen (inline styles hence !important). */
+    .lightbox-close {
+        position: fixed !important;
+        top: 10px !important;
+        right: 10px !important;
+        width: 42px !important;
+        height: 42px !important;
+        font-size: 26px !important;
+        z-index: 2001;
+    }
+
+    .touch-zoom-btn {
+        display: block;
+        margin: 6px auto 0;
+        padding: 7px 16px;
+        font-family: roboto, sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+        color: #d2e2e2;
+        background: #5a7a7a;
+        border: 1px solid #799494;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    /* --- Pair comparison (same_style rule 2) --- */
+
+    /* The pair stays side by side on its own: the template sizes each image to
+       46% of the card, which still holds once the card is one column wide.
+       Only the gap and height are tightened, and each image gets its own Zoom
+       button for the detail a phone-sized thumbnail cannot show.
+
+       These selectors are scoped through the container to outrank
+       label_style_pair.html's <style> block, which the browser reads after
+       this file. */
+    div.design.container .style-pair-images {
+        gap: 6px;
+    }
+
+    div.design.container .style-pair-images .style-pair-item img.design {
+        max-height: 34vh;
+    }
+
+    div.design.container .style-pair-images h1.label_option.rule {
+        margin-left: 0;
+        font-size: 12px;
+    }
+
+    /* --- Page chrome: give the image back as much height as possible --- */
+
+    .site-topbar {
+        padding: 6px 6px 0 6px;
+    }
+
+    /* The top bar buttons are sized by inline styles, hence !important. */
+    .site-topbar button {
+        padding: 7px 14px !important;
+        font-size: 13px !important;
+    }
+
+    .rules-toggle-btn {
+        top: 54px;
+        padding: 10px 13px;
+        font-size: 13px;
+    }
+
+    /* Anchored to the right when open so it stays reachable (and doubles as
+       the close button) instead of being pushed off a narrow screen. */
+    .rules-toggle-btn.open {
+        left: auto;
+        right: 8px;
+        border-radius: 8px;
+    }
+
+    .rules-sidebar {
+        width: 88vw;
+        max-width: 340px;
+        left: -92vw;
+        padding: 14px;
+    }
+
+    .rules-sidebar .example-grid {
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    div.label_options.container.horizontal {
+        gap: 8px;
+    }
+
+    h1.label_option.intro {
+        font-size: 15px;
+    }
+}

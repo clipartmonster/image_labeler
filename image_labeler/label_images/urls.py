@@ -28,6 +28,7 @@ urlpatterns = [
     path('select_primary_colors/', views.select_primary_colors, name = 'select_primary_colors'),
     path('select_line_widths/', views.select_line_widths, name = 'select_line_widths'),
     path('measure_line_widths/', views.measure_line_widths, name='measure_line_widths'),
+    path('label_color_depth/', views.label_color_depth, name='label_color_depth'),
     path('correct_mismatch_labels/', views.correct_mismatch_labels, name = 'correct_mismatch_labels'),
 
     path('manage_rules/', views.manage_rules, name = 'manage_rules'),
@@ -49,6 +50,8 @@ urlpatterns = [
     path('admin/performance/data/', views.admin_performance_data, name='admin_performance_data'),
     path('admin/labeler_labels/detail/', views.admin_labeler_labels_detail, name='admin_labeler_labels_detail'),
     path('admin/line_width_samples/', views.admin_line_width_samples, name='admin_line_width_samples'),
+    path('style_analysis/', views.style_analysis, name='style_analysis'),
+    path('model_coverage/', views.model_coverage, name='model_coverage'),
     path('admin/label_comparison/', views.admin_label_comparison, name='admin_label_comparison'),
     path('admin/label_comparison/data/', views.admin_label_comparison_data, name='admin_label_comparison_data'),
     path('admin/label_comparison/override/', views.admin_comparison_override, name='admin_comparison_override'),
@@ -68,9 +71,10 @@ urlpatterns = [
     path('admin/training/', views.admin_manage_training, name='admin_manage_training'),
     path('admin/training/create/', views.admin_training_create, name='admin_training_create'),
     path('admin/training/remove/', views.admin_training_remove, name='admin_training_remove'),
-    path('admin/training/unlock/', views.admin_training_unlock, name='admin_training_unlock'),
     path('admin/training/assets/', views.admin_training_assets, name='admin_training_assets'),
     path('admin/training/remove_asset/', views.admin_training_remove_asset, name='admin_training_remove_asset'),
+    path('admin/training/exempt/', views.admin_training_exempt, name='admin_training_exempt'),
+    path('admin/training/exempt/remove/', views.admin_training_exempt_remove, name='admin_training_exempt_remove'),
 
     # Training completion
     path('complete_training/', views.complete_training, name='complete_training'),

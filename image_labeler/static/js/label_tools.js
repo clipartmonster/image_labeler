@@ -1,4 +1,7 @@
 
+// Phones and tablets (no hover, coarse pointer) plus narrow desktop windows.
+// Must stay identical to the media query in css/label_mobile.css.
+var MOBILE_LABELING_QUERY = '(hover: none) and (pointer: coarse), (max-width: 900px)'
 
 function expand_image(event){
 
@@ -233,8 +236,16 @@ function select_content_choice(label) {
 document.addEventListener('keydown', function(event) {
     const hotkey = event.key;
     if (document.querySelector('.training-paused')) return;
-    // 1-2 drive the binary yes/no control; 3-4 additionally drive the ordinal
-    // 0-3 control (color_fill_type rule 5). Invalid keys are ignored downstream.
+    // Don't hijack keystrokes while typing in a text field.
+    var ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+    // When the color_fill_type rule 5 depth control is active, 0-5 enter the layer
+    // count (0 = Flat, 5 = "5+"), F = Flat, G = Gradient, S = Skip. Checked first
+    // so digits route to the depth control rather than the binary yes/no handler.
+    if (depth_hotkey(hotkey)) return;
+    // The same_style rule 2 pair control uses 1-4 (same/similar/different/duplicate).
+    if (style_hotkey(hotkey)) return;
+    // 1-2 drive the binary yes/no control.
     if (hotkey === '1' || hotkey === '2' || hotkey === '3' || hotkey === '4') {
         direct_hotkey_action(hotkey)
     }
@@ -274,13 +285,17 @@ function select_element(elements) {
 function activate_listing_container(listing_container) {
 
     // === OPTIMIZATION: Lazy Load Images ===
+    // Pair listings (same_style rule 2) show two images and get their own
+    // broken-image handling, so the single-asset wiring below is skipped for them.
+    var is_pair_listing = watch_pair_images(listing_container);
+
     // 1. Load image for current container
     let img = listing_container.querySelector('img.design');
     if (img && img.dataset.src) {
         img.src = img.dataset.src;
         img.removeAttribute('data-src');
     }
-    if (img) {
+    if (img && !is_pair_listing) {
         img.onerror = function() {
             var cd = listing_container.querySelector('.collection_data');
             var rv = listing_container.querySelector('.label_option.rule_validator');
@@ -316,12 +331,22 @@ function activate_listing_container(listing_container) {
     }
     // === END OPTIMIZATION ===
 
-    if (window.matchMedia('(max-width: 768px)').matches) {
+    // The keypad only replaces the 1/2 hotkeys, so it belongs to the yes/no
+    // switch alone. The depth control (color_fill_type rule 5) and the pair
+    // control (same_style rule 2) give 1 and 2 different meanings and are
+    // already made of tappable buttons, so the keypad stays hidden for them.
+    if (window.matchMedia(MOBILE_LABELING_QUERY).matches) {
         mobile_keyboard = document.querySelector('#mobile_keyboard')
-        mobile_keyboard.style.display = 'flex'
-
         prompt_container = listing_container.querySelector('.label_option.prompt.container')
-        prompt_container.append(mobile_keyboard)    
+
+        if (mobile_keyboard && prompt_container) {
+            if (prompt_container.querySelector('.switch3')) {
+                mobile_keyboard.style.display = 'flex'
+                prompt_container.append(mobile_keyboard)
+            } else {
+                mobile_keyboard.style.display = 'none'
+            }
+        }
     }
 
     listing_container.className = 'listing light container active'
@@ -337,6 +362,11 @@ function activate_listing_container(listing_container) {
         listing_container.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
+    // A pair whose image(s) already failed to load can't be judged, so skip it now
+    // that the container is active (advance_after_prompt needs the active classes).
+    if (is_pair_listing && listing_container.dataset.brokenImage === '1') {
+        skip_broken_pair(listing_container);
+    }
 
 }
 
@@ -365,6 +395,170 @@ function update_prompt(hotkey, element, response) {
         close_listing_container(element)
     }
 
+}
+
+
+// Close the given rule_validator and advance, mirroring update_prompt's tail.
+// Used by the color_fill_type rule 5 depth control, which submits a free-form
+// value (Flat=0, Gradient, or a typed layer count) instead of clicking a radio.
+function advance_after_prompt(element) {
+    element.className = 'label_option rule_validator closed'
+
+    const open_prompt_count = element
+    .closest('.label_option.prompt.container.active')
+    .querySelectorAll('[class*="open"], [class*="active"]')
+    .length;
+
+    if (open_prompt_count > 0) {
+        element
+        .nextElementSibling
+        .className = 'label_option rule_validator active'
+    } else {
+        close_listing_container(element)
+    }
+}
+
+// Record a depth response ("0" for Flat, "gradient" for Gradient) then advance.
+function submit_depth(el, value) {
+    var rv = el.closest('.label_option.rule_validator')
+    if (!rv) return
+    if (rv.getAttribute('prompt_type') == 'mismatch') {
+        collect_mismatch_prompt(rv, value)
+    } else {
+        collect_prompt(rv, value)
+    }
+    advance_after_prompt(rv)
+}
+
+// Skip the current asset (color_fill_type rule 5). The skip is recorded so the
+// asset counts as handled and stops being served again; reconcile drops it
+// because "skip" is not a depth value, so it never becomes a label.
+function skip_depth(el) {
+    var rv = el.closest('.label_option.rule_validator')
+    if (!rv) return
+    submit_depth(rv, 'skip')
+}
+
+// Keyboard shortcuts for the depth control (color_fill_type rule 5).
+// With the flood-fill sampler: 1 = Shade mode, 2 = Highlight mode, U = undo.
+// 0 / F = Flat, G = Gradient, S = Skip. Digits 3-5 still submit a layer count
+// directly for quick labels. Returns true if handled so yes/no hotkeys stay off.
+function depth_hotkey(key) {
+    var rv = document.querySelector('.label_option.rule_validator.active')
+        || document.querySelector('.label_option.rule_validator.open')
+    if (!rv || !rv.querySelector('.depth-controls')) return false
+    if (typeof window.depth_sampler_hotkey === 'function' && window.depth_sampler_hotkey(key)) {
+        return true
+    }
+    if (key >= '3' && key <= '5') { submit_depth(rv, key); return true }
+    if (key === '0' || key === 'f' || key === 'F') { submit_depth(rv, '0'); return true }
+    if (key === 'g' || key === 'G') { submit_depth(rv, 'gradient'); return true }
+    if (key === 's' || key === 'S') { skip_depth(rv); return true }
+    return false
+}
+
+// Record a pair-comparison response (same_style rule 2) then advance. Reads
+// asset_id_1/asset_id_2 from the listing's collection_data and posts to the
+// style_prompt_responses endpoint.
+function collect_style_prompt(el, response) {
+    var listing = el.closest('.listing.light.container')
+    if (!listing) return
+    // The choice buttons live inside the rule_validator; the Flag button lives
+    // outside it, so fall back to the listing's rule_validator.
+    var rv = el.closest('.label_option.rule_validator')
+        || listing.querySelector('.label_option.rule_validator')
+    if (!rv) return
+
+    var collection_data = listing.querySelector('.collection_data')
+
+    var data = {
+        task_type: collection_data.getAttribute('task_type'),
+        pair_id: collection_data.getAttribute('pair_id'),
+        asset_id_1: collection_data.getAttribute('asset_id_1'),
+        asset_id_2: collection_data.getAttribute('asset_id_2'),
+        labeler_source: collection_data.getAttribute('labeler_source'),
+        labeler_id: collection_data.getAttribute('labeler_id'),
+        rule_index: parseInt(rv.getAttribute('rule_index')),
+        prompt_response: response,
+    }
+
+    if (!window._trainingAnswers) {
+        api_collect_style_prompt(data)
+    }
+
+    advance_after_prompt(rv)
+}
+
+// Watch both images of a pair listing (same_style rule 2) for load failures. A
+// pair can't be compared if either image is missing, so it is recorded as
+// "broken_image" and skipped rather than shown to the labeler. Returns true when
+// the container is a pair listing.
+function watch_pair_images(listing_container) {
+    var cd = listing_container.querySelector('.collection_data')
+    if (!cd || !cd.getAttribute('asset_id_1')) return false
+
+    listing_container.querySelectorAll('img.design').forEach(function (img) {
+        // A missing link never requests anything, so no error event ever fires.
+        if (!img.getAttribute('src')) {
+            listing_container.dataset.brokenImage = '1'
+            return
+        }
+        if (!img.dataset.pairErrorWired) {
+            img.dataset.pairErrorWired = '1'
+            img.addEventListener('error', function () {
+                retry_or_break_pair(img, listing_container)
+            })
+        }
+        // An image that finished loading with no dimensions has failed. This
+        // catches failures that happened before the container became active,
+        // e.g. the host throttling the initial burst of requests.
+        if (img.complete && img.naturalWidth === 0) {
+            retry_or_break_pair(img, listing_container)
+        }
+    })
+
+    return true
+}
+
+// Give a failed pair image one more chance before writing the pair off, so a
+// transient/throttled request doesn't skip a perfectly good pair.
+function retry_or_break_pair(img, listing_container) {
+    if (img.dataset.pairRetried !== '1') {
+        img.dataset.pairRetried = '1'
+        var src = img.getAttribute('src')
+        img.removeAttribute('src')
+        img.src = src
+        return
+    }
+
+    listing_container.dataset.brokenImage = '1'
+    skip_broken_pair(listing_container)
+}
+
+// Record the current pair as unviewable and advance. Only acts on the pair the
+// labeler is actually on; others are handled when they become active.
+function skip_broken_pair(listing_container) {
+    if (!listing_container.classList.contains('active')) return
+    if (listing_container.dataset.brokenSkipped === '1') return
+
+    var rv = listing_container.querySelector('.label_option.rule_validator.active')
+    if (!rv) return
+
+    listing_container.dataset.brokenSkipped = '1'
+    collect_style_prompt(rv, 'broken_image')
+}
+
+// Keyboard shortcuts for the pair-comparison control (same_style rule 2):
+// 1 = Same, 2 = Similar, 3 = Different, 4 = Duplicate. Only acts when a style
+// pair control is active. Returns true if it handled the key.
+var _STYLE_HOTKEYS = { '1': 'same', '2': 'similar', '3': 'different', '4': 'duplicate' }
+function style_hotkey(key) {
+    var rv = document.querySelector('.label_option.rule_validator.active')
+    if (!rv || !rv.querySelector('.style-controls')) return false
+    var response = _STYLE_HOTKEYS[key]
+    if (!response) return false
+    collect_style_prompt(rv, response)
+    return true
 }
 
 
@@ -581,11 +775,23 @@ function reset_responses(event){
         console.log("just remove prompt")
 
         if (!window._trainingAnswers) {
-            api_remove_prompt_responses(listing_data.getAttribute('asset_id'),
+            var pair_asset_id_1 = listing_data.getAttribute('asset_id_1')
+            if (pair_asset_id_1) {
+                // Pair-comparison listing (same_style rule 2): remove from
+                // style_prompt_responses keyed on both asset ids.
+                api_remove_style_prompt(pair_asset_id_1,
+                                        listing_data.getAttribute('asset_id_2'),
                                         listing_data.getAttribute('labeler_id'),
                                         listing_data.getAttribute('labeler_source'),
                                         listing_data.getAttribute('task_type'),
                                         active_prompt.getAttribute('rule_index'))
+            } else {
+                api_remove_prompt_responses(listing_data.getAttribute('asset_id'),
+                                            listing_data.getAttribute('labeler_id'),
+                                            listing_data.getAttribute('labeler_source'),
+                                            listing_data.getAttribute('task_type'),
+                                            active_prompt.getAttribute('rule_index'))
+            }
         }
 
     }
@@ -759,6 +965,19 @@ function flag_asset_issue(event){
         api_collect_label_issue(data)
     }
 
+    // The graded depth control (color_fill_type rule 5) has no yes/no radio, so
+    // the synthetic "2" keypress used to record + advance for binary rules does
+    // nothing there. Record a "flag" entry directly and advance instead.
+    var depthControls = button
+        .closest('.listing.light.container')
+        .querySelector('.label_option.rule_validator .depth-controls')
+
+    if (depthControls) {
+        var rv = depthControls.closest('.label_option.rule_validator')
+        collect_prompt(rv, 'flag')
+        advance_after_prompt(rv)
+        return
+    }
 
     const key_event = new KeyboardEvent('keydown', {
         key: '2',        // Key value

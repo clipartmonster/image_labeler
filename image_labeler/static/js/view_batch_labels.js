@@ -48,8 +48,84 @@ if (window.location.pathname === '/label_images/view_batch_labels/') {
             });
         }
 
+        const flag_filter_select = document.getElementById('flag_filter_select');
+        if (flag_filter_select) {
+            flag_filter_select.addEventListener('change', function () {
+                const url = new URL(window.location.href);
+                url.searchParams.set('flag_filter', this.value);
+                window.location.href = url.toString();
+            });
+        }
+
+        const cv_run_select = document.getElementById('cv_run_select');
+        if (cv_run_select) {
+            cv_run_select.addEventListener('change', function () {
+                const url = new URL(window.location.href);
+                url.searchParams.set('cv_run', this.value);
+                window.location.href = url.toString();
+            });
+        }
+
+        // Cross-validation review (view=cv): bucket and label are selects here,
+        // not the yes/no buttons the default page uses.
+        const bucket_filter_select = document.getElementById('bucket_filter_select');
+        if (bucket_filter_select) {
+            bucket_filter_select.addEventListener('change', function () {
+                const url = new URL(window.location.href);
+                url.searchParams.set('bucket_filter', this.value);
+                window.location.href = url.toString();
+            });
+        }
+
+        const cv_label_filter_select = document.getElementById('cv_label_filter_select');
+        if (cv_label_filter_select) {
+            cv_label_filter_select.addEventListener('change', function () {
+                const url = new URL(window.location.href);
+                url.searchParams.set('label_filter', this.value);
+                window.location.href = url.toString();
+            });
+        }
+
+        const category_select = document.getElementById('category_select');
+        if (category_select) {
+            category_select.addEventListener('change', function () {
+                const url = new URL(window.location.href);
+                url.searchParams.set('category', this.value);
+                window.location.href = url.toString();
+            });
+        }
+
+        // Pair-comparison batch labels (same_style rule 2): switch a pair's label.
+        document.querySelectorAll('.pair-choice-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                switch_pair_label(btn);
+            });
+        });
+
     });
 
+}
+
+function switch_pair_label(btn) {
+    var row = btn.closest('.pair-row');
+    var choice = btn.getAttribute('data-choice');
+
+    // Highlight the chosen button within this pair only.
+    row.querySelectorAll('.pair-choice-btn').forEach(function (b) {
+        b.classList.remove('selected');
+    });
+    btn.classList.add('selected');
+
+    var data = {
+        pair_id: row.getAttribute('pair_id'),
+        asset_id_1: row.getAttribute('asset_id_1'),
+        asset_id_2: row.getAttribute('asset_id_2'),
+        task_type: row.getAttribute('task_type'),
+        rule_index: row.getAttribute('rule_index'),
+        label: choice,
+    };
+
+    api_set_pair_label(data);
 }
 
 function toggle_slider_control(slider_control){

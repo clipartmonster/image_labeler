@@ -255,6 +255,69 @@ def measure_line_widths(request):
 
 
 @login_required
+def label_color_depth(request):
+    """One-image Color Depth (Scale) labeling with flood-fill sampling.
+
+    Mirrors ``measure_line_widths``: one asset at a time, a 3×3 section grid that
+    changes color as the labeler samples shade/highlight layers in each panel.
+    """
+    labeler_id = request.GET.get("labeler_id", request.user.username)
+    batch_id = request.GET.get("batch_id", 1)
+    large_sub_batch = request.GET.get("large_sub_batch", 1)
+
+    rule_indexes_raw = request.GET.get("rule_indexes", "[]")
+    try:
+        rule_indexes = json.loads(rule_indexes_raw)
+    except (json.JSONDecodeError, TypeError):
+        rule_indexes = rule_indexes_raw
+    if not isinstance(rule_indexes, list):
+        rule_indexes = [rule_indexes]
+    rule_index = int(rule_indexes[0]) if rule_indexes else int(request.GET.get("rule_index", 5))
+
+    header = {
+        "Content-Type": "application/json",
+        "Authorization": settings.API_ACCESS_KEY,
+    }
+
+    task_type = "color_fill_type"
+    api_url = f"{settings.LABELING_API_BASE_URL}/get_asset_batch/"
+    data = {
+        "batch_type": "large_sub_batch",
+        "large_sub_batch": large_sub_batch,
+        "batch_id": batch_id,
+        "task_type": task_type,
+        "rule_index": rule_index,
+        "labeler_id": labeler_id,
+    }
+    response = requests.get(api_url, json=data, headers=header)
+    assets_to_label = json.loads(response.content)["asset_batch"]
+
+    rules_api_url = f"{settings.LABELING_API_BASE_URL}/get_labelling_rules/"
+    rules_data = {"task_type": task_type, "rule_indexes": [rule_index]}
+    rules_response = requests.get(rules_api_url, json=rules_data, headers=header)
+    labelling_rules = dict(json.loads(rules_response.content))["labelling_rules"]
+    labelling_rules = sorted(labelling_rules, key=lambda x: x["rule_index"])
+
+    from .models import RuleGuide
+    rule_guides = list(
+        RuleGuide.objects.filter(task_type=task_type, rule_index=rule_index)
+        .prefetch_related("directives", "reference_images", "directives__reference_images")
+    )
+
+    return render(request, "label_color_depth.html", {
+        "assets_to_label": assets_to_label,
+        "labeler_id": labeler_id,
+        "rule_index": rule_index,
+        "batch_id": batch_id,
+        "large_sub_batch": large_sub_batch,
+        "total_count": len(assets_to_label),
+        "task_type": task_type,
+        "labelling_rules": labelling_rules,
+        "rule_guides": rule_guides,
+    })
+
+
+@login_required
 def select_primary_colors(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_asset_batch/"
@@ -402,8 +465,8 @@ def setup_session(request):
         )
     else:
         now = timezone.now()
-        from labeling_api.models import prompt_responses, labelling_rules as LR
-        from .models import TrainingBatchAsset
+        from labeling_api.models import label_data_selected_assets_new, prompt_responses, labelling_rules as LR
+        from .models import TrainingBatchAsset, TrainingExemption
 
         rule_titles = {}
         for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
@@ -420,6 +483,11 @@ def setup_session(request):
         # Build set of features with completed training
         completed_training_features = set(
             training_qs.filter(completed_at__isnull=False)
+            .values_list("task_type", "rule_index")
+        )
+        # Features an admin has cleared this labeler to work untrained.
+        exempt_features = set(
+            TrainingExemption.objects.filter(user=request.user)
             .values_list("task_type", "rule_index")
         )
 
@@ -443,9 +511,68 @@ def setup_session(request):
             })
 
         from labeling_api.models import label_issues_table, line_width_sample_table
+        from labeling_api.models import (
+            label_data_selected_pair_labels,
+            style_prompt_responses,
+        )
 
         work_assignments = []
         for a in work_qs:
+            # Pair-comparison assignments (same_style rule 2): progress is measured
+            # in labeled pairs from style_prompt_responses vs pairs in the batch.
+            if a.task_type == "same_style" and a.rule_index == 2:
+                batch_pairs = set(
+                    label_data_selected_pair_labels.objects.filter(
+                        task_type=a.task_type,
+                        rule_index=a.rule_index,
+                        batch_id=a.batch_id,
+                        large_sub_batch=a.large_sub_batch,
+                    ).values_list("asset_id_1", "asset_id_2")
+                )
+                total = len(batch_pairs)
+                labeled_pairs = set(
+                    style_prompt_responses.objects.filter(
+                        task_type=a.task_type,
+                        rule_index=a.rule_index,
+                        labeler_id=request.user.username,
+                    ).values_list("asset_id_1", "asset_id_2")
+                )
+                completed = len(batch_pairs & labeled_pairs)
+
+                if total > 0 and completed >= total:
+                    from django.utils import timezone as tz
+                    a.completed_at = tz.now()
+                    a.save(update_fields=["completed_at"])
+                    continue
+
+                days_left = (a.deadline - now).days
+                if days_left < 0:
+                    deadline_status = "overdue"
+                elif days_left <= 2:
+                    deadline_status = "urgent"
+                else:
+                    deadline_status = "ok"
+
+                work_assignments.append({
+                    "id": a.id,
+                    "task_type": a.task_type,
+                    "rule_index": a.rule_index,
+                    "feature_name": rule_titles.get((a.task_type, a.rule_index), ""),
+                    "batch_id": a.batch_id,
+                    "large_sub_batch": a.large_sub_batch,
+                    "payment_amount": a.payment_amount,
+                    "bonus_amount": getattr(a, "bonus_amount", 0) or 0,
+                    "deadline": a.deadline,
+                    "deadline_status": deadline_status,
+                    "total": total,
+                    "completed": completed,
+                    "progress_pct": int((completed / total * 100) if total > 0 else 0),
+                    "is_training": False,
+                    # Pair task has no training batch yet; don't gate labeling on it.
+                    "training_required": False,
+                })
+                continue
+
             asset_model = _asset_model_for_task(a.task_type)
             batch_asset_ids = set(
                 asset_model.objects.filter(
@@ -498,6 +625,7 @@ def setup_session(request):
 
             training_required = (
                 (a.task_type, a.rule_index) not in completed_training_features
+                and (a.task_type, a.rule_index) not in exempt_features
                 and not _training_exempt(a.task_type, a.rule_index)
             )
             work_assignments.append({
@@ -591,6 +719,8 @@ def _label_history_enabled(task_type, rule_index, labeler_source):
     if task_type == "select_content":
         return False
     if task_type == "color_fill_type" and rule_index == 5:
+        return False
+    if task_type == "same_style" and rule_index == 2:
         return False
     return True
 
@@ -725,6 +855,27 @@ def mturk_redirect(request):
     is_training = request.GET.get("is_training", "0") == "1"
 
     rule_index = int(rule_indexes[0])
+
+    # Color Depth (Scale) uses the one-image flood-fill sampler, same idea as
+    # measure_line_widths — keep old mturk_redirect links working by bouncing here.
+    if (
+        task_type == "color_fill_type"
+        and rule_index == 5
+        and not is_training
+        and labeler_source != "reconcile_label"
+    ):
+        from django.http import HttpResponseRedirect
+        from urllib.parse import urlencode
+
+        qs = urlencode(
+            {
+                "labeler_id": labeler_id,
+                "rule_indexes": json.dumps([rule_index]),
+                "batch_id": batch_id or "",
+                "large_sub_batch": large_sub_batch or "",
+            }
+        )
+        return HttpResponseRedirect(f"/label_images/label_color_depth/?{qs}")
 
     assignment_id = request.GET.get("assignmentId", None)
     hit_id = request.GET.get("hitId")
@@ -1054,6 +1205,240 @@ def reconcile_labels(request):
     )
 
 
+def _pair_category_counts(pairs_df):
+    """Pairs per style type, biggest first, for the batch-labels filter.
+
+    Every type from ``text.py`` is listed even at zero, so a type stays selectable
+    (and visibly empty) instead of vanishing from the dropdown once it's filtered
+    down to nothing. Pairs with no term at all get their own ``none`` entry, since
+    otherwise a good chunk of the batch would be unreachable by any choice and the
+    counts would silently fail to add up.
+
+    Returns:
+        list[dict]: filter ``name``, display ``label`` and ``count``, ordered by
+        count then name.
+    """
+    from collections import Counter
+
+    from .text import STYLE_TERM_CATEGORIES
+
+    counts, untyped = Counter(), 0
+    if not pairs_df.empty and "categories" in pairs_df.columns:
+        for cats in pairs_df["categories"]:
+            if cats:
+                counts.update(cats)
+            else:
+                untyped += 1
+
+    names = sorted(set(STYLE_TERM_CATEGORIES) | set(counts))
+    rows = [{"name": n, "label": n, "count": counts.get(n, 0)} for n in names]
+    rows.append({"name": "none", "label": "no style type", "count": untyped})
+    return sorted(rows, key=lambda c: (-c["count"], c["label"]))
+
+
+def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by):
+    """Batch-labels page for pair-comparison tasks (same_style rule 2).
+
+    Shows each labeled pair (pair_id + both asset ids + both images) with its
+    reconciled/plurality label, the model's CV score, and a 4-way control to
+    switch the label. Data comes from ``get_batch_for_viewing`` (pair branch);
+    switches persist via ``set_pair_label``.
+    """
+    flag_filter = request.GET.get("flag_filter", "all")
+    category = request.GET.get("category", "all")
+    # No cv_run in the URL means "use the most recent run"; the API resolves it.
+    cv_run = request.GET.get("cv_run") or None
+
+    header = {
+        "Content-Type": "application/json",
+        "Authorization": settings.API_ACCESS_KEY,
+    }
+
+    response = requests.get(
+        f"{settings.LABELING_API_BASE_URL}/get_batch_for_viewing/",
+        json={
+            "task_type": task_type,
+            "rule_index": rule_index,
+            "batch_index": batch_index,
+            "cv_run_id": cv_run,
+        },
+        headers=header,
+    )
+    batch_payload = json.loads(response.content)
+    pairs_df = pd.DataFrame(batch_payload.get("assets_w_labels", []))
+    cv_runs = batch_payload.get("cv_runs", [])
+    cv_run_id = batch_payload.get("cv_run_id")
+
+    # Filter on the model's flag / disagreements before sorting.
+    if not pairs_df.empty and flag_filter != "all":
+        if flag_filter == "disagree":
+            pairs_df = pairs_df[pairs_df.get("cv_disagrees") == True]  # noqa: E712
+        elif flag_filter == "scored":
+            pairs_df = pairs_df[pairs_df["cv_prob"].notna()]
+        elif flag_filter == "unscored":
+            pairs_df = pairs_df[pairs_df["cv_prob"].isna()]
+        else:
+            pairs_df = pairs_df[pairs_df.get("cv_flag") == flag_filter]
+
+    # Counted after the model-flag filter but before the style filter, so the
+    # dropdown reads as "how many of these does each style type account for" --
+    # with flag_filter=disagree that ranks the types the model struggles with.
+    category_counts = _pair_category_counts(pairs_df)
+    if not pairs_df.empty and category != "all":
+        pairs_df = pairs_df[
+            pairs_df["categories"].apply(
+                (lambda cats: not cats) if category == "none"
+                else (lambda cats: category in (cats or []))
+            )
+        ]
+
+    if not pairs_df.empty:
+        # Model-score sorts put unscored pairs last.
+        if sort_by in ("prob_desc", "prob_asc", "suspicion_desc"):
+            col = "cv_suspicion" if sort_by == "suspicion_desc" else "cv_prob"
+            pairs_df = pairs_df.sort_values(
+                col, ascending=(sort_by == "prob_asc"), na_position="last"
+            )
+        elif "date_labeled" in pairs_df.columns:
+            pairs_df = pairs_df.sort_values(
+                "date_labeled", ascending=(sort_by == "date_asc")
+            )
+
+    if not pairs_df.empty and "label" in pairs_df.columns:
+        label_counts = (
+            pairs_df.groupby("label")
+            .agg(count=("label", "count"))
+            .reset_index()
+            .to_dict(orient="records")
+        )
+    else:
+        label_counts = []
+
+    # Rules (for title/prompt and the task_type dropdown).
+    rule_entry, all_rules = _batch_label_rules(task_type, rule_index, header)
+
+    data = {
+        "rule_entry": rule_entry,
+        "all_rules": all_rules,
+        "label_counts": label_counts,
+        "total_pairs": len(pairs_df),
+        "sort_by": sort_by,
+        "flag_filter": flag_filter,
+        "flag_filter_options": [
+            "all", "disagree", "ok", "uncertain", "suspect_fp", "suspect_fn",
+            "scored", "unscored",
+        ],
+        "category": category,
+        "category_counts": category_counts,
+        "pair_choices": ["same", "similar", "different", "duplicate"],
+        "cv_runs": cv_runs,
+        "cv_run_id": cv_run_id,
+        "batch_of_pairs": pairs_df.to_dict(orient="records") if not pairs_df.empty else [],
+    }
+
+    return render(request, "view_batch_pair_labels.html", data)
+
+
+# Rows shown per cross-validation page. Every row loads an image, so this is a
+# ceiling on browser work as much as on payload size; the sorts are built to put
+# what matters at the top.
+CV_PAGE_LIMIT = 300
+
+
+def _view_batch_cv_labels(request, task_type, rule_index, sort_by):
+    """Cross-validation review for a single-asset (yes/no) rule.
+
+    The per-asset counterpart of :func:`_view_batch_pair_labels`: one row per
+    scored asset from ``label_data.cv_scores``, showing the label it was scored
+    against, the model's prediction and probability, and the run's flag/bucket, so
+    suspected mislabels can be sorted to the top. Data comes from
+    ``get_cv_scores_for_viewing``.
+    """
+    flag_filter = request.GET.get("flag_filter", "all")
+    bucket_filter = request.GET.get("bucket_filter", "all")
+    label_filter = request.GET.get("label_filter", "all")
+    # No cv_run in the URL means "use the most recent run"; the API resolves it.
+    cv_run = request.GET.get("cv_run") or None
+
+    header = {
+        "Content-Type": "application/json",
+        "Authorization": settings.API_ACCESS_KEY,
+    }
+
+    # The API filters, sorts and caps; a run holds thousands of assets and no
+    # reviewer wants them all on one page.
+    response = requests.get(
+        f"{settings.LABELING_API_BASE_URL}/get_cv_scores_for_viewing/",
+        json={
+            "task_type": task_type,
+            "rule_index": rule_index,
+            "cv_run_id": cv_run,
+            "flag_filter": flag_filter,
+            "bucket_filter": bucket_filter,
+            "label_filter": label_filter,
+            "sort_by": sort_by,
+            "limit": CV_PAGE_LIMIT,
+        },
+        headers=header,
+    )
+    payload = json.loads(response.content)
+    assets = payload.get("assets_w_cv", [])
+
+    rule_entry, all_rules = _batch_label_rules(task_type, rule_index, header)
+
+    from django.contrib.auth.models import User
+    labeler_id_options = list(User.objects.filter(is_staff=True).values_list("username", flat=True))
+
+    data = {
+        "rule_entry": rule_entry,
+        "all_rules": all_rules,
+        "labeler_id_options": labeler_id_options,
+        "label_counts": payload.get("label_counts", []),
+        "flag_counts": payload.get("flag_counts", []),
+        "bucket_counts": payload.get("bucket_counts", []),
+        "total_assets": len(assets),
+        "matched_total": payload.get("matched_total", 0),
+        "scored_total": payload.get("scored_total", 0),
+        "page_limit": CV_PAGE_LIMIT,
+        "sort_by": sort_by,
+        "flag_filter": flag_filter,
+        "flag_filter_options": [
+            "all", "disagree", "stale", "ok", "uncertain", "suspect_fp", "suspect_fn",
+        ],
+        "bucket_filter": bucket_filter,
+        "label_filter": label_filter,
+        "label_filter_options": ["all", "only_yes", "only_no"],
+        "cv_runs": payload.get("cv_runs", []),
+        "cv_run_id": payload.get("cv_run_id"),
+        "batch_of_assets": assets,
+    }
+
+    return render(request, "view_batch_cv_labels.html", data)
+
+
+def _batch_label_rules(task_type, rule_index, header):
+    """Rule title/prompt for the current rule, plus every rule for the dropdown."""
+    rules_response = requests.get(
+        f"{settings.LABELING_API_BASE_URL}/get_labelling_rules/", json={}, headers=header
+    )
+    labelling_rules = dict(json.loads(rules_response.content))
+    rule_entry, all_rules = [], []
+    if "labelling_rules" in labelling_rules:
+        rules_df = pd.DataFrame(labelling_rules["labelling_rules"])
+        if not rules_df.empty and {"task_type", "rule_index"}.issubset(rules_df.columns):
+            rule_entry = (
+                rules_df.query("task_type == @task_type")
+                .query("rule_index == @rule_index")
+                .to_dict(orient="records")
+            )
+            all_rules = rules_df[["task_type", "rule_index", "title"]].to_dict(orient="records")
+
+    rule_entry = rule_entry[0] if rule_entry else {
+        "title": "No Rule Found", "prompt": "", "task_type": task_type, "rule_index": rule_index,
+    }
+    return rule_entry, all_rules
+
+
 @login_required
 def view_batch_labels(request):
 
@@ -1064,6 +1449,20 @@ def view_batch_labels(request):
     sort_by = request.GET.get("sort_by", "date_desc")
 
     print(task_type, rule_index, batch_index)
+
+    # Pair-comparison tasks (same_style rule 2) are keyed on a pair with a
+    # categorical label, so they use a dedicated view + template.
+    if task_type == "same_style" and rule_index == 2:
+        return _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by)
+
+    # Cross-validation review of the same yes/no labels, opt-in via the URL so the
+    # default page is untouched. Its own default sort, since "newest first" means
+    # nothing here -- a run scores everything on one day.
+    if request.GET.get("view") == "cv":
+        return _view_batch_cv_labels(
+            request, task_type, rule_index,
+            request.GET.get("sort_by", "suspicion_desc"),
+        )
 
     ###############################
     # get batches assets
@@ -1778,6 +2177,12 @@ def view_model_results(request):
 
     _db = "prod" if "prod" in settings.DATABASES else "default"
 
+    # Features whose target is a graded scale rather than yes/no or a continuous
+    # score. Precision and recall say little about a 0-5 depth count, so these
+    # show Accuracy, MAE and Macro F1. Keyed on the feature because the training
+    # pipeline does not distinguish these in outcome_type.
+    SCALE_FEATURES = {("color_fill_type", 5)}
+
     rule_titles = {}
     for r in LR.objects.exclude(task_type="color_type").values("task_type", "rule_index", "title"):
         rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
@@ -1849,11 +2254,27 @@ def view_model_results(request):
             return 0.0
 
     for row in all_results:
-        for f in ("val_recall", "val_precision", "val_auc", "val_loss", "val_mae", "learning_rate"):
-            row[f] = round(_float(row.get(f)), 3)
         row["is_regressor"] = row.get("outcome_type") == "regressor"
+        row["is_scale"] = (row["task_type"], row["rule_index"]) in SCALE_FEATURES
         row["title"] = rule_titles.get((row["task_type"], row["rule_index"]), "")
-        if row["is_regressor"]:
+
+        # Metrics left as None when unrecorded, so the table shows a dash rather
+        # than a convincing-looking 0.000. Scale features include MAE, because a
+        # graded run that recorded none would otherwise read as a perfect 0; the
+        # other kinds have always coerced to 0 and the arithmetic below needs it.
+        optional = ("val_accuracy", "val_f1", "val_mae") if row["is_scale"] else ("val_accuracy", "val_f1")
+        for f in ("val_recall", "val_precision", "val_auc", "val_loss", "val_mae",
+                  "learning_rate", "val_accuracy", "val_f1"):
+            value = row.get(f)
+            row[f] = None if (value is None and f in optional) else round(_float(value), 3)
+
+        if row["is_scale"]:
+            # Ranks the history table only; macro F1 is the headline number for a
+            # graded target, with accuracy as the stand-in until it is recorded.
+            row["score"] = row["val_f1"]
+            if row["score"] is None:
+                row["score"] = row["val_accuracy"] or 0
+        elif row["is_regressor"]:
             row["score"] = round(-row["val_mae"], 3) if row["val_mae"] else 0
         else:
             row["score"] = round((row["val_precision"] + row["val_recall"]) - abs(row["val_precision"] - row["val_recall"]), 3)
@@ -1879,6 +2300,18 @@ def view_model_results(request):
             features[key]["prod_model"] = row
         features[key]["models"].append(row)
 
+    # Graded features stay listed before their first model is trained, so the
+    # feature is visible as tracked-but-empty rather than missing entirely.
+    for key in SCALE_FEATURES:
+        if key not in features:
+            features[key] = {
+                "task_type": key[0],
+                "rule_index": key[1],
+                "title": rule_titles.get(key, ""),
+                "prod_model": None,
+                "models": [],
+            }
+
     for feat in features.values():
         feat["models"].sort(key=lambda m: m["score"], reverse=True)
         feat["models"] = feat["models"][:20]
@@ -1894,7 +2327,17 @@ def view_model_results(request):
             p = feat["prod_model"]
             if p:
                 is_reg = p.get("is_regressor")
-                if is_reg:
+                if p.get("is_scale"):
+                    # Depth is counted in layers, so MAE reads directly: within
+                    # half a layer is good. A starting point, worth retuning once
+                    # there are trained models to compare. Stays grey when the run
+                    # recorded no MAE, rather than reading absence as perfect.
+                    mae = p["val_mae"]
+                    if mae is None:
+                        feat["perf"] = "none"
+                    else:
+                        feat["perf"] = "yes" if mae <= 0.5 else ("close" if mae <= 1.0 else "no")
+                elif is_reg:
                     feat["perf"] = "yes" if p["val_mae"] <= 0.1 else ("close" if p["val_mae"] <= 0.2 else "no")
                 else:
                     feat["perf"] = "yes" if p["val_recall"] > 0.9 and p["val_precision"] > 0.9 else (
@@ -1925,6 +2368,7 @@ def view_model_results(request):
             "prod_version": f.get("prod_version", ""),
             "prod_threshold": f.get("prod_threshold"),
             "is_regressor": is_reg,
+            "is_scale": (f["task_type"], f["rule_index"]) in SCALE_FEATURES,
         }
 
     data = {
@@ -3313,6 +3757,463 @@ def admin_override_label(request):
 # Admin: label comparison tool
 # ---------------------------------------------------------------------------
 
+# Priority buckets in the order they should be worked through: terms with no
+# evaluation at all first, then untrustworthy metrics, then genuinely weak terms.
+STYLE_PRIORITY_ORDER = ["uncovered", "thin", "weak", "ok", "exhausted"]
+
+
+@admin_required
+def style_analysis(request):
+    """Per-term style model performance, to decide which terms to label next.
+
+    Joins the model's CV scores to the style groups behind each selected pair so
+    every term gets precision/recall/F1 plus how much untapped supply it still
+    has. Data comes from ``get_style_analysis``; the ``cv_run`` toggle mirrors the
+    one on the pair batch-labels page.
+    """
+    category = request.GET.get("category", "all")
+    # Several buckets can be ticked at once (e.g. uncovered + weak), so the terms
+    # for one labeling push can be pulled together.
+    priorities = [p for p in request.GET.getlist("priority") if p in STYLE_PRIORITY_ORDER]
+    sort_by = request.GET.get("sort_by", "priority")
+    search = (request.GET.get("search") or "").strip().lower()
+    cv_run = request.GET.get("cv_run") or None
+    min_support = request.GET.get("min_support") or "20"
+
+    header = {
+        "Content-Type": "application/json",
+        "Authorization": settings.API_ACCESS_KEY,
+    }
+    response = requests.get(
+        f"{settings.LABELING_API_BASE_URL}/get_style_analysis/",
+        json={"cv_run_id": cv_run, "min_support": min_support},
+        headers=header,
+    )
+    payload = json.loads(response.content)
+    terms_df = pd.DataFrame(payload.get("terms", []))
+
+    total_terms = len(terms_df)
+
+    if not terms_df.empty and category != "all":
+        terms_df = terms_df[terms_df["categories"].apply(lambda c: category in (c or []))]
+    if not terms_df.empty and search:
+        terms_df = terms_df[terms_df["term"].str.lower().str.contains(search, regex=False)]
+
+    # Bucket counts come from everything the type/search filters left, before the
+    # bucket filter itself -- otherwise ticking one bucket would zero out the rest
+    # and there'd be no way to see what else is there.
+    if not terms_df.empty:
+        counts = (
+            terms_df["priority"].value_counts().reindex(STYLE_PRIORITY_ORDER).fillna(0).astype(int)
+        )
+    else:
+        counts = pd.Series(0, index=STYLE_PRIORITY_ORDER)
+    # A list rather than a dict so the template can loop it without a lookup filter.
+    priority_counts = [{"bucket": b, "count": int(counts[b])} for b in STYLE_PRIORITY_ORDER]
+
+    if not terms_df.empty and priorities:
+        terms_df = terms_df[terms_df["priority"].isin(priorities)]
+
+    # Totals describe the rows actually on screen, so narrowing to one art type
+    # re-measures the model on just that type.
+    totals = _style_totals(terms_df, payload.get("cv_run_id"), header)
+
+    # Built before the NaN scrub below, which turns the numeric columns into
+    # objects and would break the arithmetic.
+    group_sql, sql_summary = _style_group_sql(
+        terms_df, int(payload.get("min_support", 20) or 20),
+        {"priority": ", ".join(priorities) or "all", "type": category, "search": search or "none"},
+    )
+
+    if not terms_df.empty:
+        terms_df = _sort_style_terms(terms_df, sort_by)
+        # Unscored terms have null metrics, which pandas stores as NaN. NaN is not
+        # None, so it would slip past the template's empty check and print "nan".
+        terms_df = terms_df.replace({np.nan: None})
+
+    data = {
+        "terms": terms_df.to_dict(orient="records") if not terms_df.empty else [],
+        "totals": totals,
+        "total_terms": total_terms,
+        "priority_counts": priority_counts,
+        "priority_order": STYLE_PRIORITY_ORDER,
+        "categories": payload.get("categories", []),
+        "cv_runs": payload.get("cv_runs", []),
+        "cv_run_id": payload.get("cv_run_id"),
+        "min_support": payload.get("min_support", 20),
+        "category": category,
+        "priorities": priorities,
+        "sort_by": sort_by,
+        "search": search,
+        "shown": len(terms_df),
+        "group_sql": group_sql,
+        "sql_summary": sql_summary,
+    }
+    return render(request, "style_analysis.html", data)
+
+
+COVERAGE_STATUSES = ("done", "nearly", "partial", "none", "unknown", "pending")
+
+
+def _coverage_status(model):
+    """Bucket a model by how much of its stage it has run on.
+
+    ``missing`` rather than the percentage decides ``done``, so a model with a
+    handful of assets outstanding out of millions doesn't round up to finished.
+    ``pending`` means the count hasn't been taken yet, ``unknown`` that the stage has
+    no eligible population to measure against.
+    """
+    if model["covered"] is None:
+        return "pending"
+    if model["missing"] is None:
+        return "unknown"
+    if not model["covered"]:
+        return "none"
+    if model["missing"] == 0:
+        return "done"
+    if (model["percent"] or 0) >= 99:
+        return "nearly"
+    return "partial"
+
+
+@admin_required
+def model_coverage(request):
+    """Prediction coverage per model, walking down the pipeline.
+
+    Shows, for every model active in ``model_results_prod``, how many of the assets
+    that reached its stage it has actually predicted -- so a downstream model that
+    never ran over what its upstream models cleared is visible as a gap rather than
+    something you have to go looking for.
+
+    Counts run against a 113M-row table, so each is cached separately and a normal
+    load only computes what it can inside a short budget; anything left over is
+    reported as pending and the page reloads itself to pick up the rest. ``?refresh=1``
+    discards the cached counts and takes as long as it needs, including the slow
+    count of every asset in S3.
+    """
+    refresh = bool(request.GET.get("refresh"))
+    # Counting every asset in S3 takes about two and a half minutes, so it happens
+    # only when asked for, either alongside a full recount or on its own.
+    count_assets = bool(request.GET.get("count_assets"))
+    header = {
+        "Content-Type": "application/json",
+        "Authorization": settings.API_ACCESS_KEY,
+    }
+    response = requests.get(
+        f"{settings.LABELING_API_BASE_URL}/get_model_coverage/",
+        json={
+            "refresh": "1" if refresh else "",
+            # A recount is an explicit request to wait; a page load is not. Counts
+            # are cached as each one lands, so a recount that gets cut short by a
+            # proxy timeout still keeps everything it finished.
+            "budget_seconds": 1200 if refresh or count_assets else 20,
+        },
+        headers=header,
+    )
+    payload = json.loads(response.content)
+
+    raw_stages = payload.get("stages", [])
+    # Indent each stage by how far down the pipeline it sits, so the shape of the
+    # dependency chain is visible without reading the labels.
+    parents = {s["key"]: s.get("parent") for s in raw_stages}
+
+    def depth(key):
+        steps, seen = 0, set()
+        while parents.get(key) and key not in seen:
+            seen.add(key)
+            key = parents[key]
+            steps += 1
+        return steps
+
+    stages = []
+    tally = dict.fromkeys(COVERAGE_STATUSES, 0)
+    worst = None
+    for stage in raw_stages:
+        # Grouped by task type so the rule indexes of one feature read as a set,
+        # which is how the models are actually trained and deployed.
+        groups = {}
+        for model in stage["models"]:
+            model["status"] = _coverage_status(model)
+            tally[model["status"]] += 1
+            if model["missing"] and (worst is None or model["missing"] > worst["missing"]):
+                worst = {
+                    **model,
+                    "stage": stage["label"],
+                    "stage_eligible": model.get("eligible", stage["eligible"]),
+                }
+            groups.setdefault(model["task_type"], []).append(model)
+
+        stages.append({
+            **stage,
+            "depth": depth(stage["key"]),
+            "groups": [
+                {
+                    "task_type": task_type,
+                    "models": sorted(
+                        m, key=lambda x: (x["rule_index"] is None, x["rule_index"] or 0)
+                    ),
+                }
+                for task_type, m in sorted(groups.items())
+            ],
+        })
+
+    data = {
+        "stages": stages,
+        "root_assets": payload.get("root_assets"),
+        "generated_at": payload.get("generated_at"),
+        "took_seconds": payload.get("took_seconds"),
+        "tally": tally,
+        "model_count": sum(
+            1
+            for stage in stages
+            for group in stage["groups"]
+            for model in group["models"]
+            if model.get("is_model", True)
+        ),
+        "worst": worst,
+        "pending": payload.get("pending", 0),
+        "root_pending": payload.get("root_pending", False),
+    }
+    return render(request, "model_coverage.html", data)
+
+
+def _sql_quote(value):
+    """Quote a string for inline SQL, doubling any embedded single quotes."""
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+# Stock-library and placeholder credits that shouldn't be labeled. Matched on the
+# trimmed value, since author_id carries stray surrounding whitespace; blank and
+# null authors are dropped by the query's own check rather than listed here.
+STYLE_BAD_AUTHORS = [
+    "Unknown", "None", "rawpixel", "PNGEgg", "Extra", "simpleline",
+    "rawpixel.com", "freepik", "Creators", "CleanPNG",
+]
+
+# Two assets make a pair, so each chosen group hands over that many assets.
+ASSETS_PER_PAIR = 2
+
+
+def _style_group_sql(terms_df, min_support, filter_labels):
+    """Build a query that pulls the assets needed to fill out the filtered terms.
+
+    A term short of ``min_support`` is topped up to it. A term already at or above
+    it -- every ``weak`` and ``ok`` term, by definition -- would otherwise ask for
+    nothing, so it gets another ``min_support`` pairs instead; picking the weak
+    bucket is a request for more data on it, not a request for zero rows.
+
+    Rows come out shaped like ``label_data.style_groups`` (group_id, author_id,
+    term, asset_id, group_size), two assets per chosen group, so the result drops
+    straight into pair building. Groups already drawn from are skipped, as are stock
+    library credits and any asset that has ever appeared in a selected or labeled
+    pair -- retiring the asset rather than the exact combination is blunter, but it
+    means every pair built from these rows is guaranteed new no matter how the
+    assets are matched up. Terms with no untapped groups are left out, since no
+    query can conjure supply for them.
+
+    Returns:
+        tuple[str, dict]: the SQL (empty when there's nothing to pull) and a summary
+        with the term count, groups and assets it should return, and how many terms
+        were skipped for lack of supply.
+    """
+    empty = {"terms": 0, "groups": 0, "assets": 0, "no_supply": 0}
+    if terms_df.empty:
+        return "", empty
+
+    deficit = (min_support - terms_df["support"]).clip(lower=0)
+    wanted = terms_df.assign(
+        pairs_needed=deficit.where(deficit > 0, min_support).astype(int)
+    )
+    no_supply = int((wanted["untapped_groups"] <= 0).sum())
+    wanted = wanted[wanted["untapped_groups"] > 0].sort_values("term")
+
+    if wanted.empty:
+        return "", {**empty, "no_supply": no_supply}
+
+    # With one pair per group, a term can't be filled past its untapped supply.
+    groups = int(np.minimum(wanted["pairs_needed"], wanted["untapped_groups"]).sum())
+    values = ",\n        ".join(
+        f"({_sql_quote(row.term)}, {int(row.pairs_needed)})"
+        for row in wanted.itertuples()
+    )
+    bad_authors = ", ".join(_sql_quote(a) for a in STYLE_BAD_AUTHORS)
+
+    sql = f"""-- Style assets to label next, shaped like label_data.style_groups.
+-- Filters: priority = {filter_labels['priority']} | type = {filter_labels['type']} | search = {filter_labels['search']}
+-- Goal: top each term up to {min_support} scored pairs; terms already there get
+--       another {min_support} pairs, capped by whatever supply is left.
+-- Skips groups already drawn from, stock-library credits, and any asset that has
+-- already been paired, so every pair built from these rows is new.
+-- Terms: {len(wanted)}. Up to {groups} groups and {groups * ASSETS_PER_PAIR} assets.
+WITH params AS (
+    -- Pairs built from one group, and assets per pair. Their product is how many
+    -- assets come back per group; raise pairs_per_group to spread over fewer groups.
+    SELECT 1::numeric AS pairs_per_group,
+           {ASSETS_PER_PAIR}::numeric AS assets_per_pair
+),
+used_groups AS (
+    SELECT DISTINCT group_id
+    FROM "label_data.selected_pair_labels"
+    WHERE group_id IS NOT NULL
+),
+used_assets AS (
+    -- Every asset already sitting in a selected or labeled pair. Retiring the asset
+    -- outright is what makes a fresh pair certain: neither half can be a repeat.
+    SELECT asset_id_1 AS asset_id FROM "label_data.selected_pair_labels"
+    WHERE asset_id_1 IS NOT NULL
+    UNION
+    SELECT asset_id_2 FROM "label_data.selected_pair_labels"
+    WHERE asset_id_2 IS NOT NULL
+    UNION
+    SELECT asset_id_1 FROM "label_data.style_prompt_responses"
+    WHERE asset_id_1 IS NOT NULL
+    UNION
+    SELECT asset_id_2 FROM "label_data.style_prompt_responses"
+    WHERE asset_id_2 IS NOT NULL
+),
+target_terms (term, pairs_needed) AS (
+    VALUES
+        {values}
+),
+candidates AS (
+    -- Counted on unpaired assets only, so a group is kept only when it can still
+    -- fill every pair asked of it from assets nobody has labeled yet.
+    SELECT sg.group_id, sg.term, sg.author_id, sg.group_size,
+           COUNT(DISTINCT sg.asset_id) AS fresh_assets
+    FROM "label_data.style_groups" sg
+    JOIN target_terms tt ON tt.term = sg.term
+    WHERE sg.group_id NOT IN (SELECT group_id FROM used_groups)
+      AND sg.asset_id NOT IN (SELECT asset_id FROM used_assets)
+      -- author_id carries stray whitespace, so compare the trimmed value.
+      AND sg.author_id IS NOT NULL
+      AND BTRIM(sg.author_id) <> ''
+      AND BTRIM(sg.author_id) NOT IN ({bad_authors})
+    GROUP BY sg.group_id, sg.term, sg.author_id, sg.group_size
+    HAVING COUNT(DISTINCT sg.asset_id)
+           >= (SELECT pairs_per_group * assets_per_pair FROM params)
+),
+picked_groups AS (
+    -- Most unpaired assets first: more room to choose a pair from.
+    SELECT c.group_id, c.term, c.author_id, c.group_size, tt.pairs_needed,
+           ROW_NUMBER() OVER (
+               PARTITION BY c.term
+               ORDER BY c.fresh_assets DESC, c.group_id
+           ) AS group_rank
+    FROM candidates c
+    JOIN target_terms tt ON tt.term = c.term
+),
+chosen AS (
+    SELECT pg.*
+    FROM picked_groups pg
+    CROSS JOIN params p
+    WHERE pg.group_rank <= CEIL(pg.pairs_needed / p.pairs_per_group)
+),
+group_assets AS (
+    SELECT DISTINCT sg.group_id, sg.asset_id
+    FROM "label_data.style_groups" sg
+    WHERE sg.group_id IN (SELECT group_id FROM chosen)
+      AND sg.asset_id NOT IN (SELECT asset_id FROM used_assets)
+),
+ranked_assets AS (
+    SELECT ch.group_id, ch.author_id, ch.term, ga.asset_id, ch.group_size,
+           ch.group_rank,
+           ROW_NUMBER() OVER (
+               PARTITION BY ch.group_id ORDER BY ga.asset_id
+           ) AS asset_rank
+    FROM chosen ch
+    JOIN group_assets ga ON ga.group_id = ch.group_id
+)
+SELECT ra.group_id, ra.author_id, ra.term, ra.asset_id, ra.group_size
+FROM ranked_assets ra
+CROSS JOIN params p
+WHERE ra.asset_rank <= p.pairs_per_group * p.assets_per_pair
+ORDER BY ra.term, ra.group_rank, ra.asset_rank;"""
+
+    return sql, {
+        "terms": len(wanted),
+        "groups": groups,
+        "assets": groups * ASSETS_PER_PAIR,
+        "no_supply": no_supply,
+    }
+
+
+def _style_totals(terms_df, cv_run_id, header):
+    """Headline numbers for whichever terms are currently in scope.
+
+    Precision, recall and F1 are pooled over every scored pair rather than averaged
+    across terms: a mean of per-term scores lets a term with three pairs count as
+    much as one with three hundred. AUC needs the underlying pair scores, so it
+    comes from ``get_style_auc``; if that call fails the rest of the header still
+    renders and AUC alone shows as unavailable.
+    """
+    if terms_df.empty:
+        return {
+            "terms": 0, "scored_terms": 0, "support": 0, "untapped_groups": 0,
+            "precision": None, "recall": None, "f1": None, "auc": None,
+            "auc_pairs": 0, "positives": 0, "negatives": 0,
+        }
+
+    tp, fp, fn = (int(terms_df[c].sum()) for c in ("tp", "fp", "fn"))
+    precision = tp / (tp + fp) if (tp + fp) else None
+    recall = tp / (tp + fn) if (tp + fn) else None
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if precision and recall else None
+    )
+
+    auc = {}
+    try:
+        auc_response = requests.get(
+            f"{settings.LABELING_API_BASE_URL}/get_style_auc/",
+            json={"cv_run_id": cv_run_id, "terms": terms_df["term"].tolist()},
+            headers=header,
+        )
+        auc = json.loads(auc_response.content)
+    except (requests.RequestException, ValueError):
+        pass
+
+    return {
+        "terms": len(terms_df),
+        "scored_terms": int((terms_df["support"] > 0).sum()),
+        "support": int(terms_df["support"].sum()),
+        "untapped_groups": int(terms_df["untapped_groups"].sum()),
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "auc": auc.get("auc"),
+        "auc_pairs": auc.get("pairs", 0),
+        "positives": auc.get("positives", 0),
+        "negatives": auc.get("negatives", 0),
+    }
+
+
+def _sort_style_terms(terms_df, sort_by):
+    """Order the term table. Metric sorts push unscored terms to the bottom."""
+    if sort_by == "priority":
+        # The default view: what to label next. Worst bucket first, and inside a
+        # bucket the terms with the most spare groups (cheapest to act on).
+        rank = {b: i for i, b in enumerate(STYLE_PRIORITY_ORDER)}
+        return terms_df.assign(_rank=terms_df["priority"].map(rank)).sort_values(
+            ["_rank", "untapped_groups"], ascending=[True, False]
+        ).drop(columns="_rank")
+
+    metric_sorts = {
+        "f1_asc": ("f1", True),
+        "precision_asc": ("precision", True),
+        "recall_asc": ("recall", True),
+        "support_asc": ("support", True),
+        "support_desc": ("support", False),
+        "untapped_desc": ("untapped_groups", False),
+        "groups_desc": ("groups", False),
+        "assets_desc": ("assets", False),
+        "selected_desc": ("pairs_selected", False),
+    }
+    if sort_by in metric_sorts:
+        col, ascending = metric_sorts[sort_by]
+        return terms_df.sort_values(col, ascending=ascending, na_position="last")
+    return terms_df.sort_values("term")
+
+
 @admin_required
 def admin_label_comparison(request):
     """Render the label comparison page."""
@@ -3808,7 +4709,7 @@ def complete_training(request):
 def admin_manage_training(request):
     """Admin page to manage training sets per user."""
     from django.contrib.auth.models import User
-    from .models import BatchAssignment, TrainingBatchAsset, TrainingResult
+    from .models import BatchAssignment, TrainingBatchAsset, TrainingExemption
 
     labeler_users = list(
         User.objects.filter(is_superuser=False, is_staff=True)
@@ -3825,6 +4726,18 @@ def admin_manage_training(request):
         .values("task_type", "rule_index", "title")
         .order_by("task_type", "rule_index")
     )
+    # Exemptions cover every rule, not just the five that support training sets --
+    # the whole point is features too new to have a training set at all.
+    all_rules = list(
+        LR.objects.exclude(task_type="color_type")
+        .values("task_type", "rule_index", "title")
+        .order_by("task_type", "rule_index")
+    )
+    exemptions = list(
+        TrainingExemption.objects.select_related("user")
+        .values("id", "user__username", "task_type", "rule_index", "reason", "granted_at")
+        .order_by("user__username", "task_type", "rule_index")
+    )
 
     training_assignments = list(
         BatchAssignment.objects.filter(is_training=True)
@@ -3839,117 +4752,16 @@ def admin_manage_training(request):
     for ta in TrainingBatchAsset.objects.values("assignment_id").annotate(cnt=Count("id")):
         training_asset_counts[ta["assignment_id"]] = ta["cnt"]
 
-    trained = set(
-        TrainingResult.objects.values_list("user__username", "task_type", "rule_index")
-    )
     for a in training_assignments:
         a["asset_count"] = training_asset_counts.get(a["id"], 0)
-        a["waived"] = bool(
-            a["completed_at"]
-            and float(a["payment_amount"] or 0) == 0
-            and (a["user__username"], a["task_type"], a["rule_index"]) not in trained
-        )
-
-    rule_titles = {
-        (r["task_type"], r["rule_index"]): r["title"]
-        for r in LR.objects.values("task_type", "rule_index", "title")
-    }
-    # Open work per labeler for features that need training; the page treats a
-    # feature as locked unless a completed training row exists for it.
-    open_work = {}
-    open_work_qs = (
-        BatchAssignment.objects.filter(
-            is_training=False, completed_at__isnull=True, user__username__in=labeler_users,
-        )
-        .values("user__username", "task_type", "rule_index")
-        .annotate(batches=Count("id"))
-        .order_by("user__username", "task_type", "rule_index")
-    )
-    for w in open_work_qs:
-        if _training_exempt(w["task_type"], w["rule_index"]):
-            continue
-        open_work.setdefault(w["user__username"], []).append({
-            "task_type": w["task_type"],
-            "rule_index": w["rule_index"],
-            "title": rule_titles.get((w["task_type"], w["rule_index"]), ""),
-            "batches": w["batches"],
-        })
 
     return render(request, "admin_manage_training.html", {
         "labeler_users_json": json.dumps(labeler_users),
         "rules_json": json.dumps(rules, default=str),
+        "all_rules_json": json.dumps(all_rules, default=str),
         "training_assignments_json": json.dumps(training_assignments, default=str),
-        "open_work_json": json.dumps(open_work, default=str),
+        "exemptions_json": json.dumps(exemptions, default=str),
     })
-
-
-@admin_required_ajax
-def admin_training_unlock(request):
-    """AJAX: remove the training lock for a labeler on one or more features.
-
-    Marks the feature's training assignment complete, or creates an empty
-    completed one when none exists. Waivers carry no pay and are pre-marked
-    paid so they never show as owed. Removing the training row re-locks.
-    """
-    if request.method != "POST":
-        return JsonResponse({"error": "POST required"}, status=405)
-
-    from django.contrib.auth.models import User
-    from django.utils import timezone
-    from .models import BatchAssignment, TrainingBatchAsset, TrainingResult
-
-    data = json.loads(request.body)
-    username = data.get("username")
-    features = data.get("features") or []
-
-    try:
-        user = User.objects.get(username=username)
-    except User.DoesNotExist:
-        return JsonResponse({"error": f"User '{username}' not found"}, status=404)
-    if not features:
-        return JsonResponse({"error": "No features selected"}, status=400)
-
-    now = timezone.now()
-    rows = []
-    for f in features:
-        task_type = f.get("task_type")
-        try:
-            rule_index = int(f.get("rule_index"))
-        except (TypeError, ValueError):
-            return JsonResponse({"error": "rule_index must be an integer"}, status=400)
-        if not task_type:
-            return JsonResponse({"error": "task_type is required"}, status=400)
-
-        assignment = BatchAssignment.objects.filter(
-            user=user, task_type=task_type, rule_index=rule_index, is_training=True,
-        ).first()
-        if assignment is None:
-            assignment = BatchAssignment.objects.create(
-                user=user, task_type=task_type, rule_index=rule_index,
-                batch_id=0, large_sub_batch=0, is_training=True,
-                payment_amount=0, paid=True, deadline=now, completed_at=now,
-            )
-        elif assignment.completed_at is None:
-            assignment.completed_at = now
-            assignment.payment_amount = 0
-            assignment.paid = True
-            assignment.save(update_fields=["completed_at", "payment_amount", "paid"])
-
-        asset_count = TrainingBatchAsset.objects.filter(assignment=assignment).count()
-        rows.append({
-            "id": assignment.id,
-            "user__username": user.username,
-            "task_type": task_type,
-            "rule_index": rule_index,
-            "completed_at": str(assignment.completed_at),
-            "payment_amount": str(assignment.payment_amount),
-            "asset_count": asset_count,
-            "waived": float(assignment.payment_amount) == 0 and not TrainingResult.objects.filter(
-                user=user, task_type=task_type, rule_index=rule_index,
-            ).exists(),
-        })
-
-    return JsonResponse({"ok": True, "unlocked": rows})
 
 
 @admin_required_ajax
@@ -4065,6 +4877,67 @@ def admin_training_remove(request):
     assignment.delete()
 
     return JsonResponse({"ok": True, "deleted_assets": asset_count})
+
+
+@admin_required_ajax
+def admin_training_exempt(request):
+    """AJAX: clear a labeler to work a feature without doing its training."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    from django.contrib.auth.models import User
+    from .models import TrainingExemption
+
+    data = json.loads(request.body)
+    username = data.get("username")
+    task_type = data.get("task_type")
+    reason = (data.get("reason") or "").strip()[:200]
+    try:
+        rule_index = int(data.get("rule_index"))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "A rule is required"}, status=400)
+
+    if not username or not task_type:
+        return JsonResponse({"error": "A labeler and task type are required"}, status=400)
+
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return JsonResponse({"error": f"User '{username}' not found"}, status=404)
+
+    exemption, created = TrainingExemption.objects.get_or_create(
+        user=user, task_type=task_type, rule_index=rule_index,
+        defaults={"reason": reason},
+    )
+    if not created and reason and exemption.reason != reason:
+        exemption.reason = reason
+        exemption.save(update_fields=["reason"])
+
+    return JsonResponse({
+        "ok": True,
+        "created": created,
+        "id": exemption.id,
+        "username": username,
+        "task_type": task_type,
+        "rule_index": rule_index,
+        "reason": exemption.reason,
+        "granted_at": exemption.granted_at.strftime("%Y-%m-%d %H:%M"),
+    })
+
+
+@admin_required_ajax
+def admin_training_exempt_remove(request):
+    """AJAX: revoke a training exemption, re-locking the feature for that labeler."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    from .models import TrainingExemption
+
+    data = json.loads(request.body)
+    deleted, _ = TrainingExemption.objects.filter(pk=data.get("exemption_id")).delete()
+    if not deleted:
+        return JsonResponse({"error": "Exemption not found"}, status=404)
+    return JsonResponse({"ok": True})
 
 
 @admin_required_ajax

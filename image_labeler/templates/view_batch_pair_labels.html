@@ -1,0 +1,224 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+
+<style>
+/* Pair batch-labels layout (same_style rule 2). */
+.pair-row { display:flex; flex-direction:column; gap:8px; margin:10px; padding:12px;
+    border:1px solid #3a4a4a; border-radius:10px; background:#16292a; }
+.pair-row .pair-meta { display:flex; gap:16px; align-items:center; flex-wrap:wrap;
+    color:#c0d8d8; font-size:13px; font-family:Roboto, sans-serif; }
+.pair-row .pair-meta .pair-id { font-weight:700; color:#e8f0f0; }
+.pair-images { display:flex; gap:12px; justify-content:center; align-items:flex-start; flex-wrap:wrap; }
+.pair-images .pair-item { display:flex; flex-direction:column; align-items:center; }
+.pair-images .pair-item h4 { margin:0 0 4px; color:#a0b8b8; font-size:12px; font-family:Roboto; }
+.pair-images img { width:220px; height:auto; border-radius:6px; border:1px solid #4a5a5a; background:#fff;
+    cursor:crosshair; }
+/* Hover magnifier, matching the lens on the labeling page. White background so
+   transparent clipart stays readable over the dark page. */
+#pairMagnifyLens { display:none; position:fixed; width:180px; height:180px; border-radius:50%;
+    border:3px solid #409393; box-shadow:0 4px 20px rgba(0,0,0,0.4); pointer-events:none;
+    z-index:1500; background-repeat:no-repeat; background-color:#fff; }
+.pair-choices { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:4px; }
+.pair-choice-btn { padding:8px 16px; border:2px solid #a0b4b4; border-radius:8px; cursor:pointer;
+    background:#fff; font-weight:700; color:#2a4a4a; font-family:Roboto, sans-serif; transition:all .12s; }
+.pair-choice-btn:hover { border-color:#409393; background:#e6f2f2; }
+.pair-choice-btn.selected { background:#2a6a6a; border-color:#8fd0d0; color:#fff; }
+/* Model CV score badges. */
+.cv-badge { font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px;
+    background:#22383a; border:1px solid #3f5a5a; color:#c0d8d8; }
+.cv-flag-ok { color:#a0e0a0; border-color:#4a8a4a; background:rgba(100,200,100,0.12); }
+.cv-flag-uncertain { color:#e8d79a; border-color:#8a7a4a; background:rgba(220,190,90,0.12); }
+.cv-flag-suspect_fp, .cv-flag-suspect_fn { color:#e0a0a0; border-color:#8a4a4a; background:rgba(200,100,100,0.12); }
+.cv-disagree { color:#ffd0d0; border-color:#a45a5a; background:rgba(200,80,80,0.2); }
+.cv-stale { color:#d8c0e8; border-color:#6a4a8a; background:rgba(150,100,200,0.15); }
+.term-badge { font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px;
+    color:#9fd6e8; border:1px solid #3f6a7a; background:rgba(80,160,200,0.14); }
+.pair-help { color:#8fa8a8; font-size:11px; font-family:Roboto, sans-serif;
+    line-height:1.45; margin:6px 0 0; }
+.cv-unscored { color:#8a9a9a; }
+</style>
+
+<div style='display:flex; flex-direction: row;'>
+
+    <div class='listing light container side_panel'>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Task Type</h1>
+            <select id="task_type_select" class='title_font field_label'>
+                {% for rule in all_rules %}
+                <option value="{{ rule.task_type }}" data-rule-index="{{ rule.rule_index }}"
+                    {% if rule.task_type == rule_entry.task_type and rule.rule_index == rule_entry.rule_index %}selected{% endif %}>
+                    {{ rule.task_type }} — {{ rule.title }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Sort</h1>
+            <select id="sort_by_select" class='title_font field_label'>
+                <option value="date_desc" {% if sort_by == "date_desc" %}selected{% endif %}>Newest first</option>
+                <option value="date_asc" {% if sort_by == "date_asc" %}selected{% endif %}>Oldest first</option>
+                <option value="prob_desc" {% if sort_by == "prob_desc" %}selected{% endif %}>Model prob: high → low</option>
+                <option value="prob_asc" {% if sort_by == "prob_asc" %}selected{% endif %}>Model prob: low → high</option>
+                <option value="suspicion_desc" {% if sort_by == "suspicion_desc" %}selected{% endif %}>Most suspicious first</option>
+            </select>
+        </div>
+
+        {% if cv_runs %}
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Model Run</h1>
+            <select id="cv_run_select" class='title_font field_label'>
+                {% for run in cv_runs %}
+                <option value="{{ run.cv_run_id }}" {% if run.cv_run_id == cv_run_id %}selected{% endif %}>
+                    {{ run.last_scored }} — {{ run.cv_run_id }} ({{ run.pairs }} pairs){% if forloop.first %} — latest{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Model Flag</h1>
+            <select id="flag_filter_select" class='title_font field_label'>
+                {% for option in flag_filter_options %}
+                <option value="{{ option }}" {% if flag_filter == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div style='margin:5px; width:100%'>
+            <h1 class='listing_info label'>Style Type</h1>
+            <select id="category_select" class='title_font field_label'>
+                <option value="all" {% if category == "all" %}selected{% endif %}>all types</option>
+                {% for row in category_counts %}
+                <option value="{{ row.name }}" {% if category == row.name %}selected{% endif %}>
+                    {{ row.label }} ({{ row.count }})
+                </option>
+                {% endfor %}
+            </select>
+            <p class='pair-help'>
+                Counts follow the Model Flag filter, so setting it to
+                <b>disagree</b> ranks the types the model gets wrong most.
+            </p>
+        </div>
+
+        <div style='display:flex; gap:10px; flex-wrap:wrap'>
+            <h2 id=image_count class='label_option label'>total: {{total_pairs}} </h2>
+            {% for label_count in label_counts %}
+            <h2 class="label_option label"> {{ label_count.label }}: {{ label_count.count }} </h2>
+            {% endfor %}
+        </div>
+
+        <div>
+            <h1 class='label_option intro'>{{rule_entry.title}}</h1>
+            <h3 class='title view_batch'>{{rule_entry.prompt}}</h3>
+        </div>
+
+    </div>
+
+    <div id='pair_list' class='listing light container' style='display:flex; flex-direction:column; flex:1'>
+
+        {% for pair in batch_of_pairs %}
+
+        <div class='pair-row' pair_id="{{pair.pair_id}}" asset_id_1="{{pair.asset_id_1}}"
+            asset_id_2="{{pair.asset_id_2}}" task_type="{{rule_entry.task_type}}"
+            rule_index="{{rule_entry.rule_index}}">
+
+            <div class='pair-meta'>
+                <span class='pair-id'>pair: {{pair.pair_id}}</span>
+                {% for term in pair.terms %}
+                <span class='term-badge'>{{ term }}</span>
+                {% endfor %}
+                <span>agreement: {{pair.agree_status}}</span>
+                <span>votes: {{pair.samples}}</span>
+                {% if pair.cv_prob != None %}
+                <span class='cv-badge'>model: {{pair.cv_model_label}} ({{pair.cv_prob|floatformat:3}})</span>
+                <span class='cv-badge cv-flag-{{pair.cv_flag}}'>{{pair.cv_flag}}</span>
+                {% if pair.cv_disagrees %}
+                <span class='cv-badge cv-disagree'>disagrees (scored: {{pair.cv_scored_label}})</span>
+                {% endif %}
+                {% if pair.cv_stale %}
+                <span class='cv-badge cv-stale'>label changed since scoring</span>
+                {% endif %}
+                {% else %}
+                <span class='cv-badge cv-unscored'>not scored</span>
+                {% endif %}
+            </div>
+
+            <!-- No crossOrigin here: nothing on this page reads the pixels back, and
+                 hosts that omit CORS headers reject the request outright. -->
+            <div class='pair-images'>
+                <div class='pair-item'>
+                    <h4>{{pair.asset_id_1}}</h4>
+                    <img src="{{ pair.image_link_1 }}" loading="lazy">
+                </div>
+                <div class='pair-item'>
+                    <h4>{{pair.asset_id_2}}</h4>
+                    <img src="{{ pair.image_link_2 }}" loading="lazy">
+                </div>
+            </div>
+
+            <div class='pair-choices'>
+                {% for choice in pair_choices %}
+                <div class='pair-choice-btn {% if pair.label == choice %}selected{% endif %}'
+                    data-choice="{{choice}}">{{choice}}</div>
+                {% endfor %}
+            </div>
+
+        </div>
+
+        {% endfor %}
+
+    </div>
+</div>
+
+<div id='pairMagnifyLens'></div>
+
+<script>
+/* Hover magnifier for the pair thumbnails. Delegated from the list rather than
+   bound per image, since a batch can hold hundreds of pairs. */
+(function () {
+    var lens = document.getElementById('pairMagnifyLens');
+    var list = document.getElementById('pair_list');
+    if (!lens || !list) return;
+
+    var ZOOM = 2.5;
+    var HALF = 90;  // half of the lens size set in CSS
+
+    list.addEventListener('mousemove', function (e) {
+        var img = e.target.closest('.pair-images img');
+        if (!img) {
+            lens.style.display = 'none';
+            return;
+        }
+
+        // A failed image collapses to a thin box, so its rendered height can't be
+        // trusted; size the lens from the source's own aspect ratio instead.
+        if (!img.naturalWidth || !img.naturalHeight) {
+            lens.style.display = 'none';
+            return;
+        }
+
+        var rect = img.getBoundingClientRect();
+        var bgW = rect.width * ZOOM;
+        var bgH = bgW * (img.naturalHeight / img.naturalWidth);
+        var percX = (e.clientX - rect.left) / rect.width;
+        var percY = (e.clientY - rect.top) / rect.height;
+
+        lens.style.display = 'block';
+        lens.style.left = (e.clientX - HALF) + 'px';
+        lens.style.top = (e.clientY - HALF) + 'px';
+        lens.style.backgroundImage = 'url(' + img.src + ')';
+        lens.style.backgroundSize = bgW + 'px ' + bgH + 'px';
+        lens.style.backgroundPosition =
+            (-percX * bgW + HALF) + 'px ' + (-percY * bgH + HALF) + 'px';
+    });
+
+    list.addEventListener('mouseleave', function () { lens.style.display = 'none'; });
+})();
+</script>
+
+{% endblock %}

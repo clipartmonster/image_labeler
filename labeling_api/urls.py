@@ -22,12 +22,22 @@ urlpatterns = [
         name="remove_prompt_responses",
     ),
     path(
+        "remove_style_prompt/",
+        views.remove_style_prompt,
+        name="remove_style_prompt",
+    ),
+    path(
         "get_prompt_responses/", views.get_prompt_responses, name="get_prompt_responses"
     ),
     path(
         "collect_prompt_internal_source/",
         views.collect_prompt_internal_source,
         name="collect_prompt_internal_source",
+    ),
+    path(
+        "collect_style_prompt/",
+        views.collect_style_prompt,
+        name="collect_style_prompt",
     ),
     path(
         "collect_validation_response/",
@@ -56,6 +66,15 @@ urlpatterns = [
         views.get_batch_for_viewing,
         name="get_batch_for_viewing",
     ),
+    path(
+        "get_cv_scores_for_viewing/",
+        views.get_cv_scores_for_viewing,
+        name="get_cv_scores_for_viewing",
+    ),
+    path("set_pair_label/", views.set_pair_label, name="set_pair_label"),
+    path("get_style_analysis/", views.get_style_analysis, name="get_style_analysis"),
+    path("get_style_auc/", views.get_style_auc, name="get_style_auc"),
+    path("get_model_coverage/", views.get_model_coverage, name="get_model_coverage"),
     path("get_predictions/", views.get_predictions, name="get_predictions"),
     path(
         "get_assets_w_label_issues/",
@@ -91,6 +110,16 @@ urlpatterns = [
         "remove_line_width_sample/",
         views.remove_line_width_sample,
         name="remove_line_sample_width",
+    ),
+    path(
+        "collect_color_depth_sample/",
+        views.collect_color_depth_sample,
+        name="collect_color_depth_sample",
+    ),
+    path(
+        "remove_color_depth_sample/",
+        views.remove_color_depth_sample,
+        name="remove_color_depth_sample",
     ),
     path(
         "label_line_width_as_invalid/",

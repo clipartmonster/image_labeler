@@ -38,6 +38,15 @@
             </select>
         </div>
 
+        <!-- The same labels seen through the model's held-out predictions. Only the
+             task and rule carry over; this page's sort and filters don't apply there. -->
+        <div style='margin:5px; width:100%'>
+            <a class='label_option label' style='display:inline-block; text-decoration:none'
+                href="?task_type={{rule_entry.task_type}}&rule_index={{rule_entry.rule_index}}&view=cv">
+                Cross-Validation →
+            </a>
+        </div>
+
         <div style='display:flex; gap:10px'>
             <h2 id=image_count class='label_option label'>total: {{total_assets}} </h2>
             {% for label_count in label_counts %}
