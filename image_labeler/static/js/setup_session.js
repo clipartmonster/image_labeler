@@ -190,7 +190,7 @@ function go_to_view_page(view_button){
 
 function select_batch_option(selected_batch_option){
 
-    batch_options = document.querySelectorAll('.batch.indicator:not(.container')
+    batch_options = document.querySelectorAll('.batch.indicator:not(.container)')
 
     batch_options.forEach(batch_option => {
         batch_option.classList.remove('selected')
@@ -257,8 +257,11 @@ function show_images_wo_labels(){
 
     console.log(task_type,batch_id,rule_index,large_sub_batch)
 
-    if (task_type == 'line_width_type' && rule_index == '2') {
+    // Dedicated UIs — only these (task, rule) pairs; everything else stays on mturk_redirect.
+    if (task_type === 'line_width_type' && String(rule_index) === '2') {
         link_stem = '/label_images/measure_line_widths/'
+    } else if (task_type === 'color_fill_type' && String(rule_index) === '5') {
+        link_stem = '/label_images/label_color_depth/'
     } else {
         link_stem = '/label_images/mturk_redirect/'
     }

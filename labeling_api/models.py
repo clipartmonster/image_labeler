@@ -1081,6 +1081,38 @@ class line_width_sample_table(models.Model):
         db_table = "label_data.line_width_responses"
 
 
+class color_depth_scale_responses(models.Model):
+    """Flood-fill layer samples for Color Depth (Scale) labeling.
+
+    **Table:** ``label_data.color_depth_scale_responses``
+
+    Each row is one shade/highlight selection (or a skip marker). Seed color,
+    tolerance, native click coords, and image/display sizes are enough to
+    recreate the whole-image similar-color fill.
+    """
+
+    id = models.AutoField(primary_key=True)
+    asset_id = models.BigIntegerField()
+    sample_index = models.IntegerField()
+    labeler_id = models.CharField()
+    datetime_created = models.DateTimeField(auto_now_add=True)
+    color_hex = models.CharField(max_length=7, null=True, blank=True)
+    label_type = models.CharField()  # sampled | skip
+    layer_type = models.CharField(null=True, blank=True)  # shade | highlight
+    x_coord = models.IntegerField(null=True, blank=True)
+    y_coord = models.IntegerField(null=True, blank=True)
+    pixel_count = models.IntegerField(null=True, blank=True)
+    tolerance = models.IntegerField(null=True, blank=True)
+    image_width = models.IntegerField(null=True, blank=True)
+    image_height = models.IntegerField(null=True, blank=True)
+    scaled_width = models.IntegerField(null=True, blank=True)
+    scaled_height = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "label_data.color_depth_scale_responses"
+
+
 class mismatched_labels_table(models.Model):
     """Manual vs model label disagreements flagged for review.
 

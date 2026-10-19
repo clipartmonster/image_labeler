@@ -112,6 +112,16 @@ urlpatterns = [
         name="remove_line_sample_width",
     ),
     path(
+        "collect_color_depth_sample/",
+        views.collect_color_depth_sample,
+        name="collect_color_depth_sample",
+    ),
+    path(
+        "remove_color_depth_sample/",
+        views.remove_color_depth_sample,
+        name="remove_color_depth_sample",
+    ),
+    path(
         "label_line_width_as_invalid/",
         views.label_line_width_as_invalid,
         name="label_line_width_as_invalid",

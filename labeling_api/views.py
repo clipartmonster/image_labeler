@@ -5095,6 +5095,111 @@ def remove_line_width_sample(request: Request) -> JsonResponse:
 @csrf_exempt
 @api_authorization
 @api_view(["POST"])
+def collect_color_depth_sample(request: Request) -> JsonResponse:
+    """Save one Color Depth (Scale) flood-fill sample (or a skip marker).
+
+    Args:
+        request (Request): POST body. ``asset_id``, ``sample_index``, ``labeler_id``,
+        ``label_type`` (``sampled`` | ``skip``), optional ``layer_type``
+        (``shade`` | ``highlight``), ``color_hex``, ``x_coord``, ``y_coord``,
+        ``pixel_count``, ``tolerance``, ``image_width``, ``image_height``,
+        ``scaled_width``, ``scaled_height``.
+
+    Returns:
+        JsonResponse: ``status``, ``saved_id``, ``explanation``.
+    """
+    label_type = (request.data.get("label_type") or "sampled").strip().lower()
+    if label_type not in ("sampled", "skip"):
+        return JsonResponse(
+            {"status": "failed", "explanation": "label_type must be sampled or skip"},
+            status=400,
+        )
+
+    entry = color_depth_scale_responses(
+        asset_id=request.data.get("asset_id"),
+        sample_index=request.data.get("sample_index"),
+        labeler_id=request.data.get("labeler_id"),
+        color_hex=request.data.get("color_hex"),
+        label_type=label_type,
+        layer_type=request.data.get("layer_type"),
+        x_coord=request.data.get("x_coord"),
+        y_coord=request.data.get("y_coord"),
+        pixel_count=request.data.get("pixel_count"),
+        tolerance=request.data.get("tolerance"),
+        image_width=request.data.get("image_width"),
+        image_height=request.data.get("image_height"),
+        scaled_width=request.data.get("scaled_width"),
+        scaled_height=request.data.get("scaled_height"),
+    )
+    entry.save()
+
+    return JsonResponse(
+        {
+            "status": "success",
+            "saved_id": entry.id,
+            "explanation": f"recorded color depth sample for asset {entry.asset_id}",
+        },
+        safe=False,
+    )
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["POST"])
+def remove_color_depth_sample(request: Request) -> JsonResponse:
+    """Delete Color Depth samples by row id, or all samples for an asset/labeler.
+
+    Args:
+        request (Request): POST body. Either ``saved_id``, or
+        ``asset_id`` + ``labeler_id`` + optional ``sample_index``. If
+        ``sample_index`` is omitted, all rows for that asset/labeler are removed.
+
+    Returns:
+        JsonResponse: ``status``, ``deleted``, ``explanation``.
+    """
+    saved_id = request.data.get("saved_id")
+    if saved_id is not None:
+        deleted, _ = color_depth_scale_responses.objects.filter(id=saved_id).delete()
+        return JsonResponse(
+            {
+                "status": "success",
+                "deleted": deleted,
+                "explanation": f"removed color depth sample id={saved_id}",
+            },
+            safe=False,
+        )
+
+    asset_id = request.data.get("asset_id")
+    labeler_id = request.data.get("labeler_id")
+    sample_index = request.data.get("sample_index", None)
+    if asset_id is None or not labeler_id:
+        return JsonResponse(
+            {
+                "status": "failed",
+                "explanation": "saved_id or asset_id+labeler_id required",
+            },
+            status=400,
+        )
+
+    qs = color_depth_scale_responses.objects.filter(
+        asset_id=asset_id, labeler_id=labeler_id
+    )
+    if sample_index is not None:
+        qs = qs.filter(sample_index=sample_index)
+    deleted, _ = qs.delete()
+    return JsonResponse(
+        {
+            "status": "success",
+            "deleted": deleted,
+            "explanation": f"removed {deleted} color depth sample(s)",
+        },
+        safe=False,
+    )
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["POST"])
 def label_line_width_as_invalid(request: Request) -> JsonResponse:
     """Clear samples for an asset/labeler and record an invalid line-width placeholder row.
 
