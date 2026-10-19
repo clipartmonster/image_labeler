@@ -194,6 +194,9 @@
             {% elif a.task_type == "line_width_type" and a.rule_index == 2 %}
                 <a href="/label_images/measure_line_widths/?labeler_id={{ request.user.username }}&rule_indexes=%5B{{ a.rule_index }}%5D&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}"
                    class="lb-btn lb-btn-label">Measure</a>
+            {% elif a.task_type == "color_fill_type" and a.rule_index == 5 %}
+                <a href="/label_images/label_color_depth/?labeler_id={{ request.user.username }}&rule_indexes=%5B{{ a.rule_index }}%5D&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}"
+                   class="lb-btn lb-btn-label">Sample</a>
             {% else %}
                 <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}"
                    class="lb-btn lb-btn-label">Label</a>

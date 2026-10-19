@@ -333,6 +333,69 @@ def measure_line_widths(request):
 
 
 @login_required
+def label_color_depth(request):
+    """One-image Color Depth (Scale) labeling with flood-fill sampling.
+
+    Mirrors ``measure_line_widths``: one asset at a time, a 3×3 section grid that
+    changes color as the labeler samples shade/highlight layers in each panel.
+    """
+    labeler_id = request.GET.get("labeler_id", request.user.username)
+    batch_id = request.GET.get("batch_id", 1)
+    large_sub_batch = request.GET.get("large_sub_batch", 1)
+
+    rule_indexes_raw = request.GET.get("rule_indexes", "[]")
+    try:
+        rule_indexes = json.loads(rule_indexes_raw)
+    except (json.JSONDecodeError, TypeError):
+        rule_indexes = rule_indexes_raw
+    if not isinstance(rule_indexes, list):
+        rule_indexes = [rule_indexes]
+    rule_index = int(rule_indexes[0]) if rule_indexes else int(request.GET.get("rule_index", 5))
+
+    header = {
+        "Content-Type": "application/json",
+        "Authorization": settings.API_ACCESS_KEY,
+    }
+
+    task_type = "color_fill_type"
+    api_url = f"{settings.LABELING_API_BASE_URL}/get_asset_batch/"
+    data = {
+        "batch_type": "large_sub_batch",
+        "large_sub_batch": large_sub_batch,
+        "batch_id": batch_id,
+        "task_type": task_type,
+        "rule_index": rule_index,
+        "labeler_id": labeler_id,
+    }
+    response = requests.get(api_url, json=data, headers=header)
+    assets_to_label = json.loads(response.content)["asset_batch"]
+
+    rules_api_url = f"{settings.LABELING_API_BASE_URL}/get_labelling_rules/"
+    rules_data = {"task_type": task_type, "rule_indexes": [rule_index]}
+    rules_response = requests.get(rules_api_url, json=rules_data, headers=header)
+    labelling_rules = dict(json.loads(rules_response.content))["labelling_rules"]
+    labelling_rules = sorted(labelling_rules, key=lambda x: x["rule_index"])
+
+    from .models import RuleGuide
+    rule_guides = list(
+        RuleGuide.objects.filter(task_type=task_type, rule_index=rule_index)
+        .prefetch_related("directives", "reference_images", "directives__reference_images")
+    )
+
+    return render(request, "label_color_depth.html", {
+        "assets_to_label": assets_to_label,
+        "labeler_id": labeler_id,
+        "rule_index": rule_index,
+        "batch_id": batch_id,
+        "large_sub_batch": large_sub_batch,
+        "total_count": len(assets_to_label),
+        "task_type": task_type,
+        "labelling_rules": labelling_rules,
+        "rule_guides": rule_guides,
+    })
+
+
+@login_required
 def select_primary_colors(request):
 
     api_url = f"{settings.LABELING_API_BASE_URL}/get_asset_batch/"
@@ -903,6 +966,27 @@ def mturk_redirect(request):
     is_training = request.GET.get("is_training", "0") == "1"
 
     rule_index = int(rule_indexes[0])
+
+    # Color Depth (Scale) uses the one-image flood-fill sampler, same idea as
+    # measure_line_widths — keep old mturk_redirect links working by bouncing here.
+    if (
+        task_type == "color_fill_type"
+        and rule_index == 5
+        and not is_training
+        and labeler_source != "reconcile_label"
+    ):
+        from django.http import HttpResponseRedirect
+        from urllib.parse import urlencode
+
+        qs = urlencode(
+            {
+                "labeler_id": labeler_id,
+                "rule_indexes": json.dumps([rule_index]),
+                "batch_id": batch_id or "",
+                "large_sub_batch": large_sub_batch or "",
+            }
+        )
+        return HttpResponseRedirect(f"/label_images/label_color_depth/?{qs}")
 
     assignment_id = request.GET.get("assignmentId", None)
     hit_id = request.GET.get("hitId")
