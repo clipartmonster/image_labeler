@@ -4221,6 +4221,7 @@ def style_analysis(request):
     # Totals describe the rows actually on screen, so narrowing to one art type
     # re-measures the model on just that type.
     totals = _style_totals(terms_df, payload.get("cv_run_id"), header)
+    platform_metrics = _style_platform_metrics(terms_df, payload.get("cv_run_id"), header)
 
     # Built before the NaN scrub below, which turns the numeric columns into
     # objects and would break the arithmetic.
@@ -4243,6 +4244,7 @@ def style_analysis(request):
     data = {
         "terms": terms_df.to_dict(orient="records") if not terms_df.empty else [],
         "totals": totals,
+        "platform_metrics": platform_metrics,
         "total_terms": total_terms,
         "priority_counts": priority_counts,
         "priority_order": STYLE_PRIORITY_ORDER,
@@ -4615,6 +4617,25 @@ def _style_totals(terms_df, cv_run_id, header):
         "positives": auc.get("positives", 0),
         "negatives": auc.get("negatives", 0),
     }
+
+
+def _style_platform_metrics(terms_df, cv_run_id, header):
+    """Metrics split by same / different / Shutterstock-vs-other platforms.
+
+    Scoped to the terms in view, like the totals. Returns None when there's
+    nothing in view or the call fails, so the rest of the page still renders.
+    """
+    if terms_df.empty:
+        return None
+    try:
+        response = requests.get(
+            f"{settings.LABELING_API_BASE_URL}/get_style_platform_metrics/",
+            json={"cv_run_id": cv_run_id, "terms": terms_df["term"].tolist()},
+            headers=header,
+        )
+        return json.loads(response.content)
+    except (requests.RequestException, ValueError):
+        return None
 
 
 def _sort_style_terms(terms_df, sort_by):

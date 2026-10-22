@@ -148,6 +148,13 @@
                 {% endif %}
             </div>
 
+            <div class='pair-meta'>
+                <span>labelers:</span>
+                {% for r in pair.labeler_responses %}
+                <span class='cv-badge'>{{r.labeler_id}}: {{r.response}}</span>
+                {% endfor %}
+            </div>
+
             <!-- No crossOrigin here: nothing on this page reads the pixels back, and
                  hosts that omit CORS headers reject the request outright. -->
             <div class='pair-images'>

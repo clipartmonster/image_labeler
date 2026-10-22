@@ -56,6 +56,14 @@
     font-family:Roboto, sans-serif; }
 .sa-check .sa-check-n { color:#8fa8a8; font-size:11px; margin-left:auto; }
 
+/* Inter-platform metrics panel. */
+.sa-platform { margin:0 0 14px; background:#122324; border:1px solid #3a4a4a;
+    border-radius:10px; padding:10px 14px; }
+.sa-platform-hd { color:#8fd0d0; font-weight:700; font-size:13px; margin-bottom:6px;
+    font-family:Roboto, sans-serif; }
+.sa-platform-table { table-layout:auto; }
+.sa-platform-table th { position:static; }
+
 /* Generated SQL panel. */
 .sa-sql { margin:4px 0 14px; background:#122324; border:1px solid #3a4a4a;
     border-radius:10px; padding:10px 14px; font-family:Roboto, sans-serif; }
@@ -219,6 +227,48 @@
             </div>
             {% endfor %}
         </div>
+
+        {% if platform_metrics.segments %}
+        <div class='sa-platform'>
+            <div class='sa-platform-hd'>Inter-platform accuracy</div>
+            <table class='sa-table sa-platform-table'>
+                <thead>
+                    <tr>
+                        <th class='sa-left'>Pairs</th>
+                        <th>Scored</th>
+                        <th title='Pairs labeled same style / not same style'>Same / diff</th>
+                        <th>Accuracy</th>
+                        <th>Precision</th>
+                        <th>Recall</th>
+                        <th>F1</th>
+                        <th>AUC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in platform_metrics.segments %}
+                    <tr>
+                        <td class='sa-left'>{{ s.label }}</td>
+                        <td>{{ s.pairs }}</td>
+                        <td>{{ s.positives }} / {{ s.negatives }}</td>
+                        <td>{% if s.accuracy != None %}{{ s.accuracy|floatformat:3 }}{% else %}<span class='sa-muted'>—</span>{% endif %}</td>
+                        <td>{% if s.precision != None %}{{ s.precision|floatformat:3 }}{% else %}<span class='sa-muted'>—</span>{% endif %}</td>
+                        <td>{% if s.recall != None %}{{ s.recall|floatformat:3 }}{% else %}<span class='sa-muted'>—</span>{% endif %}</td>
+                        <td>{% if s.f1 != None %}{{ s.f1|floatformat:3 }}{% else %}<span class='sa-muted'>—</span>{% endif %}</td>
+                        <td>{% if s.auc != None %}{{ s.auc|floatformat:3 }}{% else %}<span class='sa-muted'>—</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p class='sa-help'>
+                Platform comes from each asset's scraping log. "Shutterstock vs. other" is
+                the different-platform pairs where exactly one image is from Shutterstock.
+                Scoped to the terms in view.
+                {% if platform_metrics.unresolved %}
+                {{ platform_metrics.unresolved }} pair(s) with an unknown platform are left out.
+                {% endif %}
+            </p>
+        </div>
+        {% endif %}
 
         <details class='sa-sql' {% if group_sql %}open{% endif %}>
             <summary>

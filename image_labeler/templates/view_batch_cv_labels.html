@@ -201,6 +201,14 @@
                     {% endif %}
                 </div>
                 <div class='cv-badges'>
+                    <span>labelers:</span>
+                    {% for r in asset.labeler_responses %}
+                    <span class='cv-badge cv-label-{{r.response}}'>{{r.labeler_id}}: {{r.response}}</span>
+                    {% empty %}
+                    <span class='cv-help' style='margin:0'>no labeler responses</span>
+                    {% endfor %}
+                </div>
+                <div class='cv-badges'>
                     <span>suspicion: {{asset.cv_suspicion|floatformat:3}}</span>
                     <span>threshold: {{asset.cv_threshold}}</span>
                     <span>fold: {{asset.cv_fold}}</span>
