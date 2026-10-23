@@ -3585,9 +3585,9 @@ def admin_performance(request):
     from django.contrib.auth.models import User
 
     labelers = list(
-        User.objects.filter(is_staff=True, is_superuser=False)
+        User.objects.filter(Q(is_staff=True) | Q(is_superuser=True))
         .order_by("username")
-        .values("id", "username")
+        .values("id", "username", "is_superuser")
     )
     return render(
         request,
@@ -3596,6 +3596,79 @@ def admin_performance(request):
             "labelers_json": json.dumps(labelers, default=str),
         },
     )
+
+
+# Gaps between consecutive responses longer than this count as a break, not work.
+ADMIN_IDLE_GAP_SECONDS = 300
+
+
+def _admin_work_rows(user, rule_titles):
+    """Per-rule work rows for an admin, built from their responses.
+
+    Admins have no ``BatchAssignment`` (and so no session telemetry). ``labels``
+    is distinct assets (or pairs) answered; ``hours`` is estimated by summing the
+    gaps between consecutive responses, ignoring gaps over
+    ``ADMIN_IDLE_GAP_SECONDS``. Each gap is credited to the later response's rule.
+    """
+    from labeling_api.models import prompt_responses, style_prompt_responses
+
+    frames = []
+    single = pd.DataFrame(
+        list(
+            prompt_responses.objects.filter(labeler_id__iexact=user.username)
+            .exclude(prompt_response="none")
+            .values_list("task_type", "rule_index", "asset_id", "datetime_created")
+        ),
+        columns=["task_type", "rule_index", "item", "ts"],
+    )
+    frames.append(single)
+    pairs = pd.DataFrame(
+        list(
+            style_prompt_responses.objects.filter(
+                labeler_id__iexact=user.username
+            ).values_list(
+                "task_type", "rule_index", "asset_id_1", "asset_id_2", "datetime_created"
+            )
+        ),
+        columns=["task_type", "rule_index", "a1", "a2", "ts"],
+    )
+    if not pairs.empty:
+        pairs["item"] = pairs["a1"].astype(str) + "_" + pairs["a2"].astype(str)
+        frames.append(pairs[["task_type", "rule_index", "item", "ts"]])
+
+    df = pd.concat(frames, ignore_index=True)
+    if df.empty:
+        return []
+    df["item"] = df["item"].astype(str)
+    df["ts"] = pd.to_datetime(df["ts"], utc=True)
+    df = df.sort_values("ts")
+    gap = df["ts"].diff().dt.total_seconds()
+    df["work_s"] = gap.where(gap <= ADMIN_IDLE_GAP_SECONDS, 0).fillna(0)
+
+    rows = []
+    for (task_type, rule_index), g in df.groupby(["task_type", "rule_index"]):
+        labels = g["item"].nunique()
+        hours = round(g["work_s"].sum() / 3600, 2)
+        rows.append(
+            {
+                "task_type": task_type,
+                "rule_index": int(rule_index),
+                "feature": rule_titles.get((task_type, int(rule_index)), ""),
+                "batch_id": "all",
+                "sub_batch": "all",
+                "labels": int(labels),
+                "hours": hours,
+                "throughput": round(labels / hours, 1) if hours > 0 else None,
+                "deadline": "",
+                "deadline_iso": "",
+                "assignment_id": None,
+                "completed": True,
+                "on_time": None,
+                "is_admin_row": True,
+                "last_labeled": g["ts"].max().strftime("%b %d, %Y"),
+            }
+        )
+    return sorted(rows, key=lambda r: -r["labels"])
 
 
 @admin_required_ajax
@@ -3763,6 +3836,13 @@ def admin_performance_data(request):
                 ),
             }
         )
+
+    # Admins label without batch assignments, so their work comes from responses.
+    if user.is_superuser:
+        admin_rows = _admin_work_rows(user, rule_titles)
+        work_rows.extend(admin_rows)
+        total_work_labels += sum(r["labels"] for r in admin_rows)
+        total_work_hours += sum(r["hours"] for r in admin_rows)
 
     # Work summary — use accumulated totals so line_width batches are included
     w_throughput = (
