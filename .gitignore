@@ -1,3 +1,9 @@
 .venv/
 
 .env
+
+# Generated images and agent scratch files
+*.png
+*_cursor*
+# Site UI icons are part of the app
+!image_labeler/static/images/**/*.png

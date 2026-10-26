@@ -1882,6 +1882,23 @@ def _rule_cv_for_viewing(
     )
     scores = scores.replace({np.nan: None})
 
+    # Each labeler's latest answer per asset, for just the rows on this page.
+    by_asset = {}
+    for asset_id, labeler_id, response in (
+        prompt_responses.objects.filter(
+            task_type=task_type,
+            rule_index=rule_index,
+            asset_id__in=[int(a) for a in scores["asset_id"] if a.isdigit()],
+        )
+        .exclude(prompt_response="none")
+        .order_by("datetime_created")
+        .values_list("asset_id", "labeler_id", "prompt_response")
+    ):
+        by_asset.setdefault(str(asset_id), {})[labeler_id] = response
+    scores["labeler_responses"] = scores["asset_id"].map(
+        lambda a: _labeler_response_list(by_asset.get(a, {}))
+    )
+
     return payload(
         scores[
             [
@@ -1890,10 +1907,19 @@ def _rule_cv_for_viewing(
                 "cv_prob", "cv_pred", "cv_correct", "cv_suspicion",
                 "cv_flag", "cv_bucket", "cv_threshold", "cv_fold",
                 "cv_date_scored", "cv_disagrees", "cv_stale",
+                "labeler_responses",
             ]
         ].to_dict(orient="records"),
         **counts,
     )
+
+
+def _labeler_response_list(answers):
+    """``{labeler_id: answer}`` as a list of dicts, ordered by labeler."""
+    return [
+        {"labeler_id": labeler, "response": answer}
+        for labeler, answer in sorted(answers.items(), key=lambda kv: kv[0].lower())
+    ]
 
 
 @csrf_exempt
@@ -2006,7 +2032,10 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index, cv_run_id=None):
         list(
             style_prompt_responses.objects.filter(
                 task_type=task_type, rule_index=rule_index
-            ).values("asset_id_1", "asset_id_2", "prompt_response", "datetime_created")
+            ).values(
+                "asset_id_1", "asset_id_2", "prompt_response", "datetime_created",
+                "labeler_id",
+            )
         )
     )
     if responses.empty:
@@ -2016,6 +2045,15 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index, cv_run_id=None):
     responses = responses[responses["resp"].isin(PAIR_CHOICES)]
     if responses.empty:
         return payload([])
+
+    # Each labeler's latest answer per pair.
+    by_pair = {}
+    for a1, a2, labeler_id, resp in (
+        responses.sort_values("datetime_created")
+        [["asset_id_1", "asset_id_2", "labeler_id", "resp"]]
+        .itertuples(index=False)
+    ):
+        by_pair.setdefault((a1, a2), {})[labeler_id] = resp
 
     counts = responses.groupby(key + ["resp"]).size().rename("n").reset_index()
     counts["max_n"] = counts.groupby(key)["n"].transform("max")
@@ -2141,6 +2179,10 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index, cv_run_id=None):
     labels["categories"] = labels["terms"].map(
         lambda terms: sorted({c for t in terms for c in categories_for_term(t)})
     )
+    labels["labeler_responses"] = [
+        _labeler_response_list(by_pair.get((a1, a2), {}))
+        for a1, a2 in zip(labels["asset_id_1"], labels["asset_id_2"])
+    ]
 
     return payload(
         labels[
@@ -2149,7 +2191,7 @@ def _pair_batch_for_viewing(task_type, rule_index, batch_index, cv_run_id=None):
                 "label", "agree_status", "samples", "date_labeled",
                 "cv_prob", "cv_pred", "cv_model_label", "cv_flag", "cv_correct",
                 "cv_suspicion", "cv_scored_label", "cv_disagrees", "cv_stale",
-                "terms", "categories",
+                "terms", "categories", "labeler_responses",
             ]
         ].to_dict(orient="records")
     )
@@ -2481,6 +2523,161 @@ def get_style_auc(request: Request) -> JsonResponse:
         "pairs": len(scores),
         "positives": positives,
         "negatives": len(scores) - positives,
+    })
+
+
+def _asset_platforms(asset_ids):
+    """Platform name per asset, from prod's scraping log.
+
+    content.assets on the default database is a sparse copy, so the lookup has to
+    run on prod. Assets without a scraping log entry are simply absent.
+    """
+    platforms = {}
+    ids = sorted({int(a) for a in asset_ids if a})
+    with _prod_cursor() as c:
+        c.execute("SET statement_timeout = '300s'")
+        for start in range(0, len(ids), 20000):
+            c.execute(
+                """
+                SELECT a.asset_id, p.platform
+                FROM content.assets a
+                JOIN ops.scraping_log l ON l.log_id = a.log_id
+                JOIN platform.platform p ON p.platform_id = l.platform_id
+                WHERE a.asset_id = ANY(%s)
+                """,
+                [ids[start:start + 20000]],
+            )
+            platforms.update(c.fetchall())
+    return platforms
+
+
+def _style_pair_platform_rows(cv_run_id):
+    """Every pair one run scored, with its term and both assets' platforms.
+
+    The platform lookup reads ~40k assets from prod (~25s), and a finished run
+    never changes, so the result is cached per run for a week.
+
+    Returns:
+        list: ``[term, prob, y, pred, platform_1, platform_2]`` per pair.
+    """
+    if not cv_run_id:
+        return []
+
+    from django.core.cache import cache
+
+    cache_key = f"style_pair_platforms_v1::{cv_run_id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with connection.cursor() as c:
+        c.execute(
+            f"""
+            WITH cv AS (
+                SELECT DISTINCT ON (pair_id) pair_id, asset_id_1, asset_id_2,
+                       prob, y, pred
+                FROM "label_data.style_cv_scores"
+                WHERE cv_run_id = %s
+                ORDER BY pair_id
+            ),
+            pair_group AS ({_PAIR_GROUP_SQL}),
+            group_term AS ({_GROUP_TERM_SQL})
+            SELECT gt.term, cv.prob, cv.y, cv.pred, cv.asset_id_1, cv.asset_id_2
+            FROM cv
+            JOIN pair_group pg ON pg.pair_id = cv.pair_id
+            JOIN group_term gt ON gt.group_id = pg.group_id
+            """,
+            [cv_run_id],
+        )
+        pairs = c.fetchall()
+
+    platforms = _asset_platforms(a for p in pairs for a in (p[4], p[5]))
+    rows = [
+        [
+            term,
+            float(prob) if prob is not None else None,
+            int(y) if y is not None else None,
+            int(pred) if pred is not None else None,
+            platforms.get(int(a1)) if a1 else None,
+            platforms.get(int(a2)) if a2 else None,
+        ]
+        for term, prob, y, pred, a1, a2 in pairs
+    ]
+
+    cache.set(cache_key, rows, timeout=7 * 24 * 60 * 60)
+    return rows
+
+
+def _pair_metrics(rows):
+    """Accuracy, precision, recall, F1 and AUC over ``[.., prob, y, pred, ..]`` rows."""
+    scored = [r for r in rows if r[2] is not None and r[3] is not None]
+    tp = sum(1 for r in scored if r[3] == 1 and r[2] == 1)
+    fp = sum(1 for r in scored if r[3] == 1 and r[2] == 0)
+    fn = sum(1 for r in scored if r[3] == 0 and r[2] == 1)
+    tn = sum(1 for r in scored if r[3] == 0 and r[2] == 0)
+    precision = _ratio(tp, tp + fp)
+    recall = _ratio(tp, tp + fn)
+    return {
+        "pairs": len(scored),
+        "positives": tp + fn,
+        "negatives": fp + tn,
+        "accuracy": _ratio(tp + tn, len(scored)),
+        "precision": precision,
+        "recall": recall,
+        "f1": (
+            _ratio(2 * precision * recall, precision + recall)
+            if precision and recall else None
+        ),
+        "auc": _auc([(r[1], r[2]) for r in scored if r[1] is not None]),
+    }
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["GET", "POST"])
+def get_style_platform_metrics(request: Request) -> JsonResponse:
+    """Model metrics for one run, split by whether a pair's two platforms match.
+
+    Segments: both images from the same platform, from different platforms, and
+    the different-platform pairs where exactly one image is from Shutterstock.
+
+    Args:
+        request (Request): ``cv_run_id`` and ``terms`` (list; omitted or empty
+            means every term the run scored).
+
+    Returns:
+        JsonResponse: ``segments`` (each with ``key``, ``label`` and the metrics
+        from :func:`_pair_metrics`) and ``unresolved`` (pairs where either
+        platform is unknown, left out of every segment).
+
+    Frontend:
+        ``image_labeler.label_images.views.style_analysis`` -> ``style_analysis.html``.
+    """
+    data = request.data or request.GET
+    cv_run_id = data.get("cv_run_id")
+    terms = data.get("terms")
+    if isinstance(terms, str):
+        terms = [terms]
+
+    rows = _style_pair_platform_rows(cv_run_id)
+    if terms:
+        wanted = set(terms)
+        rows = [r for r in rows if r[0] in wanted]
+
+    known = [r for r in rows if r[4] and r[5]]
+    same = [r for r in known if r[4] == r[5]]
+    different = [r for r in known if r[4] != r[5]]
+    shutterstock = [r for r in different if "shutterstock" in (r[4], r[5])]
+
+    return JsonResponse({
+        "segments": [
+            {"key": "same", "label": "Same platform", **_pair_metrics(same)},
+            {"key": "different", "label": "Different platforms",
+             **_pair_metrics(different)},
+            {"key": "shutterstock_vs_other", "label": "Shutterstock vs. other",
+             **_pair_metrics(shutterstock)},
+        ],
+        "unresolved": len(rows) - len(known),
     })
 
 

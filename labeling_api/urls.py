@@ -74,6 +74,11 @@ urlpatterns = [
     path("set_pair_label/", views.set_pair_label, name="set_pair_label"),
     path("get_style_analysis/", views.get_style_analysis, name="get_style_analysis"),
     path("get_style_auc/", views.get_style_auc, name="get_style_auc"),
+    path(
+        "get_style_platform_metrics/",
+        views.get_style_platform_metrics,
+        name="get_style_platform_metrics",
+    ),
     path("get_model_coverage/", views.get_model_coverage, name="get_model_coverage"),
     path("get_predictions/", views.get_predictions, name="get_predictions"),
     path(
