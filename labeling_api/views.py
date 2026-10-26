@@ -14,7 +14,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Subquery, OuterRef
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
-from django.db import connection
+from django.db import IntegrityError, connection
 from rest_framework.decorators import api_view
 
 import requests
@@ -681,6 +681,11 @@ def collect_label(request: Request) -> JsonResponse:
     return JsonResponse(result, safe=False)
 
 
+def _labeler_may_repeat(labeler_id):
+    """This account may label the same asset again inside a batch."""
+    return str(labeler_id or "").strip().lower() == "steve.green@grumpyoldmanstudios.com"
+
+
 @csrf_exempt
 @api_authorization
 @api_view(["POST"])
@@ -722,7 +727,7 @@ def collect_prompt_internal_source(request: Request) -> JsonResponse:
     # Admins and reconcile labels are exempt so they can re-label.
     is_admin = hasattr(request, "user") and request.user.is_authenticated and request.user.is_superuser
     is_reconcile = labeler_source == "reconcile_label"
-    if not is_admin and not is_reconcile:
+    if not is_admin and not is_reconcile and not _labeler_may_repeat(labeler_id):
         already_exists = prompt_responses.objects.filter(
             asset_id=asset_id, task_type=task_type,
             rule_index=rule_index, labeler_id=labeler_id,
@@ -799,7 +804,7 @@ def collect_style_prompt(request: Request) -> JsonResponse:
     # labels are exempt so they can re-label.
     is_admin = hasattr(request, "user") and request.user.is_authenticated and request.user.is_superuser
     is_reconcile = labeler_source == "reconcile_label"
-    if not is_admin and not is_reconcile:
+    if not is_admin and not is_reconcile and not _labeler_may_repeat(labeler_id):
         already_exists = style_prompt_responses.objects.filter(
             asset_id_1=asset_id_1, asset_id_2=asset_id_2,
             task_type=task_type, rule_index=rule_index, labeler_id=labeler_id,
@@ -908,6 +913,13 @@ def _check_batch_complete(labeler_id, task_type, rule_index):
         if task_type == "line_width_type":
             labeled_ids = set(
                 line_width_sample_table.objects.filter(
+                    asset_id__in=batch_asset_ids,
+                    labeler_id=labeler_id,
+                ).values_list("asset_id", flat=True).distinct()
+            )
+        elif _uses_color_depth_path_labels(a.task_type, a.rule_index, a.batch_id):
+            labeled_ids = set(
+                color_depth_scale_responses.objects.filter(
                     asset_id__in=batch_asset_ids,
                     labeler_id=labeler_id,
                 ).values_list("asset_id", flat=True).distinct()
@@ -3338,6 +3350,22 @@ def get_model_coverage(request: Request) -> JsonResponse:
     })
 
 
+def _uses_color_depth_path_labels(task_type, rule_index, batch_id) -> bool:
+    """Color Depth Scale batches after batch 1 are counted from path samples.
+
+    Batch 1 keeps ``prompt_responses``. Batch 2 and every later batch use
+    ``color_depth_scale_responses``, one label per labeler who saved a point.
+    """
+    try:
+        return (
+            str(task_type) == "color_fill_type"
+            and int(rule_index) == 5
+            and int(batch_id) >= 2
+        )
+    except (TypeError, ValueError):
+        return False
+
+
 def _is_pair_task(task_type, rule_index):
     """True for pair-comparison labeling (currently same_style rule 2).
 
@@ -3413,6 +3441,8 @@ def get_asset_batch(request: Request) -> JsonResponse:
     # Fallback: accept labeler_id from the request data (used by internal API calls)
     if not labeler_username:
         labeler_username = request.data.get("labeler_id") or request.GET.get("labeler_id")
+    if _labeler_may_repeat(labeler_username):
+        labeler_username = None
 
     # Pair-comparison tasks (same_style rule 2) serve image pairs instead of
     # single assets: pull from selected_pair_labels and exclude pairs this labeler
@@ -3471,6 +3501,13 @@ def get_asset_batch(request: Request) -> JsonResponse:
         if task_type == "line_width_type":
             already_labeled = set(
                 line_width_sample_table.objects.filter(
+                    asset_id__in=batch_asset_ids,
+                    labeler_id=labeler_username,
+                ).values_list("asset_id", flat=True).distinct()
+            )
+        elif _uses_color_depth_path_labels(task_type, rule_index, batch_id):
+            already_labeled = set(
+                color_depth_scale_responses.objects.filter(
                     asset_id__in=batch_asset_ids,
                     labeler_id=labeler_username,
                 ).values_list("asset_id", flat=True).distinct()
@@ -3971,7 +4008,7 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
     """
     from django.core.cache import cache
 
-    cache_key = f"session_opts_v2::{task_type}::{'excl_flags' if remove_flagged_assets else 'incl_flags'}"
+    cache_key = f"session_opts_v3::{task_type}::{'excl_flags' if remove_flagged_assets else 'incl_flags'}"
     cached = cache.get(cache_key)
     if cached is not None:
         logger.debug("_build_session_options cache hit: %s", cache_key)
@@ -4096,6 +4133,38 @@ def _build_session_options(task_type: str, remove_flagged_assets: bool = True) -
                 "one_label",
             ]
         )
+
+    # Color Depth Scale batch 2+ stores the real labels in the path table.
+    # Drop prompt-row counts for those assets and count distinct labelers instead.
+    # Batch 1 is unchanged.
+    if task_type == "color_fill_type" and not selected_assets_new.empty:
+        path_assets = selected_assets_new[
+            (selected_assets_new["rule_index"].astype(int) == 5)
+            & (selected_assets_new["batch_id"].astype(int) >= 2)
+        ]
+        path_ids = path_assets["asset_id"].tolist()
+        if path_ids:
+            if not asset_label_counts.empty:
+                prompt_counted = (
+                    asset_label_counts["asset_id"].isin(path_ids)
+                    & (asset_label_counts["rule_index"].astype(int) == 5)
+                )
+                asset_label_counts = asset_label_counts.loc[~prompt_counted].copy()
+            depth_rows = list(
+                color_depth_scale_responses.objects.filter(asset_id__in=path_ids)
+                .values("asset_id")
+                .annotate(_cnt=Count("labeler_id", distinct=True))
+            )
+            if depth_rows:
+                depth_df = pd.DataFrame(depth_rows).rename(columns={"_cnt": "count"})
+                depth_df["rule_index"] = 5
+                depth_df["task_type"] = task_type
+                depth_df["completed"] = (depth_df["count"] >= 2).astype(int)
+                depth_df["one_label"] = (depth_df["count"] == 1).astype(int)
+                asset_label_counts = pd.concat(
+                    [asset_label_counts, depth_df],
+                    ignore_index=True,
+                )
 
     # ── merge counts onto asset list ─────────────────────────────────────────
     asset_list = selected_assets_new.merge(
@@ -5293,42 +5362,98 @@ def remove_line_width_sample(request: Request) -> JsonResponse:
 @api_authorization
 @api_view(["POST"])
 def collect_color_depth_sample(request: Request) -> JsonResponse:
-    """Save one Color Depth (Scale) flood-fill sample (or a skip marker).
+    """Save one clicked color on a Color Depth (Scale) path.
 
     Args:
-        request (Request): POST body. ``asset_id``, ``sample_index``, ``labeler_id``,
-        ``label_type`` (``sampled`` | ``skip``), optional ``layer_type``
-        (``shade`` | ``highlight``), ``color_hex``, ``x_coord``, ``y_coord``,
-        ``pixel_count``, ``tolerance``, ``image_width``, ``image_height``,
-        ``scaled_width``, ``scaled_height``.
+        request (Request): POST body. ``asset_id``, ``labeler_id``, ``path_index``,
+        ``point_index`` (0 is Main), optional ``path_kind`` (``highlight`` or
+        ``shade``), ``color_hex``, ``x_coord``, ``y_coord``, ``image_width``,
+        ``image_height``, optional ``pixel_count``. A skip sends
+        ``skipped_asset`` true and leaves the color fields empty.
 
     Returns:
         JsonResponse: ``status``, ``saved_id``, ``explanation``.
     """
-    label_type = (request.data.get("label_type") or "sampled").strip().lower()
-    if label_type not in ("sampled", "skip"):
+
+    def required_int(key):
+        raw = request.data.get(key)
+        if raw is None or raw == "":
+            raise ValueError(f"{key} is required")
+        return int(raw)
+
+    def optional_int(key):
+        raw = request.data.get(key)
+        if raw is None or raw == "":
+            return None
+        return int(raw)
+
+    skipped_raw = request.data.get("skipped_asset")
+    if isinstance(skipped_raw, bool):
+        skipped_asset = skipped_raw
+    else:
+        skipped_asset = str(skipped_raw or "").strip().lower() in ("1", "true", "t", "yes")
+
+    try:
+        asset_id = required_int("asset_id")
+        path_index = required_int("path_index")
+        point_index = required_int("point_index")
+        if skipped_asset:
+            x_coord = optional_int("x_coord")
+            y_coord = optional_int("y_coord")
+            image_width = optional_int("image_width")
+            image_height = optional_int("image_height")
+        else:
+            x_coord = required_int("x_coord")
+            y_coord = required_int("y_coord")
+            image_width = required_int("image_width")
+            image_height = required_int("image_height")
+        pixel_count = optional_int("pixel_count")
+    except (TypeError, ValueError) as exc:
         return JsonResponse(
-            {"status": "failed", "explanation": "label_type must be sampled or skip"},
+            {"status": "failed", "explanation": str(exc)},
+            status=400,
+        )
+
+    labeler_id = request.data.get("labeler_id")
+    color_hex = (request.data.get("color_hex") or "").strip() or None
+    path_kind = request.data.get("path_kind")
+    if isinstance(path_kind, str):
+        path_kind = path_kind.strip().lower() or None
+    if not labeler_id or (not skipped_asset and not color_hex):
+        return JsonResponse(
+            {"status": "failed", "explanation": "labeler_id and color_hex are required"},
+            status=400,
+        )
+    if path_kind not in (None, "highlight", "shade"):
+        return JsonResponse(
+            {"status": "failed", "explanation": "path_kind must be highlight, shade, or empty"},
             status=400,
         )
 
     entry = color_depth_scale_responses(
-        asset_id=request.data.get("asset_id"),
-        sample_index=request.data.get("sample_index"),
-        labeler_id=request.data.get("labeler_id"),
-        color_hex=request.data.get("color_hex"),
-        label_type=label_type,
-        layer_type=request.data.get("layer_type"),
-        x_coord=request.data.get("x_coord"),
-        y_coord=request.data.get("y_coord"),
-        pixel_count=request.data.get("pixel_count"),
-        tolerance=request.data.get("tolerance"),
-        image_width=request.data.get("image_width"),
-        image_height=request.data.get("image_height"),
-        scaled_width=request.data.get("scaled_width"),
-        scaled_height=request.data.get("scaled_height"),
+        asset_id=asset_id,
+        labeler_id=labeler_id,
+        path_index=path_index,
+        point_index=point_index,
+        path_kind=path_kind,
+        color_hex=color_hex,
+        x_coord=x_coord,
+        y_coord=y_coord,
+        image_width=image_width,
+        image_height=image_height,
+        pixel_count=pixel_count,
+        skipped_asset=skipped_asset,
     )
-    entry.save()
+    try:
+        entry.save()
+    except IntegrityError:
+        return JsonResponse(
+            {
+                "status": "failed",
+                "explanation": "a point already exists for this path and index",
+            },
+            status=409,
+        )
 
     return JsonResponse(
         {
@@ -5344,12 +5469,12 @@ def collect_color_depth_sample(request: Request) -> JsonResponse:
 @api_authorization
 @api_view(["POST"])
 def remove_color_depth_sample(request: Request) -> JsonResponse:
-    """Delete Color Depth samples by row id, or all samples for an asset/labeler.
+    """Delete Color Depth samples by row id, path, or asset/labeler.
 
     Args:
         request (Request): POST body. Either ``saved_id``, or
-        ``asset_id`` + ``labeler_id`` + optional ``sample_index``. If
-        ``sample_index`` is omitted, all rows for that asset/labeler are removed.
+        ``asset_id`` + ``labeler_id`` + optional ``path_index``. If
+        ``path_index`` is omitted, all rows for that asset/labeler are removed.
 
     Returns:
         JsonResponse: ``status``, ``deleted``, ``explanation``.
@@ -5368,7 +5493,7 @@ def remove_color_depth_sample(request: Request) -> JsonResponse:
 
     asset_id = request.data.get("asset_id")
     labeler_id = request.data.get("labeler_id")
-    sample_index = request.data.get("sample_index", None)
+    path_index = request.data.get("path_index", None)
     if asset_id is None or not labeler_id:
         return JsonResponse(
             {
@@ -5381,8 +5506,8 @@ def remove_color_depth_sample(request: Request) -> JsonResponse:
     qs = color_depth_scale_responses.objects.filter(
         asset_id=asset_id, labeler_id=labeler_id
     )
-    if sample_index is not None:
-        qs = qs.filter(sample_index=sample_index)
+    if path_index is not None:
+        qs = qs.filter(path_index=path_index)
     deleted, _ = qs.delete()
     return JsonResponse(
         {

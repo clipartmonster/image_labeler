@@ -1082,35 +1082,39 @@ class line_width_sample_table(models.Model):
 
 
 class color_depth_scale_responses(models.Model):
-    """Flood-fill layer samples for Color Depth (Scale) labeling.
+    """One clicked color on a Color Depth (Scale) path.
 
-    **Table:** ``label_data.color_depth_scale_responses``
+    **Table:** ``public."label_data.color_depth_scale_responses"``
+    Django quotes ``db_table`` as a single identifier, so this is not a
+    ``label_data`` schema table.
 
-    Each row is one shade/highlight selection (or a skip marker). Seed color,
-    tolerance, native click coords, and image/display sizes are enough to
-    recreate the whole-image similar-color fill.
+    ``point_index`` 0 is Main. Later points are depth steps 1, 2, 3.
+    ``path_kind`` is ``highlight`` or ``shade`` once a second color is chosen.
+    Ordering a path by ``point_index`` rebuilds the card and the markers.
+
+    A skip is one row with ``skipped_asset`` true, ``path_index`` 0, and no color.
+    Point rows keep ``skipped_asset`` false.
     """
 
     id = models.AutoField(primary_key=True)
     asset_id = models.BigIntegerField()
-    sample_index = models.IntegerField()
-    labeler_id = models.CharField()
+    labeler_id = models.TextField()
     datetime_created = models.DateTimeField(auto_now_add=True)
+    path_index = models.IntegerField()
+    point_index = models.IntegerField()
+    path_kind = models.CharField(max_length=16, null=True, blank=True)
     color_hex = models.CharField(max_length=7, null=True, blank=True)
-    label_type = models.CharField()  # sampled | skip
-    layer_type = models.CharField(null=True, blank=True)  # shade | highlight
     x_coord = models.IntegerField(null=True, blank=True)
     y_coord = models.IntegerField(null=True, blank=True)
-    pixel_count = models.IntegerField(null=True, blank=True)
-    tolerance = models.IntegerField(null=True, blank=True)
     image_width = models.IntegerField(null=True, blank=True)
     image_height = models.IntegerField(null=True, blank=True)
-    scaled_width = models.IntegerField(null=True, blank=True)
-    scaled_height = models.IntegerField(null=True, blank=True)
+    pixel_count = models.IntegerField(null=True, blank=True)
+    skipped_asset = models.BooleanField(default=False)
 
     class Meta:
         managed = False
         db_table = "label_data.color_depth_scale_responses"
+        unique_together = (("asset_id", "labeler_id", "path_index", "point_index"),)
 
 
 class mismatched_labels_table(models.Model):
