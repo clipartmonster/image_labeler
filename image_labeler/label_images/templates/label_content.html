@@ -124,7 +124,7 @@
         </div>
 
 
-        {% if labeler_source == 'reconcile_label' %}
+        {% if labeler_source == 'reconcile_label' and not single_image_mode %}
               {% include 'reconcile_labels.html' %}
          {% elif task_type == 'same_style' and rule_index == 2 %}
             {% include 'label_style_pair.html' %}

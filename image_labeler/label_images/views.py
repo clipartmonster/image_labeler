@@ -173,14 +173,16 @@ def select_line_widths(request):
     response = requests.get(api_url, json=data, headers=header)
     assets_to_label = json.loads(response.content)["asset_batch"]
 
-    # Exclude assets that this labeler has already sampled
+    # Exclude assets that this labeler has already sampled.
+    # steve.green@grumpyoldmanstudios.com may label the same asset again.
     from labeling_api.models import line_width_sample_table
-    already_sampled = set(
-        line_width_sample_table.objects
-        .filter(labeler_id=labeler_id)
-        .values_list("asset_id", flat=True)
-    )
-    assets_to_label = [a for a in assets_to_label if a["asset_id"] not in already_sampled]
+    if str(labeler_id or "").strip().lower() != "steve.green@grumpyoldmanstudios.com":
+        already_sampled = set(
+            line_width_sample_table.objects
+            .filter(labeler_id=labeler_id)
+            .values_list("asset_id", flat=True)
+        )
+        assets_to_label = [a for a in assets_to_label if a["asset_id"] not in already_sampled]
 
     sampling_array = [[1 + col + row * 3 for col in range(3)] for row in range(3)]
 
@@ -715,7 +717,9 @@ LABEL_HISTORY_SIZE = 90
 def _label_history_enabled(task_type, rule_index, labeler_source):
     """Recent-label strips only apply to binary yes/no rules."""
     if labeler_source == "reconcile_label":
-        return False
+        # Sketch Fill V2 reconcile uses the same one-image + history layout as
+        # labeling; other reconcile flows keep the classic multi-list page.
+        return _reconcile_uses_single_image(task_type, rule_index)
     if task_type == "select_content":
         return False
     if task_type == "color_fill_type" and rule_index == 5:
@@ -723,6 +727,11 @@ def _label_history_enabled(task_type, rule_index, labeler_source):
     if task_type == "same_style" and rule_index == 2:
         return False
     return True
+
+
+def _reconcile_uses_single_image(task_type, rule_index):
+    """Rules whose reconcile UI matches their single-image labeling page."""
+    return task_type == "mono_color_type" and int(rule_index) == 7
 
 
 def _label_history(task_type, rule_index, labeler_id, exclude_ids):
@@ -1162,6 +1171,10 @@ def reconcile_labels(request):
         "labeler_id": labeler_id,
         "assignment_id": assignment_id,
         "labeler_source": labeler_source,
+        "label_type": "label",
+        "hit_id": "None",
+        "mturk_batch_id": 0,
+        "rule_index": rule_index,
     }
 
     from .models import RuleGuide
@@ -1186,6 +1199,19 @@ def reconcile_labels(request):
                 "response": row["prompt_response"],
             })
 
+    single_image_mode = _label_history_enabled(task_type, rule_index, labeler_source)
+    label_history = None
+    if single_image_mode:
+        page_asset_ids = {int(a["asset_id"]) for a in assets_to_label}
+        try:
+            label_history = _label_history(
+                task_type, rule_index, labeler_id, page_asset_ids
+            )
+        except Exception:
+            logger.exception(
+                "label history failed for reconcile %s/rule %s", task_type, rule_index
+            )
+
     return render(
         request,
         "label_content.html",
@@ -1201,6 +1227,8 @@ def reconcile_labels(request):
             "assignment_id": assignment_id,
             "rule_guides": rule_guides,
             "votes_by_asset_json": json.dumps(votes_by_asset),
+            "single_image_mode": single_image_mode,
+            "label_history": label_history,
         },
     )
 
@@ -4511,6 +4539,24 @@ def admin_subbatch_completion(request):
             .values_list("asset_id", flat=True)
             .distinct()
         )
+    # Color Depth Scale batch 2+ is done only when a path sample exists.
+    # Prompt rows for those assets are not labels. Batch 1 still uses them.
+    if task_type == "color_fill_type":
+        from labeling_api.models import color_depth_scale_responses
+
+        path_asset_ids = set(
+            label_data_selected_assets_new.objects.filter(
+                task_type=task_type,
+                rule_index=5,
+                batch_id__gte=2,
+            ).values_list("asset_id", flat=True)
+        )
+        done_ids -= path_asset_ids
+        done_ids |= set(
+            color_depth_scale_responses.objects.filter(asset_id__in=path_asset_ids)
+            .values_list("asset_id", flat=True)
+            .distinct()
+        )
     # Flagged assets also count as done
     flagged_ids = set(
         label_issues_table.objects.values_list("asset_id", flat=True)
@@ -4996,30 +5042,43 @@ def image_proxy(request):
         return HttpResponse("Missing url param", status=400)
 
     split = urlsplit(url)
-    referer = f"{split.scheme}://{split.netloc}/" if split.scheme and split.netloc else ""
-    headers = {
+    origin = f"{split.scheme}://{split.netloc}/" if split.scheme and split.netloc else ""
+    base_headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
         ),
-        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        # Prefer formats the canvas can decode. Asking for AVIF makes some CDNs
+        # return a file the sampler cannot read.
+        "Accept": "image/jpeg,image/png,image/webp,image/apng,image/*;q=0.8,*/*;q=0.5",
     }
-    if referer:
-        headers["Referer"] = referer
+    # Some hosts block a request whose Referer is their own CDN and answer with
+    # a redirect loop. Try with no Referer first, then with the image origin.
+    header_attempts = [dict(base_headers)]
+    if origin:
+        header_attempts.append(dict(base_headers, Referer=origin))
 
-    try:
-        resp = requests.get(url, timeout=10, headers=headers)
-        resp.raise_for_status()
-    except Exception as exc:
-        return HttpResponse(f"Failed to fetch image: {exc}", status=502)
+    session = requests.Session()
+    session.max_redirects = 5
+    resp = None
+    last_error = "the image host did not return an image"
+    for headers in header_attempts:
+        try:
+            candidate = session.get(url, timeout=15, headers=headers)
+            candidate.raise_for_status()
+        except Exception as exc:
+            last_error = str(exc)
+            continue
+        content_type = (candidate.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if content_type.startswith("image/"):
+            resp = candidate
+            break
+        last_error = f"upstream returned {content_type or 'unknown'} instead of an image"
 
-    content_type = (resp.headers.get("Content-Type") or "").lower()
-    if not content_type.startswith("image/"):
-        return HttpResponse(
-            f"Upstream returned non-image content ({content_type or 'unknown'}); "
-            "the image host likely blocked the server-side fetch.",
-            status=502,
-        )
+    if resp is None:
+        return HttpResponse(f"Failed to fetch image: {last_error}", status=502)
+
+    content_type = (resp.headers.get("Content-Type") or "image/jpeg").split(";")[0].strip()
 
     response = HttpResponse(resp.content, content_type=content_type)
     response["Cache-Control"] = "public, max-age=3600"
