@@ -1294,7 +1294,8 @@ def reconcile_labels(request):
     # Fetch per-labeler responses for each disputed asset
     from labeling_api.models import prompt_responses as PromptResp
 
-    disputed_asset_ids = [a["asset_id"] for a in assets_to_label]
+    # Disputed pairs arrive with their votes attached; this lookup is per asset.
+    disputed_asset_ids = [a["asset_id"] for a in assets_to_label if "asset_id" in a]
     votes_by_asset = {}
     if disputed_asset_ids:
         qs = PromptResp.objects.filter(
@@ -1465,8 +1466,11 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
         "pair_choices": ["same", "similar", "different", "duplicate"],
         "cv_runs": cv_runs,
         "cv_run_id": cv_run_id,
+        # Building the DataFrame turned missing scores into NaN; the template
+        # tests for None to tell unscored pairs apart.
         "batch_of_pairs": (
-            pairs_df.to_dict(orient="records") if not pairs_df.empty else []
+            pairs_df.astype(object).where(pairs_df.notna(), None).to_dict(orient="records")
+            if not pairs_df.empty else []
         ),
     }
 

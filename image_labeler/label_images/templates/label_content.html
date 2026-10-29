@@ -124,10 +124,10 @@
         </div>
 
 
-        {% if labeler_source == 'reconcile_label' %}
-              {% include 'reconcile_labels.html' %}
-         {% elif task_type == 'same_style' and rule_index == 2 %}
+        {% if task_type == 'same_style' and rule_index == 2 %}
             {% include 'label_style_pair.html' %}
+         {% elif labeler_source == 'reconcile_label' %}
+              {% include 'reconcile_labels.html' %}
          {% else %}
             {% include 'label_art_type.html'%}
         {% endif %}

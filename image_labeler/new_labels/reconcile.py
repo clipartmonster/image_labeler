@@ -189,6 +189,29 @@ try:
             .agg(label=("resp", "first"), n_top=("resp", "size"), max_n=("n", "max"))
             .reset_index()
         )
+        # A reviewer's answer from the reconcile queue is final: it becomes the
+        # label even when it isn't one of the tied answers, which would otherwise
+        # just make a bigger tie. max_n becomes the votes for that answer so
+        # percent_agree stays truthful.
+        _rec = (
+            _p[_p.labeler_source == "reconcile_label"]
+            .sort_values("datetime_created")
+            .groupby(PAIR_KEY)["resp"].last().rename("reconciled").reset_index()
+        )
+        if len(_rec):
+            _rec = _rec.merge(
+                _pc.rename(columns={"resp": "reconciled", "n": "rec_n"})[
+                    PAIR_KEY + ["reconciled", "rec_n"]
+                ],
+                on=PAIR_KEY + ["reconciled"],
+                how="left",
+            )
+            _pagg = _pagg.merge(_rec, on=PAIR_KEY, how="left")
+            _settled = _pagg.reconciled.notna()
+            _pagg.loc[_settled, "label"] = _pagg.loc[_settled, "reconciled"]
+            _pagg.loc[_settled, "max_n"] = _pagg.loc[_settled, "rec_n"]
+            _pagg.loc[_settled, "n_top"] = 1
+            _pagg = _pagg.drop(columns=["reconciled", "rec_n"])
         _psamples = _pc.groupby(PAIR_KEY)["n"].sum().rename("samples").reset_index()
         # Carry pair_id (constant per pair) through to the output.
         _pid = _p.groupby(PAIR_KEY)["pair_id"].first().reset_index()

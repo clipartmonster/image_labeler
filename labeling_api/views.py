@@ -3657,6 +3657,80 @@ def _plurality_tie_asset_ids(pr_df):
     }
 
 
+def _disputed_pairs(task_type, rule_index):
+    """Pairs whose labelers tie for the top answer, for the reconcile queue.
+
+    A pair is disputed when it has more than one response and two or more of
+    same/similar/different/duplicate tie for the most votes. Pairs that already
+    have a ``reconcile_label`` response are done (that answer is final, see
+    ``new_labels/reconcile.py``), and pairs flagged or marked broken by anyone
+    are left out, matching how flagged assets are skipped for yes/no rules.
+
+    Returns:
+        list[dict]: ``pair_id``, ``asset_id_1``, ``asset_id_2``, ``image_link_1``,
+        ``image_link_2`` and ``votes`` (``labeler``/``response`` per answer).
+    """
+    responses = pd.DataFrame(
+        list(
+            style_prompt_responses.objects.filter(
+                task_type=task_type, rule_index=rule_index
+            ).values("asset_id_1", "asset_id_2", "labeler_id", "labeler_source",
+                     "prompt_response")
+        )
+    )
+    if responses.empty:
+        return []
+    key = ["asset_id_1", "asset_id_2"]
+    responses["resp"] = responses["prompt_response"].astype(str).str.strip().str.lower()
+
+    done = set(
+        responses.loc[
+            (responses["labeler_source"] == "reconcile_label")
+            | ~responses["resp"].isin(PAIR_CHOICES),
+            key,
+        ].itertuples(index=False, name=None)
+    )
+    done |= set(
+        label_data_same_style_rule_labels.objects.filter(
+            task_type=task_type, rule_index=rule_index
+        ).values_list("asset_id_1", "asset_id_2")
+    )
+    votes = responses[responses["resp"].isin(PAIR_CHOICES)]
+    counts = votes.groupby(key + ["resp"]).size().rename("n").reset_index()
+    counts["max_n"] = counts.groupby(key)["n"].transform("max")
+    top = counts[counts["n"] == counts["max_n"]].groupby(key).size()
+    tied = [k for k, n_top in top.items() if n_top > 1 and k not in done]
+    if not tied:
+        return []
+
+    meta = {}
+    for row in label_data_selected_pair_labels.objects.filter(
+        task_type=task_type, rule_index=rule_index
+    ).values("pair_id", "asset_id_1", "asset_id_2", "image_link_1", "image_link_2"):
+        meta.setdefault((row["asset_id_1"], row["asset_id_2"]), row)
+
+    votes_by_pair = {}
+    for a1, a2, labeler, resp in votes[key + ["labeler_id", "resp"]].itertuples(
+        index=False, name=None
+    ):
+        votes_by_pair.setdefault((a1, a2), []).append(
+            {"labeler": labeler, "response": resp}
+        )
+
+    return [
+        {
+            "pair_id": meta[k]["pair_id"],
+            "asset_id_1": k[0],
+            "asset_id_2": k[1],
+            "image_link_1": meta[k]["image_link_1"],
+            "image_link_2": meta[k]["image_link_2"],
+            "votes": votes_by_pair.get(k, []),
+        }
+        for k in tied
+        if k in meta
+    ]
+
+
 @csrf_exempt
 @api_authorization
 @api_view(["GET"])
@@ -3676,6 +3750,9 @@ def get_disputed_assets(request: Request) -> JsonResponse:
 
     rule_index = request.data.get("rule_index", 1)
     task_type = request.data.get("task_type", None)
+
+    if _is_pair_task(task_type, rule_index):
+        return JsonResponse(_disputed_pairs(task_type, int(rule_index)), safe=False)
 
     asset_model = task_asset_model(task_type)
     asset_links = pd.DataFrame(
@@ -6603,6 +6680,11 @@ def get_reconcile_count(request):
 
     try:
         rule_index = int(rule_index)
+
+        if _is_pair_task(task_type, rule_index):
+            return JsonResponse(
+                {"disputed_count": len(_disputed_pairs(task_type, rule_index))}
+            )
 
         flagged_ids = set(label_issues_table.objects.values_list("asset_id", flat=True))
 
