@@ -23,8 +23,15 @@ current_data = pd.read_sql(
 )
 print(f"current_data: {len(current_data)} rows in {time.time()-t:.1f}s")
 
-_COLS = ["asset_id", "task_type", "rule_index", "label", "percent_agree",
-         "label_strength", "label_source"]
+_COLS = [
+    "asset_id",
+    "task_type",
+    "rule_index",
+    "label",
+    "percent_agree",
+    "label_strength",
+    "label_source",
+]
 
 # color_fill_type rule 5 is a graded Color Depth scale, not yes/no. Responses are
 # "0" (Flat), an integer >= 1 (counted depth layers), or "gradient" (continuous
@@ -33,7 +40,9 @@ _COLS = ["asset_id", "task_type", "rule_index", "label", "percent_agree",
 # out here and resolved by a human in the reconcile review UI. "gradient" is
 # encoded as 99 so it sorts above any countable depth.
 GRADIENT_CODE = 99
-ordinal_mask = (prompt_data.task_type == "color_fill_type") & (prompt_data.rule_index == 5)
+ordinal_mask = (prompt_data.task_type == "color_fill_type") & (
+    prompt_data.rule_index == 5
+)
 binary_data = prompt_data[~ordinal_mask]
 ordinal_data = prompt_data[ordinal_mask]
 
@@ -63,7 +72,9 @@ print("loading graded label set (color_fill_type rule 5)")
 if len(ordinal_data):
     _o = ordinal_data.assign(
         val=lambda x: pd.to_numeric(
-            x.prompt_response.astype(str).str.strip().str.lower()
+            x.prompt_response.astype(str)
+            .str.strip()
+            .str.lower()
             .replace({"gradient": str(GRADIENT_CODE)}),
             errors="coerce",
         )
@@ -76,11 +87,13 @@ if len(ordinal_data):
     # yes/no rules.
     _counts = (
         _o.groupby(["asset_id", "task_type", "rule_index", "val"])
-        .size().rename("n").reset_index()
+        .size()
+        .rename("n")
+        .reset_index()
     )
-    _counts["max_n"] = _counts.groupby(
-        ["asset_id", "task_type", "rule_index"]
-    )["n"].transform("max")
+    _counts["max_n"] = _counts.groupby(["asset_id", "task_type", "rule_index"])[
+        "n"
+    ].transform("max")
     _top = _counts[_counts.n == _counts.max_n]
     _agg = (
         _top.groupby(["asset_id", "task_type", "rule_index"])
@@ -89,7 +102,9 @@ if len(ordinal_data):
     )
     _samples = (
         _counts.groupby(["asset_id", "task_type", "rule_index"])["n"]
-        .sum().rename("samples").reset_index()
+        .sum()
+        .rename("samples")
+        .reset_index()
     )
     ordinal_label_set = (
         _agg.merge(_samples, on=["asset_id", "task_type", "rule_index"])
@@ -156,8 +171,15 @@ print(f"saved in {time.time()-t:.1f}s")
 # ties are left out for human review. Output mirrors label_data.asset_type.rule.labels
 # but keys on the pair, going to label_data.same_style.rule.labels.
 PAIR_COLS = [
-    "pair_id", "asset_id_1", "asset_id_2", "task_type", "rule_index",
-    "label", "percent_agree", "label_strength", "label_source",
+    "pair_id",
+    "asset_id_1",
+    "asset_id_2",
+    "task_type",
+    "rule_index",
+    "label",
+    "percent_agree",
+    "label_strength",
+    "label_source",
 ]
 PAIR_KEY = ["asset_id_1", "asset_id_2", "task_type", "rule_index"]
 VALID_STYLE_RESPONSES = ["same", "similar", "different", "duplicate"]
@@ -196,7 +218,10 @@ try:
         _rec = (
             _p[_p.labeler_source == "reconcile_label"]
             .sort_values("datetime_created")
-            .groupby(PAIR_KEY)["resp"].last().rename("reconciled").reset_index()
+            .groupby(PAIR_KEY)["resp"]
+            .last()
+            .rename("reconciled")
+            .reset_index()
         )
         if len(_rec):
             _rec = _rec.merge(
@@ -245,7 +270,9 @@ try:
     else:
         pair_new_rows = pair_label_set
 
-    print(f"new pair rows to insert: {len(pair_new_rows)} of {len(pair_label_set)} total")
+    print(
+        f"new pair rows to insert: {len(pair_new_rows)} of {len(pair_label_set)} total"
+    )
 
     if len(pair_new_rows):
         t = time.time()

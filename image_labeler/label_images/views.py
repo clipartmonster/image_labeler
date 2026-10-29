@@ -350,7 +350,9 @@ def label_color_depth(request):
         rule_indexes = rule_indexes_raw
     if not isinstance(rule_indexes, list):
         rule_indexes = [rule_indexes]
-    rule_index = int(rule_indexes[0]) if rule_indexes else int(request.GET.get("rule_index", 5))
+    rule_index = (
+        int(rule_indexes[0]) if rule_indexes else int(request.GET.get("rule_index", 5))
+    )
 
     header = {
         "Content-Type": "application/json",
@@ -377,22 +379,30 @@ def label_color_depth(request):
     labelling_rules = sorted(labelling_rules, key=lambda x: x["rule_index"])
 
     from .models import RuleGuide
+
     rule_guides = list(
-        RuleGuide.objects.filter(task_type=task_type, rule_index=rule_index)
-        .prefetch_related("directives", "reference_images", "directives__reference_images")
+        RuleGuide.objects.filter(
+            task_type=task_type, rule_index=rule_index
+        ).prefetch_related(
+            "directives", "reference_images", "directives__reference_images"
+        )
     )
 
-    return render(request, "label_color_depth.html", {
-        "assets_to_label": assets_to_label,
-        "labeler_id": labeler_id,
-        "rule_index": rule_index,
-        "batch_id": batch_id,
-        "large_sub_batch": large_sub_batch,
-        "total_count": len(assets_to_label),
-        "task_type": task_type,
-        "labelling_rules": labelling_rules,
-        "rule_guides": rule_guides,
-    })
+    return render(
+        request,
+        "label_color_depth.html",
+        {
+            "assets_to_label": assets_to_label,
+            "labeler_id": labeler_id,
+            "rule_index": rule_index,
+            "batch_id": batch_id,
+            "large_sub_batch": large_sub_batch,
+            "total_count": len(assets_to_label),
+            "task_type": task_type,
+            "labelling_rules": labelling_rules,
+            "rule_guides": rule_guides,
+        },
+    )
 
 
 @login_required
@@ -1469,8 +1479,11 @@ def _view_batch_pair_labels(request, task_type, rule_index, batch_index, sort_by
         # Building the DataFrame turned missing scores into NaN; the template
         # tests for None to tell unscored pairs apart.
         "batch_of_pairs": (
-            pairs_df.astype(object).where(pairs_df.notna(), None).to_dict(orient="records")
-            if not pairs_df.empty else []
+            pairs_df.astype(object)
+            .where(pairs_df.notna(), None)
+            .to_dict(orient="records")
+            if not pairs_df.empty
+            else []
         ),
     }
 
@@ -3631,7 +3644,11 @@ def _admin_work_rows(user, rule_titles):
             style_prompt_responses.objects.filter(
                 labeler_id__iexact=user.username
             ).values_list(
-                "task_type", "rule_index", "asset_id_1", "asset_id_2", "datetime_created"
+                "task_type",
+                "rule_index",
+                "asset_id_1",
+                "asset_id_2",
+                "datetime_created",
             )
         ),
         columns=["task_type", "rule_index", "a1", "a2", "ts"],
@@ -4389,7 +4406,9 @@ def style_analysis(request):
     # Totals describe the rows actually on screen, so narrowing to one art type
     # re-measures the model on just that type.
     totals = _style_totals(terms_df, payload.get("cv_run_id"), header)
-    platform_metrics = _style_platform_metrics(terms_df, payload.get("cv_run_id"), header)
+    platform_metrics = _style_platform_metrics(
+        terms_df, payload.get("cv_run_id"), header
+    )
 
     # Built before the NaN scrub below, which turns the numeric columns into
     # objects and would break the arithmetic.
