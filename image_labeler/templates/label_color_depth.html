@@ -65,8 +65,19 @@
     object-position: center;
     display: block; position: relative; z-index: 1;
 }
+.cd-img-wrap.is-drawing {
+    box-shadow: inset 0 0 0 6px #409393;
+}
 .cd-sampler-canvas {
-    position: absolute; z-index: 12; cursor: crosshair;
+    position: absolute; z-index: 12; cursor: default;
+}
+.cd-sampler-canvas.is-drawing { cursor: crosshair; }
+.cd-sampler-banner.is-drawing {
+    background: #409393;
+    color: #fff;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+    padding: 10px 12px;
 }
 .cd-sampler-banner {
     position: absolute; left: 0; right: 0; top: 0; z-index: 14;
@@ -273,6 +284,30 @@
     overflow: auto;
 }
 .cd-layer-empty { font-size: 11px; color: #98a8a8; font-style: italic; }
+.cd-depth-path {
+    border: 1.5px solid #e2e8e8; border-radius: 6px; padding: 8px;
+    background: #f7fafa;
+}
+.cd-depth-path.is-light {
+    border-color: rgba(212, 160, 32, 0.7);
+    background: rgba(245, 200, 40, 0.14);
+}
+.cd-depth-path.is-dark {
+    border-color: rgba(128, 64, 200, 0.5);
+    background: rgba(128, 64, 200, 0.08);
+}
+.cd-depth-path.is-open { box-shadow: inset 0 0 0 2px rgba(64, 147, 147, 0.55); }
+.cd-depth-path-title {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 8px; margin-bottom: 6px;
+    font-size: 12px; font-weight: 800; color: #2a4a4a;
+}
+.cd-depth-path-title .cd-path-x { margin-left: auto; }
+.cd-depth-path-kind {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+    text-transform: uppercase; color: #6a7a7a;
+}
+.cd-depth-path-colors { display: flex; flex-direction: column; gap: 4px; }
 .cd-layer-item {
     display: flex; align-items: center; gap: 8px; font-size: 12px; color: #2a4a4a;
     background: #fff; border-radius: 4px; padding: 4px 6px; border: 1px solid #e2e8e8;
@@ -353,7 +388,7 @@
 
 <div class="cd-page">
     <div class="cd-header">
-        <h1>Color Depth — Sample Layers</h1>
+        <h1>Color Depth — Pick depth colors</h1>
         <span class="cd-counter" id="cdCounter">1 / {{ total_count }}</span>
     </div>
 
@@ -372,53 +407,27 @@
 
             <aside class="cd-sidebar">
                 <div class="cd-actions">
-                    <button type="button" class="cd-btn cd-btn-save" onclick="cdSave()">Save &amp; Next (S)</button>
+                    <button type="button" class="cd-btn cd-btn-save" onclick="cdSave()">Save &amp; Next (Enter)</button>
                     <button type="button" class="cd-btn cd-btn-skip" onclick="cdSkip()">Skip (K)</button>
                     <button type="button" class="cd-btn cd-btn-flag" onclick="cdFlag()">Flag Issue (F)</button>
                 </div>
                 <div class="cd-status"></div>
 
                 <div class="cd-panel">
-                    <div class="cd-panel-title">Sample mode</div>
-                    <div class="cd-modes">
-                        <button type="button" class="cd-mode-btn active" data-mode="shade">
-                            <span class="cd-key">1</span>
-                            <span class="cd-name">Shade</span>
-                        </button>
-                        <button type="button" class="cd-mode-btn" data-mode="highlight">
-                            <span class="cd-key">2</span>
-                            <span class="cd-name">Light</span>
-                        </button>
-                    </div>
-                    <div class="cd-hint" data-mode-hint>Shade mode — click to place a sample (1 Shade, 2 Light)</div>
-                </div>
-
-                <div class="cd-panel">
-                    <div class="cd-panel-title">Sections</div>
-                    <div class="cd-section-host"></div>
+                    <div class="cd-panel-title">How to sample</div>
+                    <div class="cd-hint" data-mode-hint>Press S to start a path. The first color is Main.</div>
                 </div>
 
                 <div class="cd-panel cd-layers-panel">
                     <div class="cd-layers-head">
-                        <div class="cd-panel-title">Layers sampled</div>
+                        <div class="cd-panel-title">Depth colors</div>
                         <div class="cd-layer-actions">
                             <button type="button" class="cd-btn" data-undo>Undo (U)</button>
                             <button type="button" class="cd-btn" data-clear>Clear</button>
                         </div>
                     </div>
-                    <div class="cd-layers-cols">
-                        <div class="cd-layers-col cd-layers-col-shade">
-                            <div class="cd-layers-col-title">Shades</div>
-                            <div class="cd-layer-list" data-shade-list>
-                                <div class="cd-layer-empty">None yet</div>
-                            </div>
-                        </div>
-                        <div class="cd-layers-col cd-layers-col-light">
-                            <div class="cd-layers-col-title">Lights</div>
-                            <div class="cd-layer-list" data-light-list>
-                                <div class="cd-layer-empty">None yet</div>
-                            </div>
-                        </div>
+                    <div class="cd-layer-list" data-depth-list>
+                        <div class="cd-layer-empty">Press S to start a path.</div>
                     </div>
                 </div>
             </aside>
@@ -441,12 +450,12 @@
             Please make sure you are not missing depth cues in non-selected panels.
         </p>
         <p class="cd-confirm-keys" id="cdConfirmKeys">
-            Press <kbd>S</kbd> or <kbd>Enter</kbd> to confirm —
+            Press <kbd>Enter</kbd> to confirm —
             or <kbd>Esc</kbd> to cancel.
         </p>
         <div class="cd-confirm-actions">
             <button type="button" class="cd-btn cd-btn-cancel" id="cdConfirmCancel">Cancel (Esc)</button>
-            <button type="button" class="cd-btn cd-btn-yes" id="cdConfirmYes">Yes (S)</button>
+            <button type="button" class="cd-btn cd-btn-yes" id="cdConfirmYes">Yes (Enter)</button>
         </div>
     </div>
 </div>
@@ -454,7 +463,7 @@
 </div>
 </div>
 
-<script src="{% static 'js/color_depth_sampler.js' %}?v=40"></script>
+<script src="{% static 'js/color_depth_sampler.js' %}?v=47"></script>
 <script>
 (function () {
     var cards = document.querySelectorAll('.cd-card');
@@ -463,8 +472,8 @@
     var labelerId = '{{ labeler_id }}';
     var ruleIndex = {{ rule_index }};
     var taskType = '{{ task_type }}';
-    var GRID = 3;
-    var NEEDED = 1; // one sample (or skip) per section
+    var GRID = 0;
+    var NEEDED = 1;
 
     function setStatus(card, msg, kind) {
         var el = card.querySelector('.cd-status');
@@ -522,9 +531,8 @@
         function start() {
             if (!window.ColorDepthSampler) return;
             ColorDepthSampler.init(card, {
-                gridSections: GRID,
-                samplesPerSection: NEEDED,
-                sectionHost: card.querySelector('.cd-section-host'),
+                gridSections: 0,
+                samplesPerSection: 0,
                 assetId: card.getAttribute('data-asset-id'),
                 labelerId: labelerId,
                 saveSample: saveDepthSample,
@@ -545,37 +553,6 @@
             img.onload = start;
             img.onerror = onErr;
         }
-    }
-
-    function savePrompt(assetId, response) {
-        return fetch(window.LABELING_API_BASE_URL + '/collect_prompt_internal_source/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': authKey(),
-            },
-            body: JSON.stringify({
-                task_type: taskType,
-                asset_id: parseInt(assetId, 10),
-                labeler_source: 'Internal',
-                labeler_id: labelerId,
-                label_type: 'label',
-                rule_index: ruleIndex,
-                prompt_response: response,
-                assignment_id: '',
-                hit_id: '',
-                is_test_question: 'no',
-                mturk_batch_id: 0,
-                is_lure_question: 'no',
-            }),
-        }).then(function (r) {
-            if (!r.ok) {
-                return r.text().then(function (t) {
-                    throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 200));
-                });
-            }
-            return r;
-        });
     }
 
     function flagAsset(assetId) {
@@ -653,8 +630,8 @@
     function showNoLayersConfirm() {
         openConfirm('noLayers', {
             title: 'Art is flat?',
-            body: 'No shade or light layers were sampled.',
-            warn: 'Confirm this art is flat (no depth cues).',
+            body: 'No depth colors were selected.',
+            warn: 'Confirm this art is flat (no depth colors).',
             keysHtml: '<kbd>S</kbd> / <kbd>Enter</kbd> = yes · <kbd>Esc</kbd> = cancel',
             yesLabel: 'Yes, art is flat (S)',
         });
@@ -678,11 +655,13 @@
     function finishSave(card, st) {
         clearConfirm();
         var n = st.selections.length;
-        var assetId = card.getAttribute('data-asset-id');
         setStatus(card, n
-            ? ('Saving ' + n + ' layer' + (n === 1 ? '' : 's') + '…')
-            : 'Saving (no layers)…', 'info');
-        savePrompt(assetId, String(n)).then(function () {
+            ? ('Saving ' + n + ' depth color' + (n === 1 ? '' : 's') + '…')
+            : 'Saving (no depth colors)…', 'info');
+        var flush = (window.ColorDepthSampler && ColorDepthSampler.flushAll)
+            ? ColorDepthSampler.flushAll()
+            : Promise.resolve();
+        flush.then(function () {
             activateCard(currentIdx + 1);
         }).catch(function (err) {
             setStatus(card, 'Save failed: ' + (err && err.message ? err.message : err));
@@ -722,7 +701,7 @@
         clearConfirm();
         if (!card) return;
         if (kind === 'noLayers') {
-            setStatus(card, 'Save cancelled — sample layers, or press K to skip / F to flag.');
+            setStatus(card, 'Save cancelled — click depth colors, or press K to skip / F to flag.');
         } else {
             setStatus(card, 'Save cancelled — sample remaining panels, or skip empty ones in Sections.');
         }
@@ -738,20 +717,7 @@
             setStatus(card, 'Sampler not ready. Wait for the image to load, then try again.');
             return;
         }
-        var unsaved = st.selections.filter(function (s) { return !s.savedId && !s.saveError; });
-        if (unsaved.length) {
-            clearConfirm();
-            setStatus(card, 'Still saving samples… wait a moment, then try again.');
-            return;
-        }
-        var failed = st.selections.filter(function (s) { return s.saveError; });
-        if (failed.length) {
-            clearConfirm();
-            setStatus(card, 'Some samples failed to save. Undo and re-sample, or refresh.');
-            return;
-        }
-
-        // Dialog already open: Yes / S / Enter confirms.
+        // Dialog already open: Enter confirms.
         if (isConfirmOpen() && pendingConfirmKind) {
             confirmDialogYes();
             return;
@@ -796,30 +762,24 @@
         var card = cards[currentIdx];
         var assetId = card.getAttribute('data-asset-id');
         setStatus(card, 'Skipping…', 'info');
-        // Drop any in-progress samples, then record a skip marker row.
-        var clearPromise = removeDepthSample({
+        removeDepthSample({
             asset_id: parseInt(assetId, 10),
             labeler_id: labelerId,
-        }).catch(function () { return null; });
-        clearPromise.then(function () {
+        }).catch(function () { return null; }).then(function () {
             return saveDepthSample({
                 asset_id: parseInt(assetId, 10),
-                sample_index: 1,
                 labeler_id: labelerId,
-                label_type: 'skip',
-                layer_type: null,
+                path_index: 0,
+                point_index: 0,
+                path_kind: null,
                 color_hex: null,
                 x_coord: null,
                 y_coord: null,
-                pixel_count: null,
-                tolerance: null,
                 image_width: null,
                 image_height: null,
-                scaled_width: null,
-                scaled_height: null,
+                pixel_count: null,
+                skipped_asset: true,
             });
-        }).then(function () {
-            return savePrompt(assetId, 'skip');
         }).then(function () {
             activateCard(currentIdx + 1);
         }).catch(function (err) {
@@ -849,7 +809,7 @@
                 cancelConfirm();
                 return;
             }
-            if (key === 's' || key === 'S' || key === 'Enter') {
+            if (key === 'Enter') {
                 e.preventDefault();
                 confirmDialogYes();
                 return;
@@ -873,7 +833,7 @@
             e.preventDefault();
             return;
         }
-        if (key === 's' || key === 'S' || key === 'Enter') {
+        if (key === 'Enter') {
             e.preventDefault();
             cdSave();
             return;

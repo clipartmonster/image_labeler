@@ -1,10 +1,10 @@
 /**
- * Color Depth (Scale) circle sampler.
- * Used by /label_images/label_color_depth/ — one image, 3×3 section panels.
+ * Color Depth (Scale) point sampler.
+ * Used by /label_images/label_color_depth/.
  *
- * Hotkeys: 1 = Shade, 2 = Light, U = undo.
- * Sample window used for palette context; click places a sample in the
- * selected Light/Shade mode. Radius 16.
+ * S starts or finishes a light path. D starts or finishes a dark path.
+ * Clicks only add colors while a path is open. The first color in a path
+ * is Main. A line connects the colors in that path. U = undo. Radius 16.
  */
 (function (global) {
     'use strict';
@@ -277,14 +277,12 @@
             st.probe.style.border = '1px solid #701818';
             st.probe.innerHTML = '<span class="cd-probe-tag">Click to remove</span>';
         } else {
-            var mode = effectiveMode();
-            var label = MODE[mode].label;
-            var badge = MODE[mode].badge;
-            // Match markers: yellow = light, purple = shade.
+            var px = st.hover && st.hover.px;
+            var badge = px || [40, 40, 40];
             st.probe.style.background = rgbCss(badge);
             st.probe.style.color = luminance(badge) > 140 ? '#111111' : '#ffffff';
             st.probe.style.border = '1px solid #000000';
-            st.probe.innerHTML = '<span class="cd-probe-tag">' + label + '</span>';
+            st.probe.innerHTML = '<span class="cd-probe-tag">Click to add</span>';
         }
         st.probe.style.display = 'flex';
 
@@ -336,17 +334,7 @@
             0, 0, size, size
         );
 
-        // Sample window outline in loupe space.
-        var mode = effectiveMode();
-        var accent = roleAccent(mode);
-        var sampleR = SAMPLE_RADIUS * zoom;
-        lctx.beginPath();
-        lctx.arc(r, r, Math.min(sampleR, r - 4), 0, Math.PI * 2);
-        lctx.strokeStyle = accent.fill;
-        lctx.lineWidth = 2;
-        lctx.stroke();
-
-        // Crosshair on the target pixel.
+        // Crosshair on the pixel the user is choosing. No generated sample ring.
         lctx.strokeStyle = 'rgba(0,0,0,0.75)';
         lctx.lineWidth = 1;
         lctx.beginPath();
@@ -367,7 +355,7 @@
         // Outer ring.
         lctx.beginPath();
         lctx.arc(r, r, r - 1.5, 0, Math.PI * 2);
-        lctx.strokeStyle = accent.fill;
+        lctx.strokeStyle = '#111111';
         lctx.lineWidth = 3;
         lctx.stroke();
         lctx.beginPath();
@@ -632,8 +620,304 @@
         });
     }
 
+    function selectionsInPath(pathId) {
+        var out = [];
+        st.selections.forEach(function (sel) {
+            if (sel.pathId === pathId) out.push(sel);
+        });
+        return out;
+    }
+
+    function pointLabel(sel) {
+        if (!sel || sel.pathRole === 'main' || pathStep(sel) <= 1) return 'M';
+        return String(pathStep(sel) - 1);
+    }
+    function pathStep(sel) {
+        var n = 0;
+        for (var i = 0; i < st.selections.length; i++) {
+            if (st.selections[i].pathId !== sel.pathId) continue;
+            n += 1;
+            if (st.selections[i] === sel) return n;
+        }
+        return n;
+    }
+
+    function refreshPathRoles() {
+        if (!st) return;
+        st.paths.forEach(function (path) {
+            selectionsInPath(path.id).forEach(function (sel, i) {
+                sel.pathRole = i === 0 ? 'main' : 'depth';
+                sel.mode = path.kind;
+            });
+        });
+        st.paths = st.paths.filter(function (path) {
+            if (st.openPath && st.openPath.id === path.id) return true;
+            return selectionsInPath(path.id).length > 0;
+        });
+        if (st.openPath && st.paths.indexOf(st.openPath) < 0) st.openPath = null;
+    }
+
+    function setPathHint(text) {
+        if (!st) return;
+        var hint = st.card.querySelector('[data-mode-hint]');
+        if (hint) hint.textContent = text;
+    }
+
+    function applyCursor(hit) {
+        if (!st || !st.overlay) return;
+        if (hit >= 0) {
+            st.overlay.style.cursor = 'pointer';
+            return;
+        }
+        st.overlay.style.cursor = hit >= 0 ? 'pointer' : (st.openPath ? 'crosshair' : 'default');
+    }
+
+    function syncDrawChrome() {
+        if (!st) return;
+        var drawing = !!st.openPath;
+        if (st.overlay) st.overlay.classList.toggle('is-drawing', drawing);
+        if (st.wrap) st.wrap.classList.toggle('is-drawing', drawing);
+        applyCursor(st.hoverMarkerIdx);
+        if (!st.srcReady || !st.banner) return;
+        if (!drawing) {
+            st.banner.style.display = 'none';
+            st.banner.classList.remove('is-drawing');
+            return;
+        }
+        var n = selectionsInPath(st.openPath.id).length;
+        var kind = st.openPath.kind === 'highlight' ? 'light' : st.openPath.kind === 'shade' ? 'dark' : '';
+        st.banner.style.display = 'block';
+        st.banner.classList.remove('error');
+        st.banner.classList.add('is-drawing');
+        st.banner.textContent = n === 0
+            ? 'DRAWING — click the main color. Press S for the next path.'
+            : ('DRAWING' + (kind ? ' a ' + kind + ' path' : '') + ' — click the next color. Press S for the next path.');
+    }
+
+    function syncPathChrome() {
+        if (!st) return;
+        syncDrawChrome();
+        if (!st.openPath) {
+            setPathHint('Press S to start a path. The first color is Main.');
+            return;
+        }
+        var n = selectionsInPath(st.openPath.id).length;
+        var kind = st.openPath.kind === 'highlight' ? 'Light' : st.openPath.kind === 'shade' ? 'Dark' : '';
+        if (!n) {
+            setPathHint('Drawing — click the main color, then each depth color. Press S to start the next path.');
+            return;
+        }
+        setPathHint(
+            (kind ? kind + ' path. ' : 'Drawing. ')
+            + 'Click the next color, or press S to start the next path.'
+        );
+    }
+
+    function closeOpenPath() {
+        if (!st || !st.openPath) return;
+        var path = st.openPath;
+        st.openPath = null;
+        if (!selectionsInPath(path.id).length) {
+            st.paths = st.paths.filter(function (item) { return item.id !== path.id; });
+            return;
+        }
+        flushPath(path);
+    }
+
+    function inferPathKind(path) {
+        var pts = selectionsInPath(path.id);
+        if (pts.length < 2) return null;
+        var mainL = luminance(pts[0].seed);
+        var nextL = luminance(pts[1].seed);
+        return nextL >= mainL ? 'highlight' : 'shade';
+    }
+
+    function enqueueSave(work) {
+        if (!st) return Promise.resolve();
+        var run = st.saveQueue.then(work, work);
+        st.saveQueue = run.then(function () { return null; }, function () { return null; });
+        return run;
+    }
+
+    function deletePersistedPath(pathIndex) {
+        return enqueueSave(function () {
+            if (!st || !st.removeSample || !st.assetId || !st.labelerId) return null;
+            return st.removeSample({
+                asset_id: parseInt(st.assetId, 10),
+                labeler_id: st.labelerId,
+                path_index: pathIndex,
+            });
+        });
+    }
+
+    function flushPath(path) {
+        if (!st || !path || !st.saveSample) return Promise.resolve();
+        var pathIndex = path.id;
+        return enqueueSave(function () {
+            if (!st) return null;
+            var pts = selectionsInPath(pathIndex);
+            var clear = Promise.resolve();
+            if (st.removeSample && st.assetId && st.labelerId) {
+                clear = Promise.resolve(st.removeSample({
+                    asset_id: parseInt(st.assetId, 10),
+                    labeler_id: st.labelerId,
+                    path_index: pathIndex,
+                }));
+            }
+            return clear.then(function () {
+                if (!pts.length) {
+                    path.persisted = false;
+                    return null;
+                }
+                var chain = Promise.resolve();
+                pts.forEach(function (sel, i) {
+                    chain = chain.then(function () {
+                        return Promise.resolve(st.saveSample({
+                            asset_id: parseInt(st.assetId, 10),
+                            labeler_id: st.labelerId,
+                            path_index: pathIndex,
+                            point_index: i,
+                            path_kind: path.kind || null,
+                            color_hex: toHex(sel.seed),
+                            x_coord: sel.x,
+                            y_coord: sel.y,
+                            image_width: st.natW,
+                            image_height: st.natH,
+                            pixel_count: sel.count,
+                        })).then(function (res) {
+                            sel.savedId = res && res.saved_id != null ? res.saved_id : null;
+                            sel.pending = false;
+                            sel.saveError = null;
+                        });
+                    });
+                });
+                return chain.then(function () {
+                    path.persisted = true;
+                });
+            });
+        });
+    }
+
+    function flushAll() {
+        if (!st) return Promise.resolve();
+        var paths = st.paths.filter(function (path) {
+            return selectionsInPath(path.id).length > 0;
+        });
+        return paths.reduce(function (chain, path) {
+            return chain.then(function () { return flushPath(path); });
+        }, Promise.resolve());
+    }
+
+    function syncClosedPath(path) {
+        if (!path || (st.openPath && st.openPath.id === path.id)) return;
+        if (!selectionsInPath(path.id).length) deletePersistedPath(path.id);
+        else flushPath(path);
+    }
+
+    function applyInferredKind(path) {
+        if (!path) return false;
+        var kind = inferPathKind(path);
+        if (path.kind === kind) return false;
+        path.kind = kind;
+        refreshPathRoles();
+        return true;
+    }
+
+    function togglePath() {
+        if (!st) return;
+        if (st.openPath) closeOpenPath();
+        var path = { id: ++st.pathSeq, kind: null };
+        st.paths.push(path);
+        st.openPath = path;
+        syncPathChrome();
+        redraw();
+        renderList();
+    }
+
+    function drawDepthPaths(ctx) {
+        st.paths.forEach(function (path) {
+            var pts = selectionsInPath(path.id);
+            if (pts.length < 2) return;
+            ctx.beginPath();
+            var started = false;
+            pts.forEach(function (sel) {
+                var m = markerLayout(sel);
+                if (!m) return;
+                if (!started) {
+                    ctx.moveTo(m.cx, m.cy);
+                    started = true;
+                } else {
+                    ctx.lineTo(m.cx, m.cy);
+                }
+            });
+            if (!started) return;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 6;
+            ctx.stroke();
+            ctx.strokeStyle = path.kind === 'highlight' ? '#d4a020' : path.kind === 'shade' ? '#8040c8' : '#409393';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        });
+    }
+
+    function renderDepthList(host) {
+        if (!st.paths.length) {
+            host.innerHTML = '<div class="cd-layer-empty">Press S to start a path.</div>';
+            return;
+        }
+        host.innerHTML = st.paths.map(function (path) {
+            var pts = selectionsInPath(path.id);
+            var light = path.kind === 'highlight';
+            var dark = path.kind === 'shade';
+            var open = st.openPath && st.openPath.id === path.id;
+            var kindName = light ? 'Light' : dark ? 'Dark' : 'Not set yet';
+            var colors = pts.length
+                ? pts.map(function (sel) {
+                    var idx = st.selections.indexOf(sel);
+                    var role = pointLabel(sel);
+                    return '<div class="cd-layer-item">'
+                        + '<span class="cd-layer-swatch" style="background:' + rgbCss(sel.seed) + '"></span>'
+                        + '<span class="cd-layer-meta"><strong>' + role + '</strong> · ' + toHex(sel.seed) + '</span>'
+                        + '<button type="button" class="cd-layer-x" title="Remove this color"'
+                        + ' data-remove-index="' + idx + '">×</button>'
+                        + '</div>';
+                }).join('')
+                : '<div class="cd-layer-empty">Click the image. The first color is Main.</div>';
+            return '<section class="cd-depth-path ' + (light ? 'is-light' : dark ? 'is-dark' : '') + (open ? ' is-open' : '') + '">'
+                + '<div class="cd-depth-path-title">'
+                + '<span>Depth path</span>'
+                + '<span class="cd-depth-path-kind">' + kindName + (open ? ' · drawing' : '') + '</span>'
+                + '<button type="button" class="cd-layer-x cd-path-x" title="Remove this path"'
+                + ' data-remove-path="' + path.id + '">×</button>'
+                + '</div>'
+                + '<div class="cd-depth-path-colors">' + colors + '</div>'
+                + '</section>';
+        }).join('');
+        host.querySelectorAll('[data-remove-path]').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                removePath(parseInt(btn.getAttribute('data-remove-path'), 10));
+            });
+        });
+        host.querySelectorAll('[data-remove-index]').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                removeSelectionAt(parseInt(btn.getAttribute('data-remove-index'), 10));
+            });
+        });
+    }
+
     function renderList() {
         if (!st) return;
+        var depthHost = st.card.querySelector('[data-depth-list]');
+        if (depthHost) {
+            renderDepthList(depthHost);
+            return;
+        }
         var shadeHost = st.card.querySelector('[data-shade-list]');
         var lightHost = st.card.querySelector('[data-light-list]');
         if (!shadeHost && !lightHost) return;
@@ -749,80 +1033,39 @@
         var scaleX = st.dispW / st.natW;
         var scaleY = st.dispH / st.natH;
 
-        // Live cursor ring under markers (hide when hovering a removable marker).
-        if (st.hover && st.hoverMarkerIdx < 0) {
-            var hx = st.hover.dx;
-            var hy = st.hover.dy;
-            var hr = Math.max(8, SAMPLE_RADIUS * ((scaleX + scaleY) / 2));
-            var ringMode = effectiveMode();
-            var accent = roleAccent(ringMode);
-            ctx.beginPath();
-            ctx.arc(hx, hy, hr, 0, Math.PI * 2);
-            ctx.strokeStyle = accent.fill;
-            ctx.lineWidth = 2.5;
-            ctx.stroke();
-        }
+        drawDepthPaths(ctx);
 
-        // Markers drawn last so they sit above green/yellow section fills.
+        // Markers drawn last so they sit above the path line.
         st.selections.forEach(function (sel, selIdx) {
             var m = markerLayout(sel);
             if (!m) return;
             var cx = m.cx;
             var cy = m.cy;
-            var lx = m.lx;
-            var ly = m.ly;
-            var pinR = m.pinR;
+            var lx = cx;
+            var ly = cy;
             var badgeR = m.badgeR;
-            var label = String(sel.colorGroup || 1);
-            var modeInfo = MODE[sel.mode] || MODE.shade;
-            var badgeRgb = modeInfo.badge;
+            var label = pointLabel(sel);
+            var badgeRgb = (sel.seed && sel.seed.length >= 3) ? sel.seed : [40, 40, 40];
             var removing = selIdx === st.hoverMarkerIdx;
 
-            // Leader line: pin → badge (stop at each circle's edge).
-            var dx = lx - cx;
-            var dy = ly - cy;
-            var dist = Math.sqrt(dx * dx + dy * dy) || 1;
-            var ux = dx / dist;
-            var uy = dy / dist;
+            var badgeLabel = removing ? '×' : label;
+            ctx.font = 'bold 11px Roboto, sans-serif';
+            var textW = ctx.measureText(badgeLabel).width;
+            var pillW = Math.max(22, textW + 10);
+            var pillH = 18;
+            var pillR = 9;
             ctx.beginPath();
-            ctx.moveTo(cx + ux * pinR, cy + uy * pinR);
-            ctx.lineTo(lx - ux * badgeR, ly - uy * badgeR);
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = '#000000';
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(cx + ux * pinR, cy + uy * pinR);
-            ctx.lineTo(lx - ux * badgeR, ly - uy * badgeR);
-            ctx.lineWidth = 1;
-            ctx.strokeStyle = rgbCss(badgeRgb);
-            ctx.stroke();
-
-            // Tiny pin at the sampled pixel — keep normal color even when badge is hovered.
-            ctx.beginPath();
-            ctx.arc(cx, cy, pinR, 0, Math.PI * 2);
-            ctx.fillStyle = rgbCss(badgeRgb);
-            ctx.fill();
-            ctx.lineWidth = 1.5;
-            ctx.strokeStyle = '#000000';
-            ctx.stroke();
-            ctx.lineWidth = 1;
-            ctx.strokeStyle = '#ffffff';
-            ctx.stroke();
-
-            // Number badge NW — purple = shade, yellow = light; red when removable.
-            ctx.beginPath();
-            ctx.arc(lx, ly, badgeR + (removing ? 2 : 0), 0, Math.PI * 2);
+            ctx.moveTo(lx - pillW / 2 + pillR, ly - pillH / 2);
+            ctx.arcTo(lx + pillW / 2, ly - pillH / 2, lx + pillW / 2, ly + pillH / 2, pillR);
+            ctx.arcTo(lx + pillW / 2, ly + pillH / 2, lx - pillW / 2, ly + pillH / 2, pillR);
+            ctx.arcTo(lx - pillW / 2, ly + pillH / 2, lx - pillW / 2, ly - pillH / 2, pillR);
+            ctx.arcTo(lx - pillW / 2, ly - pillH / 2, lx + pillW / 2, ly - pillH / 2, pillR);
+            ctx.closePath();
             ctx.fillStyle = removing ? '#b03030' : rgbCss(badgeRgb);
             ctx.fill();
             ctx.lineWidth = removing ? 3 : 2;
             ctx.strokeStyle = '#000000';
             ctx.stroke();
-            ctx.lineWidth = 1.25;
-            ctx.strokeStyle = '#ffffff';
-            ctx.stroke();
-
-            var badgeLabel = removing ? '×' : label;
-            ctx.font = 'bold ' + Math.max(12, Math.round(badgeR * (removing ? 1.2 : 1.05))) + 'px Roboto, sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.lineWidth = 3;
@@ -840,18 +1083,15 @@
         var cx = (sel.x + 0.5) * scaleX;
         var cy = (sel.y + 0.5) * scaleY;
         // Fixed on-screen size so markers don't grow when the image is scaled up.
-        var pinR = MARKER_PIN_R;
         var badgeR = MARKER_BADGE_R;
-        var gap = MARKER_LABEL_GAP;
         return {
             cx: cx,
             cy: cy,
-            lx: Math.max(badgeR + 2, cx - gap),
-            ly: Math.max(badgeR + 2, cy - gap),
-            pinR: pinR,
+            lx: cx,
+            ly: cy,
+            pinR: badgeR,
             badgeR: badgeR,
-            // Generous hit target for the tiny pin.
-            hitPinR: Math.max(pinR + 6, 10),
+            hitPinR: badgeR + 2,
             hitBadgeR: badgeR + 2,
         };
     }
@@ -868,16 +1108,41 @@
         return -1;
     }
 
-    function removeSelectionAt(index) {
-        if (!st || index < 0 || index >= st.selections.length) return;
-        var sel = st.selections.splice(index, 1)[0];
+    function removePath(pathId) {
+        if (!st) return;
+        var removed = [];
+        st.selections = st.selections.filter(function (sel) {
+            if (sel.pathId !== pathId) return true;
+            removed.push(sel);
+            return false;
+        });
+        st.paths = st.paths.filter(function (path) { return path.id !== pathId; });
+        if (st.openPath && st.openPath.id === pathId) st.openPath = null;
+        refreshPathRoles();
+        syncPathChrome();
         reindexColorGroups();
         redraw();
         renderList();
         renderSectionPanel();
-        removePersisted(sel).catch(function (err) {
-            console.error('color depth sample remove failed', err);
+        deletePersistedPath(pathId).catch(function (err) {
+            console.error('color depth path remove failed', err);
         });
+    }
+
+    function removeSelectionAt(index) {
+        if (!st || index < 0 || index >= st.selections.length) return;
+        var sel = st.selections.splice(index, 1)[0];
+        var pathId = sel.pathId;
+        var path = null;
+        st.paths.forEach(function (item) { if (item.id === pathId) path = item; });
+        refreshPathRoles();
+        if (path) applyInferredKind(path);
+        syncPathChrome();
+        reindexColorGroups();
+        redraw();
+        renderList();
+        renderSectionPanel();
+        syncClosedPath(path);
     }
 
     function pointerToNative(event) {
@@ -925,18 +1190,19 @@
         st.localPalette = local;
         var px = pixelAt(st.imgData.data, pos.sx, pos.sy, st.natW);
         var cls = classifyColor(px, local);
-        st.hover = { dx: pos.dx, dy: pos.dy, sx: pos.sx, sy: pos.sy, cls: cls };
+        st.hover = { dx: pos.dx, dy: pos.dy, sx: pos.sx, sy: pos.sy, cls: cls, px: px };
         if (hit >= 0) {
             updateProbe(pos.dx, pos.dy, { remove: true });
+            hideMagnifier();
+        } else if (!st.openPath) {
+            if (st.probe) st.probe.style.display = 'none';
             hideMagnifier();
         } else {
             updateProbe(pos.dx, pos.dy);
             updateMagnifier(pos.sx, pos.sy, pos.dx, pos.dy, cls);
         }
         renderPalettePanel(local);
-        if (st.overlay) {
-            st.overlay.style.cursor = hit >= 0 ? 'pointer' : 'none';
-        }
+        applyCursor(hit);
         scheduleHoverDraw();
     }
 
@@ -948,7 +1214,7 @@
         if (st.probe) st.probe.style.display = 'none';
         hideMagnifier();
         renderPalettePanel(null);
-        if (st.overlay) st.overlay.style.cursor = 'crosshair';
+        applyCursor(-1);
         scheduleHoverDraw();
     }
 
@@ -958,10 +1224,14 @@
         var pos = pointerToNative(event);
         if (!pos) return;
 
-        // Click an existing marker (pin or number badge) to remove it.
+        // Click an existing marker to remove it.
         var hit = hitTestMarker(pos.dx, pos.dy);
         if (hit >= 0) {
             removeSelectionAt(hit);
+            return;
+        }
+        if (!st.openPath) {
+            setPathHint('Press S to start a path.');
             return;
         }
 
@@ -992,9 +1262,11 @@
         );
         st.localPalette = local;
         renderPalettePanel(local);
-        var sampleMode = effectiveMode();
+        var pathPts = selectionsInPath(st.openPath.id);
         var sel = {
-            mode: sampleMode,
+            mode: st.openPath.kind,
+            pathId: st.openPath.id,
+            pathRole: pathPts.length ? 'depth' : 'main',
             seed: seed,
             colorGroup: assignColorGroup(seed),
             count: result.count,
@@ -1005,13 +1277,15 @@
             sampleIndex: st.selections.length + 1,
             predicted: null,
             savedId: null,
-            pending: true,
+            pending: false,
         };
         st.selections.push(sel);
+        refreshPathRoles();
+        applyInferredKind(st.openPath);
+        syncPathChrome();
         redraw();
         renderList();
         renderSectionPanel();
-        persistSample(sel);
     }
 
     function toHex(rgb) {
@@ -1022,82 +1296,41 @@
         return '#' + h(rgb[0]) + h(rgb[1]) + h(rgb[2]);
     }
 
-    function persistSample(sel) {
-        if (!st || !st.saveSample || !st.assetId || !st.labelerId) return;
-        var payload = {
-            asset_id: parseInt(st.assetId, 10),
-            sample_index: sel.sampleIndex,
-            labeler_id: st.labelerId,
-            color_hex: toHex(sel.seed),
-            label_type: 'sampled',
-            layer_type: sel.mode,
-            x_coord: sel.x,
-            y_coord: sel.y,
-            pixel_count: sel.count,
-            // Circles use a fixed native radius (SAMPLE_RADIUS); tolerance unused.
-            tolerance: null,
-            image_width: st.natW,
-            image_height: st.natH,
-            scaled_width: st.dispW,
-            scaled_height: st.dispH,
-        };
-        Promise.resolve(st.saveSample(payload)).then(function (res) {
-            sel.pending = false;
-            if (res && res.saved_id != null) sel.savedId = res.saved_id;
-            renderList();
-        }).catch(function (err) {
-            sel.pending = false;
-            sel.saveError = (err && err.message) ? err.message : String(err);
-            console.error('color depth sample save failed', err);
-            renderList();
-        });
-    }
-
-    function removePersisted(sel) {
-        if (!st || !st.removeSample || !sel) return Promise.resolve();
-        if (sel.savedId != null) {
-            return Promise.resolve(st.removeSample({ saved_id: sel.savedId }));
-        }
-        if (st.assetId && st.labelerId && sel.sampleIndex != null) {
-            return Promise.resolve(st.removeSample({
-                asset_id: parseInt(st.assetId, 10),
-                labeler_id: st.labelerId,
-                sample_index: sel.sampleIndex,
-            }));
-        }
-        return Promise.resolve();
-    }
-
     function undo() {
         if (!st || !st.selections.length) return;
         var sel = st.selections.pop();
+        var pathId = sel.pathId;
+        var path = null;
+        st.paths.forEach(function (item) { if (item.id === pathId) path = item; });
+        refreshPathRoles();
+        if (path) applyInferredKind(path);
+        syncPathChrome();
         reindexColorGroups();
         redraw();
         renderList();
         renderSectionPanel();
-        removePersisted(sel).catch(function (err) {
-            console.error('color depth sample remove failed', err);
-        });
+        syncClosedPath(path);
     }
 
     function clearSelections() {
         if (!st) return;
-        var removed = st.selections.slice();
         st.selections = [];
+        st.paths = [];
+        st.openPath = null;
+        st.pathSeq = 0;
+        syncPathChrome();
         reindexColorGroups();
         redraw();
         renderList();
         renderSectionPanel();
         if (st.removeSample && st.assetId && st.labelerId) {
-            Promise.resolve(st.removeSample({
-                asset_id: parseInt(st.assetId, 10),
-                labeler_id: st.labelerId,
-            })).catch(function (err) {
+            enqueueSave(function () {
+                return st.removeSample({
+                    asset_id: parseInt(st.assetId, 10),
+                    labeler_id: st.labelerId,
+                });
+            }).catch(function (err) {
                 console.error('color depth clear failed', err);
-            });
-        } else {
-            removed.forEach(function (sel) {
-                removePersisted(sel).catch(function () {});
             });
         }
     }
@@ -1119,7 +1352,7 @@
                 sizeOverlay();
                 redraw();
                 renderPalettePanel(null);
-                if (st.banner) st.banner.style.display = 'none';
+                syncDrawChrome();
             } catch (err) {
                 if (st.banner) {
                     st.banner.textContent = 'Pixel data unavailable';
@@ -1144,7 +1377,7 @@
                     sizeOverlay();
                     redraw();
                     renderPalettePanel(null);
-                    if (st.banner) st.banner.style.display = 'none';
+                    syncDrawChrome();
                 } catch (err2) {
                     if (st.banner) {
                         st.banner.textContent = 'Pixel data unavailable';
@@ -1234,6 +1467,10 @@
             hover: null,
             hoverMarkerIdx: -1,
             selections: [],
+            paths: [],
+            openPath: null,
+            pathSeq: 0,
+            saveQueue: Promise.resolve(),
             ignoredSections: {},
             srcReady: false,
             imgData: null,
@@ -1249,9 +1486,9 @@
         };
 
         bindUi();
+        syncPathChrome();
         sizeOverlay();
         loadPixels();
-        setPickMode('shade');
         renderList();
         renderSectionPanel();
         renderPalettePanel();
@@ -1271,9 +1508,8 @@
 
     function hotkey(key) {
         if (!st) return false;
-        if (key === '1') { setPickMode('shade'); return true; }
-        if (key === '2') { setPickMode('highlight'); return true; }
         if (key === 'u' || key === 'U') { undo(); return true; }
+        if (key === 's' || key === 'S') { togglePath(); return true; }
         return false;
     }
 
@@ -1305,6 +1541,7 @@
         teardown: teardown,
         hotkey: hotkey,
         getState: function () { return st; },
+        flushAll: flushAll,
         getSectionCounts: getSectionCounts,
         autoSkipIncomplete: autoSkipIncomplete,
     };
