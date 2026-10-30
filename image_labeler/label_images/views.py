@@ -3700,30 +3700,99 @@ def _admin_work_rows(user, rule_titles):
     gap = df["ts"].diff().dt.total_seconds()
     df["work_s"] = gap.where(gap <= ADMIN_IDLE_GAP_SECONDS, 0).fillna(0)
 
-    rows = []
-    for (task_type, rule_index), g in df.groupby(["task_type", "rule_index"]):
+    def make_row(g, task_type, rule_index, batch_id, sub_batch, assignment_id):
         labels = g["item"].nunique()
         hours = round(g["work_s"].sum() / 3600, 2)
-        rows.append(
-            {
-                "task_type": task_type,
-                "rule_index": int(rule_index),
-                "feature": rule_titles.get((task_type, int(rule_index)), ""),
-                "batch_id": "all",
-                "sub_batch": "all",
-                "labels": int(labels),
-                "hours": hours,
-                "throughput": round(labels / hours, 1) if hours > 0 else None,
-                "deadline": "",
-                "deadline_iso": "",
-                "assignment_id": None,
-                "completed": True,
-                "on_time": None,
-                "is_admin_row": True,
-                "last_labeled": g["ts"].max().strftime("%b %d, %Y"),
-            }
-        )
+        return {
+            "task_type": task_type,
+            "rule_index": rule_index,
+            "feature": rule_titles.get((task_type, rule_index), ""),
+            "batch_id": batch_id,
+            "sub_batch": sub_batch,
+            "labels": int(labels),
+            "hours": hours,
+            "throughput": round(labels / hours, 1) if hours > 0 else None,
+            "deadline": "",
+            "deadline_iso": "",
+            "assignment_id": assignment_id,
+            "completed": True,
+            "on_time": None,
+            "is_admin_row": True,
+            "last_labeled": g["ts"].max().strftime("%b %d, %Y"),
+        }
+
+    # One row per batch/sub-batch, like a labeler's assignments. Work on assets
+    # that sit in no batch (older tasks) is rolled into one "all" row per rule,
+    # which has nothing to review.
+    rows = []
+    for (task_type, rule_index), g in df.groupby(["task_type", "rule_index"]):
+        rule_index = int(rule_index)
+        batch_of = _admin_batch_lookup(task_type, rule_index)
+        g = g.assign(bk=g["item"].map(batch_of))
+        mapped = g[g["bk"].notna()]
+        for (batch_id, sub_batch), sg in mapped.groupby(
+            [
+                mapped["bk"].map(lambda k: k[0]).rename("b"),
+                mapped["bk"].map(lambda k: k[1]).rename("s"),
+            ]
+        ):
+            key = f"admin:{user.id}:{task_type}:{rule_index}:{batch_id}:{sub_batch}"
+            rows.append(make_row(sg, task_type, rule_index, int(batch_id), int(sub_batch), key))
+        rest = g[g["bk"].isna()]
+        if not rest.empty:
+            rows.append(make_row(rest, task_type, rule_index, "all", "all", None))
     return sorted(rows, key=lambda r: -r["labels"])
+
+
+def _admin_batch_lookup(task_type, rule_index):
+    """``{item: (batch_id, large_sub_batch)}`` for a rule's batches.
+
+    Items are asset ids for single-asset rules and ``"id1_id2"`` for pairs, matching
+    ``_admin_work_rows``. A pair listed in several rows keeps the first.
+    """
+    from labeling_api.models import (
+        label_data_selected_assets_new,
+        label_data_selected_pair_labels,
+    )
+
+    if task_type == "same_style" and rule_index == 2:
+        lookup = {}
+        for a1, a2, b, s in label_data_selected_pair_labels.objects.filter(
+            task_type=task_type, rule_index=rule_index
+        ).values_list("asset_id_1", "asset_id_2", "batch_id", "large_sub_batch"):
+            lookup.setdefault(f"{a1}_{a2}", (b, s))
+        return lookup
+    return {
+        str(a): (b, s)
+        for a, b, s in label_data_selected_assets_new.objects.filter(
+            task_type=task_type, rule_index=rule_index
+        ).values_list("asset_id", "batch_id", "large_sub_batch")
+    }
+
+
+def _get_assignment(assignment_id):
+    """A ``BatchAssignment`` by id, or an unsaved stand-in for an admin batch.
+
+    Admins have no assignments, so their batch rows carry a key of the form
+    ``admin:<user_id>:<task_type>:<rule_index>:<batch_id>:<sub_batch>`` instead.
+    The stand-in has the fields the review screens read; don't save it.
+    """
+    from django.contrib.auth.models import User
+
+    if str(assignment_id).startswith("admin:"):
+        try:
+            _, uid, task_type, rule_index, batch_id, sub_batch = str(assignment_id).split(":")
+            return BatchAssignment(
+                user=User.objects.get(pk=int(uid)),
+                task_type=task_type,
+                rule_index=int(rule_index),
+                batch_id=int(batch_id),
+                large_sub_batch=int(sub_batch),
+                is_training=False,
+            )
+        except (ValueError, User.DoesNotExist):
+            raise BatchAssignment.DoesNotExist
+    return BatchAssignment.objects.select_related("user").get(pk=assignment_id)
 
 
 @admin_required_ajax
@@ -4014,7 +4083,7 @@ def admin_labeler_labels_detail(request):
     if not assignment_id:
         return JsonResponse({"error": "assignment_id required"}, status=400)
     try:
-        a = BatchAssignment.objects.select_related("user").get(pk=assignment_id)
+        a = _get_assignment(assignment_id)
     except BatchAssignment.DoesNotExist:
         return JsonResponse({"error": "not found"}, status=404)
 
@@ -4026,7 +4095,7 @@ def admin_labeler_labels_detail(request):
         answers = _pair_responses(a, batch)
         return JsonResponse(
             {
-                "assignment_id": a.id,
+                "assignment_id": assignment_id,
                 "is_training": False,
                 "task_type": a.task_type,
                 "rule_index": a.rule_index,
@@ -4149,7 +4218,7 @@ def admin_labeler_labels_detail(request):
 
     return JsonResponse(
         {
-            "assignment_id": a.id,
+            "assignment_id": assignment_id,
             "is_training": a.is_training,
             "task_type": a.task_type,
             "rule_index": a.rule_index,
@@ -4287,7 +4356,7 @@ def admin_override_label(request):
         )
 
     try:
-        a = BatchAssignment.objects.select_related("user").get(pk=assignment_id)
+        a = _get_assignment(assignment_id)
     except BatchAssignment.DoesNotExist:
         return JsonResponse({"error": "not found"}, status=404)
 

@@ -428,8 +428,9 @@ function renderWork() {
             reviewBtn = '<button class="ll-view-btn" onclick="loadSampleReview('
                 + r.assignment_id + ',\'' + rTitle + '\')">Review Samples</button>';
         } else {
-            reviewBtn = '<button class="ll-view-btn" onclick="loadWorkDetail('
-                + r.assignment_id + ',\'' + rTitle + '\')">Review</button>';
+            // Quoted: admin batch rows carry a string key rather than a number.
+            reviewBtn = '<button class="ll-view-btn" onclick="loadWorkDetail(\''
+                + r.assignment_id + '\',\'' + rTitle + '\')">Review</button>';
         }
         var deadlineCell = '<td style="font-size:11px;">'
             + '<span class="dl-display" id="dl-show-' + r.assignment_id + '">' + r.deadline + '</span> '
@@ -440,10 +441,11 @@ function renderWork() {
             + ' <button onclick="saveDeadline(' + r.assignment_id + ')" style="font-size:10px;padding:1px 5px;background:#409393;color:#fff;border:none;border-radius:3px;cursor:pointer;">save</button>'
             + ' <button onclick="cancelDeadline(' + r.assignment_id + ')" style="font-size:10px;padding:1px 5px;background:#bd4444;color:#fff;border:none;border-radius:3px;cursor:pointer;">cancel</button>'
             + '</span></td>';
-        // Admin rows summarise responses per rule; there is no assignment behind them.
+        // Admin rows come from responses, not assignments: no deadline, and only
+        // rows that sit in a batch (they have a key) can be reviewed.
         if (r.is_admin_row) {
             status = '<span class="pf-tag pf-tag-done">Admin</span>';
-            reviewBtn = '';
+            if (!r.assignment_id) reviewBtn = '';
             deadlineCell = '<td style="font-size:11px;">last: ' + r.last_labeled + '</td>';
         }
         var tr = document.createElement('tr');
@@ -712,7 +714,7 @@ function makeOverrideHtml(assignmentId, assetId, currentAnswer, prefix, answerOp
         return '<option value="' + v + '"' + sel + '>' + label + '</option>';
     }).join('');
     return '<div style="margin-top:4px;">'
-        + '<select onchange="overrideLabel(this,' + assignmentId + ',\'' + assetId + '\',\'' + prefix + '\')" '
+        + '<select onchange="overrideLabel(this,\'' + assignmentId + '\',\'' + assetId + '\',\'' + prefix + '\')" '
         + 'style="font-size:10px;padding:1px 3px;border-radius:3px;border:1px solid #aaa;background:#f4f8f8;width:100%;">'
         + opts + '</select></div>';
 }
