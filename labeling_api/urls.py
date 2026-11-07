@@ -122,6 +122,11 @@ urlpatterns = [
         name="collect_color_depth_sample",
     ),
     path(
+        "get_color_depth_samples/",
+        views.get_color_depth_samples,
+        name="get_color_depth_samples",
+    ),
+    path(
         "remove_color_depth_sample/",
         views.remove_color_depth_sample,
         name="remove_color_depth_sample",

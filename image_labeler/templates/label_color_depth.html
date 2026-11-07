@@ -65,8 +65,22 @@
     object-position: center;
     display: block; position: relative; z-index: 1;
 }
-.cd-img-wrap.is-drawing {
-    box-shadow: inset 0 0 0 6px #409393;
+.cd-img-wrap.is-loading img {
+    visibility: hidden;
+}
+.cd-img-wrap.is-loading::after {
+    content: 'Loading…';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+    font-size: 15px;
+    font-weight: 600;
+    color: #6a7a7a;
+    background: #f4f6f6;
+    pointer-events: none;
 }
 .cd-sampler-canvas {
     position: absolute; z-index: 12; cursor: default;
@@ -110,6 +124,45 @@
     font-family: Roboto, sans-serif; transition: background .15s;
 }
 .cd-btn-save { background: #409393; color: #fff; }
+.cd-btn-back {
+    background: #f4f7f7; color: #3a4a4a; border: 1px solid #c8d4d4;
+}
+.cd-btn-back:hover { background: #eef4f4; }
+.cd-applied-label {
+    display: none;
+    margin: 8px 0 4px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: #e8f2f2;
+    border: 1px solid #9fc4c4;
+}
+.cd-applied-label.is-visible { display: block; }
+.cd-applied-label-key {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #5a7a7a;
+    margin-bottom: 2px;
+}
+.cd-applied-label-val {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a4a4a;
+}
+.cd-applied-label[data-kind="flagged"] {
+    background: #f8ecec;
+    border-color: #e0a8a8;
+}
+.cd-applied-label[data-kind="flagged"] .cd-applied-label-val { color: #8a3030; }
+.cd-applied-label[data-kind="flat"],
+.cd-applied-label[data-kind="invalid"] {
+    background: #f7f3e4;
+    border-color: #e0d090;
+}
+.cd-applied-label[data-kind="flat"] .cd-applied-label-val,
+.cd-applied-label[data-kind="invalid"] .cd-applied-label-val { color: #6a5500; }
 .cd-btn-save:hover { background: #357e7e; }
 .cd-btn-save:disabled { background: #a0b4b4; cursor: not-allowed; }
 .cd-btn-skip {
@@ -232,6 +285,9 @@
 .cd-cell-empty   { background: #f0f3f3; color: #98a8a8; border-color: #d8e0e0; }
 .cd-cell-partial { background: rgba(240, 180, 0, 0.18); color: #8a6a00; border-color: rgba(240, 180, 0, 0.5); }
 .cd-cell-done    { background: transparent; color: #2a6a2a; border-color: #14b43c; border-width: 2.5px; }
+.cd-cell-shade   { background: rgba(80, 160, 255, 0.22); color: #1a4a8a; border-color: rgba(80, 160, 255, 0.55); }
+.cd-cell-light   { background: rgba(255, 220, 40, 0.22); color: #7a6500; border-color: rgba(255, 220, 40, 0.55); }
+.cd-cell-both    { background: rgba(40, 200, 90, 0.22); color: #1a6a30; border-color: rgba(40, 200, 90, 0.55); }
 .cd-cell-skip    { background: #e0e4e4; color: #6a7878; border-color: #c0c8c8; border-style: dashed; }
 .cd-panel-hint {
     font-size: 11px; color: #7a8a8a; margin-top: 8px; line-height: 1.4;
@@ -347,7 +403,7 @@
 .cd-confirm-overlay.open { display: flex; }
 .cd-confirm-dialog {
     background: #fff; border-radius: 10px; padding: 22px 24px;
-    max-width: 420px; width: 100%;
+    max-width: 480px; width: 100%;
     box-shadow: 0 12px 40px rgba(0,0,0,0.35);
     font-family: Roboto, 'Segoe UI', sans-serif;
 }
@@ -370,12 +426,20 @@
     background: #eef2f2; border: 1px solid #c8d4d4;
     font-family: Roboto, monospace; font-weight: 700; color: #2a4a4a;
 }
-.cd-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.cd-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .cd-confirm-actions .cd-btn { width: auto; padding: 9px 16px; }
 .cd-confirm-actions .cd-btn-cancel {
     background: #f4f7f7; color: #3a4a4a; border: 1px solid #c8d4d4;
 }
 .cd-confirm-actions .cd-btn-yes { background: #409393; color: #fff; }
+.cd-confirm-actions.cd-confirm-choices { justify-content: stretch; }
+.cd-confirm-actions.cd-confirm-choices .cd-btn-choice {
+    flex: 1 1 auto;
+    background: #409393;
+    color: #fff;
+    text-align: center;
+}
+.cd-confirm-actions.cd-confirm-choices .cd-btn-cancel { margin-right: auto; }
 
 @media (max-width: 820px) {
     .cd-layout { grid-template-columns: 1fr; }
@@ -407,15 +471,25 @@
 
             <aside class="cd-sidebar">
                 <div class="cd-actions">
-                    <button type="button" class="cd-btn cd-btn-save" onclick="cdSave()">Save &amp; Next (Enter)</button>
-                    <button type="button" class="cd-btn cd-btn-skip" onclick="cdSkip()">Skip (K)</button>
+                    <button type="button" class="cd-btn cd-btn-save" onclick="cdSave()">Done (D)</button>
                     <button type="button" class="cd-btn cd-btn-flag" onclick="cdFlag()">Flag Issue (F)</button>
+                    <button type="button" class="cd-btn cd-btn-back" onclick="cdBack()">Back (←)</button>
+                    <button type="button" class="cd-btn cd-btn-back" onclick="cdForward()">Forward (→)</button>
+                </div>
+                <div class="cd-applied-label" data-applied-label>
+                    <span class="cd-applied-label-key">Applied label</span>
+                    <span class="cd-applied-label-val" data-applied-label-val></span>
                 </div>
                 <div class="cd-status"></div>
 
                 <div class="cd-panel">
                     <div class="cd-panel-title">How to sample</div>
-                    <div class="cd-hint" data-mode-hint>Press S to start a path. The first color is Main.</div>
+                    <div class="cd-hint" data-mode-hint>S = start a new path. The first color is Main.</div>
+                </div>
+
+                <div class="cd-panel">
+                    <div class="cd-panel-title">Sections</div>
+                    <div class="cd-section-host"></div>
                 </div>
 
                 <div class="cd-panel cd-layers-panel">
@@ -450,12 +524,17 @@
             Please make sure you are not missing depth cues in non-selected panels.
         </p>
         <p class="cd-confirm-keys" id="cdConfirmKeys">
-            Press <kbd>Enter</kbd> to confirm —
+            Press <kbd>D</kbd> to confirm —
             or <kbd>Esc</kbd> to cancel.
         </p>
-        <div class="cd-confirm-actions">
+        <div class="cd-confirm-actions" id="cdConfirmActionsDefault">
             <button type="button" class="cd-btn cd-btn-cancel" id="cdConfirmCancel">Cancel (Esc)</button>
-            <button type="button" class="cd-btn cd-btn-yes" id="cdConfirmYes">Yes (Enter)</button>
+            <button type="button" class="cd-btn cd-btn-yes" id="cdConfirmYes">Yes (D)</button>
+        </div>
+        <div class="cd-confirm-actions cd-confirm-choices" id="cdConfirmActionsChoices" style="display:none;">
+            <button type="button" class="cd-btn cd-btn-cancel" id="cdConfirmCancelChoices">Cancel (Esc)</button>
+            <button type="button" class="cd-btn cd-btn-choice" data-no-path="flat">Flat (F)</button>
+            <button type="button" class="cd-btn cd-btn-choice" data-no-path="invalid">Invalid (T)</button>
         </div>
     </div>
 </div>
@@ -463,7 +542,7 @@
 </div>
 </div>
 
-<script src="{% static 'js/color_depth_sampler.js' %}?v=47"></script>
+<script src="{% static 'js/color_depth_sampler.js' %}?v=64"></script>
 <script>
 (function () {
     var cards = document.querySelectorAll('.cd-card');
@@ -472,14 +551,55 @@
     var labelerId = '{{ labeler_id }}';
     var ruleIndex = {{ rule_index }};
     var taskType = '{{ task_type }}';
-    var GRID = 0;
+    var GRID = 3;
     var NEEDED = 1;
+    // assetId -> paths | flat | invalid | flagged (session memory for Back)
+    var sessionLabels = {};
 
     function setStatus(card, msg, kind) {
         var el = card.querySelector('.cd-status');
         if (!el) return;
         el.textContent = msg || '';
         el.style.color = kind === 'info' ? '#3a6a6a' : '#b03030';
+    }
+
+    function labelText(kind) {
+        if (kind === 'paths') return 'Color depth';
+        if (kind === 'flat') return 'Flat';
+        if (kind === 'invalid') return 'Invalid';
+        if (kind === 'flagged') return 'Flagged asset';
+        return '';
+    }
+
+    function setAppliedLabel(card, kind) {
+        var box = card.querySelector('[data-applied-label]');
+        var val = card.querySelector('[data-applied-label-val]');
+        if (!box || !val) return;
+        var text = labelText(kind);
+        if (!text) {
+            box.classList.remove('is-visible');
+            box.removeAttribute('data-kind');
+            val.textContent = '';
+            return;
+        }
+        val.textContent = text;
+        box.setAttribute('data-kind', kind);
+        box.classList.add('is-visible');
+    }
+
+    function kindFromSamples(samples) {
+        if (!samples || !samples.length) return null;
+        for (var i = 0; i < samples.length; i++) {
+            if (!samples[i].skipped_asset) return 'paths';
+        }
+        var kind = samples[0].path_kind;
+        if (kind === 'flat' || kind === 'invalid') return kind;
+        return null;
+    }
+
+    function rememberLabel(assetId, kind) {
+        if (assetId == null || !kind) return;
+        sessionLabels[String(assetId)] = kind;
     }
 
     function authKey() {
@@ -512,34 +632,86 @@
         return apiPost('/remove_color_depth_sample/', payload);
     }
 
+    function loadDepthSamples(assetId) {
+        return apiPost('/get_color_depth_samples/', {
+            asset_id: parseInt(assetId, 10),
+            labeler_id: labelerId,
+        }).then(function (res) {
+            return (res && res.samples) ? res.samples : [];
+        }).catch(function () { return []; });
+    }
+
+    function setCardLoading(card, loading) {
+        if (!card) return;
+        var wrap = card.querySelector('.cd-img-wrap');
+        if (!wrap) return;
+        wrap.classList.toggle('is-loading', !!loading);
+    }
+
+    // Hide the visible art immediately so the last image doesn't linger
+    // while save / next-image load runs. Keep sampler alive until flush finishes.
+    function blankCurrentImage() {
+        var card = cards[currentIdx];
+        if (!card) return;
+        setCardLoading(card, true);
+        var s = window.ColorDepthSampler && ColorDepthSampler.getState
+            ? ColorDepthSampler.getState()
+            : null;
+        if (!s) return;
+        if (s.overlay) s.overlay.style.display = 'none';
+        if (s.banner) s.banner.style.display = 'none';
+        if (s.probe) s.probe.style.display = 'none';
+        if (s.loupe) s.loupe.style.display = 'none';
+    }
+
     function activateCard(idx) {
         clearConfirm();
         if (window.ColorDepthSampler) ColorDepthSampler.teardown();
-        cards.forEach(function (c) { c.classList.remove('active'); });
+        cards.forEach(function (c) {
+            c.classList.remove('active');
+            setCardLoading(c, false);
+        });
+        var doneEl = document.getElementById('cdDone');
         if (idx >= total) {
-            document.getElementById('cdDone').style.display = 'block';
+            currentIdx = total;
+            if (doneEl) doneEl.style.display = 'block';
             document.getElementById('cdCounter').textContent = 'Done';
             return;
         }
+        if (doneEl) doneEl.style.display = 'none';
         currentIdx = idx;
         var card = cards[idx];
         card.classList.add('active');
         document.getElementById('cdCounter').textContent = (idx + 1) + ' / ' + total;
         setStatus(card, '');
+        setAppliedLabel(card, null);
 
         var img = card.querySelector('.cd-img');
+        var assetId = card.getAttribute('data-asset-id');
+        setCardLoading(card, true);
         function start() {
+            setCardLoading(card, false);
             if (!window.ColorDepthSampler) return;
             ColorDepthSampler.init(card, {
-                gridSections: 0,
-                samplesPerSection: 0,
-                assetId: card.getAttribute('data-asset-id'),
+                gridSections: 3,
+                samplesPerSection: 1,
+                assetId: assetId,
                 labelerId: labelerId,
                 saveSample: saveDepthSample,
                 removeSample: removeDepthSample,
             });
+            // Reload any prior label so Back can edit a mistake.
+            loadDepthSamples(assetId).then(function (samples) {
+                if (!ColorDepthSampler.getState()) return;
+                var kind = kindFromSamples(samples) || sessionLabels[String(assetId)] || null;
+                setAppliedLabel(card, kind);
+                if (samples.length) {
+                    ColorDepthSampler.hydrateFromSamples(samples);
+                }
+            });
         }
         function onErr() {
+            setCardLoading(card, false);
             setStatus(card, 'Image failed to load — auto-flagging…', 'info');
             flagAsset(card.getAttribute('data-asset-id')).then(function () {
                 activateCard(currentIdx + 1);
@@ -579,6 +751,8 @@
     var confirmWarn = document.getElementById('cdConfirmWarn');
     var confirmKeys = document.getElementById('cdConfirmKeys');
     var confirmYes = document.getElementById('cdConfirmYes');
+    var confirmActionsDefault = document.getElementById('cdConfirmActionsDefault');
+    var confirmActionsChoices = document.getElementById('cdConfirmActionsChoices');
 
     function isConfirmOpen() {
         return confirmOverlay && confirmOverlay.classList.contains('open');
@@ -590,6 +764,8 @@
             confirmOverlay.classList.remove('open');
             confirmOverlay.setAttribute('aria-hidden', 'true');
         }
+        if (confirmActionsDefault) confirmActionsDefault.style.display = '';
+        if (confirmActionsChoices) confirmActionsChoices.style.display = 'none';
     }
 
     function openConfirm(kind, opts) {
@@ -607,9 +783,12 @@
         }
         if (confirmKeys) {
             confirmKeys.innerHTML = opts.keysHtml
-                || ('Press <kbd>S</kbd> or <kbd>Enter</kbd> to confirm — or <kbd>Esc</kbd> to cancel.');
+                || ('Press <kbd>D</kbd> to confirm — or <kbd>Esc</kbd> to cancel.');
         }
-        if (confirmYes) confirmYes.textContent = opts.yesLabel || 'Yes (S)';
+        if (confirmYes) confirmYes.textContent = opts.yesLabel || 'Yes (D)';
+        var useChoices = !!opts.choiceMode;
+        if (confirmActionsDefault) confirmActionsDefault.style.display = useChoices ? 'none' : '';
+        if (confirmActionsChoices) confirmActionsChoices.style.display = useChoices ? 'flex' : 'none';
         if (confirmOverlay) {
             confirmOverlay.classList.add('open');
             confirmOverlay.setAttribute('aria-hidden', 'false');
@@ -622,18 +801,18 @@
             body: '',
             warn: missing + ' panel' + (missing === 1 ? '' : 's') + ' have no sample.\n'
                 + 'Are there depth cues in those panels?',
-            keysHtml: '<kbd>S</kbd> / <kbd>Enter</kbd> = no, continue · <kbd>Esc</kbd> = cancel',
-            yesLabel: 'No (S)',
+            keysHtml: '<kbd>D</kbd> = no, continue · <kbd>Esc</kbd> = cancel',
+            yesLabel: 'No (D)',
         });
     }
 
     function showNoLayersConfirm() {
         openConfirm('noLayers', {
-            title: 'Art is flat?',
-            body: 'No depth colors were selected.',
-            warn: 'Confirm this art is flat (no depth colors).',
-            keysHtml: '<kbd>S</kbd> / <kbd>Enter</kbd> = yes · <kbd>Esc</kbd> = cancel',
-            yesLabel: 'Yes, art is flat (S)',
+            title: 'No depth paths',
+            body: 'No depth colors were selected. What best describes this art?',
+            warn: 'Choose one so we record why there are no paths.',
+            keysHtml: '<kbd>F</kbd> Flat · <kbd>T</kbd> Invalid · <kbd>Esc</kbd> cancel',
+            choiceMode: true,
         });
     }
 
@@ -655,15 +834,25 @@
     function finishSave(card, st) {
         clearConfirm();
         var n = st.selections.length;
+        var assetId = card.getAttribute('data-asset-id');
+        rememberLabel(assetId, 'paths');
+        setAppliedLabel(card, 'paths');
         setStatus(card, n
             ? ('Saving ' + n + ' depth color' + (n === 1 ? '' : 's') + '…')
             : 'Saving (no depth colors)…', 'info');
-        var flush = (window.ColorDepthSampler && ColorDepthSampler.flushAll)
-            ? ColorDepthSampler.flushAll()
-            : Promise.resolve();
-        flush.then(function () {
+        blankCurrentImage();
+        // Clear prior rows first so edits fully replace the old label.
+        removeDepthSample({
+            asset_id: parseInt(assetId, 10),
+            labeler_id: labelerId,
+        }).catch(function () { return null; }).then(function () {
+            return (window.ColorDepthSampler && ColorDepthSampler.flushAll)
+                ? ColorDepthSampler.flushAll()
+                : Promise.resolve();
+        }).then(function () {
             activateCard(currentIdx + 1);
         }).catch(function (err) {
+            setCardLoading(card, false);
             setStatus(card, 'Save failed: ' + (err && err.message ? err.message : err));
         });
     }
@@ -684,15 +873,44 @@
             finishSave(card, st);
             return;
         }
-        if (pendingConfirmKind === 'noLayers') {
-            // Confirmed: art has no depth layers — save with zero samples.
-            if (ColorDepthSampler.autoSkipIncomplete) {
-                ColorDepthSampler.autoSkipIncomplete();
-            }
-            finishSave(card, st);
-            return;
-        }
         clearConfirm();
+    }
+
+    // Save a no-path label: skipped_asset row with path_kind flat|invalid.
+    function finishNoPathLabel(choice) {
+        var card = cards[currentIdx];
+        if (!card) return;
+        if (choice !== 'flat' && choice !== 'invalid') return;
+        var assetId = card.getAttribute('data-asset-id');
+        clearConfirm();
+        rememberLabel(assetId, choice);
+        setAppliedLabel(card, choice);
+        setStatus(card, 'Saving (' + labelText(choice) + ')…', 'info');
+        blankCurrentImage();
+        removeDepthSample({
+            asset_id: parseInt(assetId, 10),
+            labeler_id: labelerId,
+        }).catch(function () { return null; }).then(function () {
+            return saveDepthSample({
+                asset_id: parseInt(assetId, 10),
+                labeler_id: labelerId,
+                path_index: 0,
+                point_index: 0,
+                path_kind: choice,
+                color_hex: null,
+                x_coord: null,
+                y_coord: null,
+                image_width: null,
+                image_height: null,
+                pixel_count: null,
+                skipped_asset: true,
+            });
+        }).then(function () {
+            activateCard(currentIdx + 1);
+        }).catch(function (err) {
+            setCardLoading(card, false);
+            setStatus(card, 'Save failed: ' + (err && err.message ? err.message : err));
+        });
     }
 
     function cancelConfirm() {
@@ -701,7 +919,7 @@
         clearConfirm();
         if (!card) return;
         if (kind === 'noLayers') {
-            setStatus(card, 'Save cancelled — click depth colors, or press K to skip / F to flag.');
+            setStatus(card, 'Save cancelled — click depth colors, or press F to flag.');
         } else {
             setStatus(card, 'Save cancelled — sample remaining panels, or skip empty ones in Sections.');
         }
@@ -717,11 +935,12 @@
             setStatus(card, 'Sampler not ready. Wait for the image to load, then try again.');
             return;
         }
-        // Dialog already open: Enter confirms.
-        if (isConfirmOpen() && pendingConfirmKind) {
+        // Dialog already open: D confirms autoSkip only (noLayers uses F/T).
+        if (isConfirmOpen() && pendingConfirmKind === 'autoSkip') {
             confirmDialogYes();
             return;
         }
+        if (isConfirmOpen()) return;
 
         if (!st.selections.length) {
             showNoLayersConfirm();
@@ -741,8 +960,17 @@
 
     var yesBtn = document.getElementById('cdConfirmYes');
     var cancelBtn = document.getElementById('cdConfirmCancel');
+    var cancelChoicesBtn = document.getElementById('cdConfirmCancelChoices');
     if (yesBtn) yesBtn.addEventListener('click', function () { confirmDialogYes(); });
     if (cancelBtn) cancelBtn.addEventListener('click', function () { cancelConfirm(); });
+    if (cancelChoicesBtn) cancelChoicesBtn.addEventListener('click', function () { cancelConfirm(); });
+    if (confirmActionsChoices) {
+        confirmActionsChoices.addEventListener('click', function (e) {
+            var btn = e.target && e.target.closest ? e.target.closest('[data-no-path]') : null;
+            if (!btn) return;
+            finishNoPathLabel(btn.getAttribute('data-no-path'));
+        });
+    }
     if (confirmOverlay) {
         confirmOverlay.addEventListener('click', function (e) {
             if (e.target === confirmOverlay) cancelConfirm();
@@ -750,6 +978,10 @@
     }
 
     function goPrevImage() {
+        if (currentIdx >= total) {
+            if (total > 0) activateCard(total - 1);
+            return;
+        }
         if (currentIdx > 0) activateCard(currentIdx - 1);
     }
 
@@ -758,43 +990,20 @@
         else if (currentIdx >= total - 1) activateCard(total); // show done
     }
 
-    window.cdSkip = function () {
-        var card = cards[currentIdx];
-        var assetId = card.getAttribute('data-asset-id');
-        setStatus(card, 'Skipping…', 'info');
-        removeDepthSample({
-            asset_id: parseInt(assetId, 10),
-            labeler_id: labelerId,
-        }).catch(function () { return null; }).then(function () {
-            return saveDepthSample({
-                asset_id: parseInt(assetId, 10),
-                labeler_id: labelerId,
-                path_index: 0,
-                point_index: 0,
-                path_kind: null,
-                color_hex: null,
-                x_coord: null,
-                y_coord: null,
-                image_width: null,
-                image_height: null,
-                pixel_count: null,
-                skipped_asset: true,
-            });
-        }).then(function () {
-            activateCard(currentIdx + 1);
-        }).catch(function (err) {
-            console.warn(err);
-            activateCard(currentIdx + 1);
-        });
-    };
+    window.cdBack = function () { goPrevImage(); };
+    window.cdForward = function () { goNextImage(); };
 
     window.cdFlag = function () {
         var card = cards[currentIdx];
         var assetId = card.getAttribute('data-asset-id');
+        rememberLabel(assetId, 'flagged');
+        setAppliedLabel(card, 'flagged');
         setStatus(card, 'Flagging…', 'info');
+        blankCurrentImage();
         flagAsset(assetId).then(function () {
             activateCard(currentIdx + 1);
         }).catch(function (err) {
+            setCardLoading(card, false);
             setStatus(card, 'Flag failed: ' + (err && err.message ? err.message : err));
         });
     };
@@ -809,7 +1018,13 @@
                 cancelConfirm();
                 return;
             }
-            if (key === 'Enter') {
+            if (pendingConfirmKind === 'noLayers') {
+                if (key === 'f' || key === 'F') { e.preventDefault(); finishNoPathLabel('flat'); return; }
+                if (key === 't' || key === 'T') { e.preventDefault(); finishNoPathLabel('invalid'); return; }
+                e.preventDefault();
+                return;
+            }
+            if (key === 'd' || key === 'D') {
                 e.preventDefault();
                 confirmDialogYes();
                 return;
@@ -833,14 +1048,9 @@
             e.preventDefault();
             return;
         }
-        if (key === 'Enter') {
+        if (key === 'd' || key === 'D') {
             e.preventDefault();
             cdSave();
-            return;
-        }
-        if (key === 'k' || key === 'K') {
-            e.preventDefault();
-            cdSkip();
             return;
         }
         if (key === 'f' || key === 'F') {

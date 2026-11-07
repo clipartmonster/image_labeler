@@ -3435,14 +3435,14 @@ def get_asset_batch(request: Request) -> JsonResponse:
 
     # Determine the current labeler's username for per-labeler exclusion.
     # Admins (superusers) are exempt so they can re-label assets.
+    # Note: _labeler_may_repeat only relaxes collect/upsert rules — the queue
+    # still hides assets this labeler already finished (so refresh stays clean).
     labeler_username = None
     if hasattr(request, "user") and request.user.is_authenticated and not request.user.is_superuser:
         labeler_username = request.user.username
     # Fallback: accept labeler_id from the request data (used by internal API calls)
     if not labeler_username:
         labeler_username = request.data.get("labeler_id") or request.GET.get("labeler_id")
-    if _labeler_may_repeat(labeler_username):
-        labeler_username = None
 
     # Pair-comparison tasks (same_style rule 2) serve image pairs instead of
     # single assets: pull from selected_pair_labels and exclude pairs this labeler
@@ -5369,11 +5369,15 @@ def collect_color_depth_sample(request: Request) -> JsonResponse:
         ``point_index`` (0 is Main), optional ``path_kind`` (``highlight`` or
         ``shade``), ``color_hex``, ``x_coord``, ``y_coord``, ``image_width``,
         ``image_height``, optional ``pixel_count``. A skip sends
-        ``skipped_asset`` true and leaves the color fields empty.
+        ``skipped_asset`` true and leaves the color fields empty. When finishing
+        with no paths, ``path_kind`` may be ``flat`` or ``invalid``.
 
     Returns:
         JsonResponse: ``status``, ``saved_id``, ``explanation``.
     """
+
+    PATH_KINDS = (None, "highlight", "shade")
+    NO_PATH_KINDS = (None, "flat", "invalid")
 
     def required_int(key):
         raw = request.data.get(key)
@@ -5424,11 +5428,26 @@ def collect_color_depth_sample(request: Request) -> JsonResponse:
             {"status": "failed", "explanation": "labeler_id and color_hex are required"},
             status=400,
         )
-    if path_kind not in (None, "highlight", "shade"):
+    allowed_kinds = NO_PATH_KINDS if skipped_asset else PATH_KINDS
+    if path_kind not in allowed_kinds:
         return JsonResponse(
-            {"status": "failed", "explanation": "path_kind must be highlight, shade, or empty"},
+            {
+                "status": "failed",
+                "explanation": (
+                    "path_kind must be flat, invalid, or empty when skipped"
+                    if skipped_asset
+                    else "path_kind must be highlight, shade, or empty"
+                ),
+            },
             status=400,
         )
+
+    # No-path / skip labels: replace any existing rows for this asset/labeler
+    # so flat|invalid always lands and does not 409 on a prior skip.
+    if skipped_asset:
+        color_depth_scale_responses.objects.filter(
+            asset_id=asset_id, labeler_id=labeler_id
+        ).delete()
 
     entry = color_depth_scale_responses(
         asset_id=asset_id,
@@ -5446,14 +5465,18 @@ def collect_color_depth_sample(request: Request) -> JsonResponse:
     )
     try:
         entry.save()
-    except IntegrityError:
+    except IntegrityError as exc:
         return JsonResponse(
             {
                 "status": "failed",
-                "explanation": "a point already exists for this path and index",
+                "explanation": f"could not save color depth sample: {exc}",
             },
             status=409,
         )
+
+    # Mark BatchAssignment complete when every asset in the sub-batch has a
+    # path sample or skip for this labeler (batch 2+ Color Depth Scale).
+    _check_batch_complete(labeler_id, "color_fill_type", 5)
 
     return JsonResponse(
         {
@@ -5463,6 +5486,59 @@ def collect_color_depth_sample(request: Request) -> JsonResponse:
         },
         safe=False,
     )
+
+
+@csrf_exempt
+@api_authorization
+@api_view(["GET", "POST"])
+def get_color_depth_samples(request: Request) -> JsonResponse:
+    """Return saved Color Depth rows for one asset/labeler (for edit/back).
+
+    Args:
+        request (Request): GET/POST. ``asset_id``, ``labeler_id``.
+
+    Returns:
+        JsonResponse: ``status``, ``samples`` (ordered by path/point index).
+    """
+    asset_id = request.data.get("asset_id")
+    if asset_id is None:
+        asset_id = request.GET.get("asset_id")
+    labeler_id = request.data.get("labeler_id") or request.GET.get("labeler_id")
+    if asset_id is None or not labeler_id:
+        return JsonResponse(
+            {"status": "failed", "explanation": "asset_id and labeler_id required"},
+            status=400,
+        )
+    try:
+        asset_id = int(asset_id)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"status": "failed", "explanation": "asset_id must be an integer"},
+            status=400,
+        )
+
+    samples = list(
+        color_depth_scale_responses.objects.filter(
+            asset_id=asset_id, labeler_id=labeler_id
+        )
+        .order_by("path_index", "point_index")
+        .values(
+            "id",
+            "asset_id",
+            "labeler_id",
+            "path_index",
+            "point_index",
+            "path_kind",
+            "color_hex",
+            "x_coord",
+            "y_coord",
+            "image_width",
+            "image_height",
+            "pixel_count",
+            "skipped_asset",
+        )
+    )
+    return JsonResponse({"status": "success", "samples": samples}, safe=False)
 
 
 @csrf_exempt

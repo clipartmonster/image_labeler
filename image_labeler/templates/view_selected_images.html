@@ -1,0 +1,387 @@
+{% extends 'site_header.html' %}
+{% load static %}
+
+{% block content %}
+<style>
+.si-page {
+    display: flex;
+    gap: 16px;
+    min-height: calc(100vh - 70px);
+    padding: 16px 18px 28px;
+    font-family: Roboto, sans-serif;
+    color: #d6e4e4;
+    box-sizing: border-box;
+}
+.si-side {
+    width: 280px;
+    flex-shrink: 0;
+    background: #122324;
+    border: 1px solid #2f4040;
+    border-radius: 12px;
+    padding: 14px;
+}
+.si-side h1 {
+    margin: 0 0 4px;
+    font-size: 17px;
+    color: #e8f0f0;
+}
+.si-side .si-sub {
+    margin: 0 0 14px;
+    font-size: 12px;
+    color: #8fa8a8;
+}
+.si-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    background: #16292a;
+    border: 1px solid #3a4a4a;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+    transition: border-color .15s, background .15s;
+}
+.si-card:hover { border-color: #5a7a7a; }
+.si-card.is-active {
+    border-color: #409393;
+    background: #1a3334;
+    box-shadow: inset 0 0 0 1px #409393;
+}
+.si-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #e8f0f0;
+    margin: 0 0 6px;
+}
+.si-card-meta {
+    font-size: 11px;
+    color: #8fa8a8;
+    margin: 0 0 8px;
+}
+.si-filters {
+    margin: 0;
+    padding-left: 16px;
+    font-size: 11px;
+    color: #a8c4c4;
+    line-height: 1.45;
+}
+.si-empty {
+    font-size: 13px;
+    color: #8fa8a8;
+    padding: 8px 0;
+}
+.si-main {
+    flex: 1;
+    min-width: 0;
+    background: #122324;
+    border: 1px solid #2f4040;
+    border-radius: 12px;
+    padding: 14px 16px 18px;
+}
+.si-main-hd {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.si-main-hd h2 {
+    margin: 0;
+    font-size: 16px;
+    color: #e8f0f0;
+}
+.si-main-hd span {
+    font-size: 12px;
+    color: #8fa8a8;
+}
+.si-grid {
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: 6px;
+}
+.si-cell {
+    position: relative;
+    aspect-ratio: 1;
+    background: #0d1a1a;
+    border: 1px solid #2a3a3a;
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    padding: 0;
+}
+.si-cell:hover {
+    border-color: #409393;
+}
+.si-cell:focus-visible {
+    outline: 2px solid #409393;
+    outline-offset: 1px;
+}
+.si-cell img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    background: #0d1a1a;
+}
+.si-cell .si-id {
+    position: absolute;
+    left: 3px;
+    bottom: 3px;
+    font-size: 9px;
+    line-height: 1;
+    color: #dff;
+    background: rgba(0,0,0,.55);
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+.si-viewer {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(6, 14, 14, 0.92);
+    align-items: center;
+    justify-content: center;
+    padding: 28px 72px;
+    box-sizing: border-box;
+}
+.si-viewer.open { display: flex; }
+.si-viewer-panel {
+    position: relative;
+    width: min(920px, 100%);
+    height: min(860px, 100%);
+    background: #122324;
+    border: 1px solid #3a4a4a;
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 18px 50px rgba(0,0,0,.45);
+}
+.si-viewer-hd {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #2f4040;
+    background: #16292a;
+}
+.si-viewer-hd strong {
+    font-size: 14px;
+    color: #e8f0f0;
+}
+.si-viewer-hd span {
+    font-size: 12px;
+    color: #8fa8a8;
+}
+.si-viewer-close {
+    border: 0;
+    background: transparent;
+    color: #cfe0e0;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 6px;
+}
+.si-viewer-close:hover { background: #243838; }
+.si-viewer-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: #0d1a1a;
+}
+.si-viewer-body img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+}
+.si-viewer-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 1px solid #4a6060;
+    background: #1a2e2e;
+    color: #e8f0f0;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.si-viewer-nav:hover { background: #254040; }
+.si-viewer-nav.prev { left: 16px; }
+.si-viewer-nav.next { right: 16px; }
+.si-viewer-hint {
+    text-align: center;
+    font-size: 11px;
+    color: #7d9494;
+    padding: 8px 12px 12px;
+    border-top: 1px solid #2f4040;
+}
+
+@media (max-width: 1100px) {
+    .si-page { flex-direction: column; }
+    .si-side { width: auto; }
+    .si-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .si-viewer { padding: 16px 54px; }
+}
+</style>
+
+<div class="si-page">
+    <aside class="si-side">
+        <h1>Selected images</h1>
+        <p class="si-sub">Pick a batch to load its sample grid.</p>
+
+        {% if batches %}
+            {% for batch in batches %}
+                <a class="si-card {% if active_batch and active_batch.id == batch.id %}is-active{% endif %}"
+                   href="?batch={{ batch.batch_number }}">
+                    <p class="si-card-title">Batch {{ batch.batch_number }}</p>
+                    <p class="si-card-meta">
+                        {% if batch.title %}{{ batch.title }} · {% endif %}
+                        {{ batch.sample_size }} images
+                        {% if batch.pool_size %} · pool {{ batch.pool_size }}{% endif %}
+                    </p>
+                    {% if batch.filters %}
+                        <ol class="si-filters">
+                            {% for f in batch.filters %}
+                                <li>{{ f }}</li>
+                            {% endfor %}
+                        </ol>
+                    {% endif %}
+                </a>
+            {% endfor %}
+        {% else %}
+            <p class="si-empty">No selected-image batches yet. Create one with
+                <code>create_selected_image_batch</code>.</p>
+        {% endif %}
+    </aside>
+
+    <section class="si-main">
+        {% if active_batch %}
+            <div class="si-main-hd">
+                <h2>Batch {{ active_batch.batch_number }}{% if active_batch.title %} — {{ active_batch.title }}{% endif %}</h2>
+                <span>{{ images|length }} shown</span>
+            </div>
+            <div class="si-grid" id="siGrid">
+                {% for img in images %}
+                    <button type="button"
+                            class="si-cell"
+                            data-si-index="{{ forloop.counter0 }}"
+                            data-si-src="{{ img.image_link }}"
+                            data-si-id="{{ img.asset_id }}"
+                            title="asset {{ img.asset_id }}">
+                        <img src="{{ img.image_link }}" alt="asset {{ img.asset_id }}" loading="lazy">
+                        <span class="si-id">{{ img.asset_id }}</span>
+                    </button>
+                {% empty %}
+                    <p class="si-empty">This batch has no images.</p>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="si-empty">Select a batch on the left.</p>
+        {% endif %}
+    </section>
+</div>
+
+<div class="si-viewer" id="siViewer" aria-hidden="true">
+    <button type="button" class="si-viewer-nav prev" id="siPrev" aria-label="Previous image">‹</button>
+    <div class="si-viewer-panel">
+        <div class="si-viewer-hd">
+            <div>
+                <strong id="siViewerTitle">Asset</strong>
+                <span id="siViewerCount"></span>
+            </div>
+            <button type="button" class="si-viewer-close" id="siClose" aria-label="Close">×</button>
+        </div>
+        <div class="si-viewer-body">
+            <img id="siViewerImg" src="" alt="">
+        </div>
+        <div class="si-viewer-hint">← → to move · Esc to close</div>
+    </div>
+    <button type="button" class="si-viewer-nav next" id="siNext" aria-label="Next image">›</button>
+</div>
+
+<script>
+(function () {
+    var cells = Array.prototype.slice.call(document.querySelectorAll('.si-cell[data-si-src]'));
+    if (!cells.length) return;
+
+    var items = cells.map(function (cell) {
+        return {
+            src: cell.getAttribute('data-si-src'),
+            id: cell.getAttribute('data-si-id'),
+        };
+    });
+
+    var viewer = document.getElementById('siViewer');
+    var img = document.getElementById('siViewerImg');
+    var title = document.getElementById('siViewerTitle');
+    var count = document.getElementById('siViewerCount');
+    var idx = 0;
+
+    function show(i) {
+        if (!items.length) return;
+        idx = (i + items.length) % items.length;
+        var item = items[idx];
+        img.src = item.src;
+        img.alt = 'asset ' + item.id;
+        title.textContent = 'Asset ' + item.id;
+        count.textContent = ' · ' + (idx + 1) + ' / ' + items.length;
+        viewer.classList.add('open');
+        viewer.setAttribute('aria-hidden', 'false');
+    }
+
+    function close() {
+        viewer.classList.remove('open');
+        viewer.setAttribute('aria-hidden', 'true');
+        img.removeAttribute('src');
+    }
+
+    cells.forEach(function (cell) {
+        cell.addEventListener('click', function () {
+            show(parseInt(cell.getAttribute('data-si-index'), 10) || 0);
+        });
+    });
+
+    document.getElementById('siPrev').addEventListener('click', function (e) {
+        e.stopPropagation();
+        show(idx - 1);
+    });
+    document.getElementById('siNext').addEventListener('click', function (e) {
+        e.stopPropagation();
+        show(idx + 1);
+    });
+    document.getElementById('siClose').addEventListener('click', close);
+    viewer.addEventListener('click', function (e) {
+        if (e.target === viewer) close();
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (!viewer.classList.contains('open')) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            close();
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            show(idx - 1);
+        } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            show(idx + 1);
+        }
+    });
+})();
+</script>
+{% endblock %}

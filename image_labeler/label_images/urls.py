@@ -52,6 +52,7 @@ urlpatterns = [
     path('admin/line_width_samples/', views.admin_line_width_samples, name='admin_line_width_samples'),
     path('style_analysis/', views.style_analysis, name='style_analysis'),
     path('model_coverage/', views.model_coverage, name='model_coverage'),
+    path('view_selected_images/', views.view_selected_images, name='view_selected_images'),
     path('admin/label_comparison/', views.admin_label_comparison, name='admin_label_comparison'),
     path('admin/label_comparison/data/', views.admin_label_comparison_data, name='admin_label_comparison_data'),
     path('admin/label_comparison/override/', views.admin_comparison_override, name='admin_comparison_override'),
