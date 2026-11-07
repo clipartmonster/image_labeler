@@ -4686,6 +4686,38 @@ def model_coverage(request):
     return render(request, "model_coverage.html", data)
 
 
+@admin_required
+def view_selected_images(request):
+    """Internal review of curated image samples (filter cards + 10×10 grid)."""
+    from .models import SelectedImageBatch
+
+    batches = list(SelectedImageBatch.objects.prefetch_related("images").all())
+    selected_number = request.GET.get("batch")
+    active = None
+    if selected_number is not None:
+        try:
+            active = next(
+                (b for b in batches if b.batch_number == int(selected_number)),
+                None,
+            )
+        except (TypeError, ValueError):
+            active = None
+    if active is None and batches:
+        active = batches[0]
+
+    images = list(active.images.all()) if active else []
+    return render(
+        request,
+        "view_selected_images.html",
+        {
+            "batches": batches,
+            "active_batch": active,
+            "images": images,
+            "user_is_admin": True,
+        },
+    )
+
+
 def _sql_quote(value):
     """Quote a string for inline SQL, doubling any embedded single quotes."""
     return "'" + str(value).replace("'", "''") + "'"

@@ -2,9 +2,9 @@
  * Color Depth (Scale) point sampler.
  * Used by /label_images/label_color_depth/.
  *
- * S starts or finishes a light path. D starts or finishes a dark path.
- * Clicks only add colors while a path is open. The first color in a path
- * is Main. A line connects the colors in that path. U = undo. Radius 16.
+ * S starts a new path (finishes the current one first if open). Clicks only
+ * add colors while a path is open. The first color in a path is Main.
+ * U = undo. Radius 16.
  */
 (function (global) {
     'use strict';
@@ -352,15 +352,16 @@
         lctx.stroke();
         lctx.restore();
 
-        // Outer ring.
+        // Outer ring — orange while a path is active (drawing).
+        var active = !!st.openPath;
         lctx.beginPath();
         lctx.arc(r, r, r - 1.5, 0, Math.PI * 2);
-        lctx.strokeStyle = '#111111';
-        lctx.lineWidth = 3;
+        lctx.strokeStyle = active ? '#ff8a00' : '#111111';
+        lctx.lineWidth = active ? 4 : 3;
         lctx.stroke();
         lctx.beginPath();
         lctx.arc(r, r, r - 1.5, 0, Math.PI * 2);
-        lctx.strokeStyle = 'rgba(0,0,0,0.55)';
+        lctx.strokeStyle = active ? 'rgba(255, 180, 40, 0.95)' : 'rgba(0,0,0,0.55)';
         lctx.lineWidth = 1;
         lctx.stroke();
 
@@ -490,9 +491,29 @@
         return counts;
     }
 
+    // Per section: whether light and/or dark path points land there.
+    function getSectionKindPresence() {
+        var out = {};
+        var g = st ? st.gridSections : 0;
+        for (var r = 0; r < g; r++)
+            for (var c = 0; c < g; c++)
+                out[r + ',' + c] = { shade: false, highlight: false };
+        if (!st) return out;
+        st.selections.forEach(function (sel) {
+            if (sel.mode !== 'shade' && sel.mode !== 'highlight') return;
+            var secs = sel.sections || (sel.section ? [sel.section] : []);
+            secs.forEach(function (key) {
+                if (!out[key]) return;
+                out[key][sel.mode] = true;
+            });
+        });
+        return out;
+    }
+
     function renderSectionPanel() {
         if (!st || !st.sectionHost || !st.gridSections) return;
         var counts = getSectionCounts();
+        var kinds = getSectionKindPresence();
         var needed = st.samplesPerSection || 1;
         var total = st.gridSections * st.gridSections;
         var ignoredCount = 0;
@@ -520,10 +541,21 @@
             for (var c = 0; c < st.gridSections; c++) {
                 var key = r + ',' + c;
                 var n = counts[key] || 0;
+                var k = kinds[key] || {};
+                var both = k.shade && k.highlight;
                 var cls, content;
                 if (st.ignoredSections[key]) {
                     cls = 'cd-cell-skip';
                     content = '—';
+                } else if (both) {
+                    cls = 'cd-cell-both';
+                    content = n >= needed ? '✓' : (n + '/' + needed);
+                } else if (k.shade) {
+                    cls = 'cd-cell-shade';
+                    content = n >= needed ? '✓' : (n + '/' + needed);
+                } else if (k.highlight) {
+                    cls = 'cd-cell-light';
+                    content = n >= needed ? '✓' : (n + '/' + needed);
                 } else if (n >= needed) {
                     cls = 'cd-cell-done';
                     content = '✓';
@@ -652,7 +684,7 @@
         });
         st.paths = st.paths.filter(function (path) {
             if (st.openPath && st.openPath.id === path.id) return true;
-            return selectionsInPath(path.id).length > 0;
+            return selectionsInPath(path.id).length >= 2;
         });
         if (st.openPath && st.paths.indexOf(st.openPath) < 0) st.openPath = null;
     }
@@ -676,35 +708,29 @@
         if (!st) return;
         var drawing = !!st.openPath;
         if (st.overlay) st.overlay.classList.toggle('is-drawing', drawing);
-        if (st.wrap) st.wrap.classList.toggle('is-drawing', drawing);
         applyCursor(st.hoverMarkerIdx);
-        if (!st.srcReady || !st.banner) return;
-        if (!drawing) {
+        // No DRAWING instruction banner — keep border/cursor only.
+        if (st.banner && !st.banner.classList.contains('error')) {
             st.banner.style.display = 'none';
             st.banner.classList.remove('is-drawing');
-            return;
         }
-        var n = selectionsInPath(st.openPath.id).length;
-        var kind = st.openPath.kind === 'highlight' ? 'light' : st.openPath.kind === 'shade' ? 'dark' : '';
-        st.banner.style.display = 'block';
-        st.banner.classList.remove('error');
-        st.banner.classList.add('is-drawing');
-        st.banner.textContent = n === 0
-            ? 'DRAWING — click the main color. Press S for the next path.'
-            : ('DRAWING' + (kind ? ' a ' + kind + ' path' : '') + ' — click the next color. Press S for the next path.');
     }
 
     function syncPathChrome() {
         if (!st) return;
         syncDrawChrome();
         if (!st.openPath) {
-            setPathHint('Press S to start a path. The first color is Main.');
+            setPathHint('S = start a new path. The first color is Main.');
             return;
         }
         var n = selectionsInPath(st.openPath.id).length;
         var kind = st.openPath.kind === 'highlight' ? 'Light' : st.openPath.kind === 'shade' ? 'Dark' : '';
         if (!n) {
-            setPathHint('Drawing — click the main color, then each depth color. Press S to start the next path.');
+            setPathHint('Drawing — click the main color, then a depth color. S starts the next path.');
+            return;
+        }
+        if (n === 1) {
+            setPathHint('Drawing — click the next depth color (S starts next; drops a path with only Main).');
             return;
         }
         setPathHint(
@@ -713,12 +739,25 @@
         );
     }
 
+    // Paths need Main + at least one depth color. Drop anything with fewer than 2.
+    function discardPath(path) {
+        if (!st || !path) return;
+        var pathId = path.id;
+        st.selections = st.selections.filter(function (sel) { return sel.pathId !== pathId; });
+        st.paths = st.paths.filter(function (item) { return item.id !== pathId; });
+        if (st.openPath && st.openPath.id === pathId) st.openPath = null;
+        deletePersistedPath(pathId).catch(function (err) {
+            console.error('color depth path remove failed', err);
+        });
+    }
+
     function closeOpenPath() {
         if (!st || !st.openPath) return;
         var path = st.openPath;
         st.openPath = null;
-        if (!selectionsInPath(path.id).length) {
-            st.paths = st.paths.filter(function (item) { return item.id !== path.id; });
+        if (selectionsInPath(path.id).length < 2) {
+            discardPath(path);
+            reindexColorGroups();
             return;
         }
         flushPath(path);
@@ -765,7 +804,7 @@
                 }));
             }
             return clear.then(function () {
-                if (!pts.length) {
+                if (pts.length < 2) {
                     path.persisted = false;
                     return null;
                 }
@@ -800,8 +839,12 @@
 
     function flushAll() {
         if (!st) return Promise.resolve();
+        if (st.openPath) closeOpenPath();
+        st.paths.slice().forEach(function (path) {
+            if (selectionsInPath(path.id).length < 2) discardPath(path);
+        });
         var paths = st.paths.filter(function (path) {
-            return selectionsInPath(path.id).length > 0;
+            return selectionsInPath(path.id).length >= 2;
         });
         return paths.reduce(function (chain, path) {
             return chain.then(function () { return flushPath(path); });
@@ -810,8 +853,11 @@
 
     function syncClosedPath(path) {
         if (!path || (st.openPath && st.openPath.id === path.id)) return;
-        if (!selectionsInPath(path.id).length) deletePersistedPath(path.id);
-        else flushPath(path);
+        if (selectionsInPath(path.id).length < 2) {
+            discardPath(path);
+            return;
+        }
+        flushPath(path);
     }
 
     function applyInferredKind(path) {
@@ -825,6 +871,7 @@
 
     function togglePath() {
         if (!st) return;
+        // S always starts a new path; finish the current one first if open.
         if (st.openPath) closeOpenPath();
         var path = { id: ++st.pathSeq, kind: null };
         st.paths.push(path);
@@ -832,6 +879,7 @@
         syncPathChrome();
         redraw();
         renderList();
+        renderSectionPanel();
     }
 
     function drawDepthPaths(ctx) {
@@ -983,10 +1031,11 @@
         var ctx = st.overlay.getContext('2d');
         ctx.clearRect(0, 0, st.overlay.width, st.overlay.height);
 
-        // Section fills: empty clear, partial yellow, skipped gray.
-        // Done sections: no fill — thicker green outline instead.
+        // Section fills by marker kind: shade=blue, light=red-yellow, both=green.
+        // Done sections: thicker outline (kept on top of kind tints).
         if (st.gridSections) {
             var counts = getSectionCounts();
+            var kinds = getSectionKindPresence();
             var needed = st.samplesPerSection || 1;
             var cw = st.dispW / st.gridSections;
             var ch = st.dispH / st.gridSections;
@@ -994,14 +1043,26 @@
             for (var r = 0; r < st.gridSections; r++) {
                 for (var c = 0; c < st.gridSections; c++) {
                     var key = r + ',' + c;
+                    var k = kinds[key] || {};
+                    var both = k.shade && k.highlight;
                     if (st.ignoredSections[key]) {
                         ctx.fillStyle = 'rgba(120, 120, 130, 0.28)';
                         ctx.fillRect(c * cw, r * ch, cw, ch);
-                    } else if ((counts[key] || 0) >= needed) {
-                        doneKeys.push({ r: r, c: c });
-                    } else if ((counts[key] || 0) > 0) {
+                    } else if (both) {
+                        ctx.fillStyle = 'rgba(40, 200, 90, 0.22)';
+                        ctx.fillRect(c * cw, r * ch, cw, ch);
+                    } else if (k.shade) {
+                        ctx.fillStyle = 'rgba(80, 160, 255, 0.22)';
+                        ctx.fillRect(c * cw, r * ch, cw, ch);
+                    } else if (k.highlight) {
+                        ctx.fillStyle = 'rgba(255, 220, 40, 0.22)';
+                        ctx.fillRect(c * cw, r * ch, cw, ch);
+                    } else if ((counts[key] || 0) > 0 && (counts[key] || 0) < needed) {
                         ctx.fillStyle = 'rgba(255, 200, 0, 0.18)';
                         ctx.fillRect(c * cw, r * ch, cw, ch);
+                    }
+                    if (!st.ignoredSections[key] && (counts[key] || 0) >= needed) {
+                        doneKeys.push({ r: r, c: c });
                     }
                 }
             }
@@ -1136,13 +1197,13 @@
         var path = null;
         st.paths.forEach(function (item) { if (item.id === pathId) path = item; });
         refreshPathRoles();
-        if (path) applyInferredKind(path);
+        if (path && st.paths.indexOf(path) >= 0) applyInferredKind(path);
+        syncClosedPath(path);
         syncPathChrome();
         reindexColorGroups();
         redraw();
         renderList();
         renderSectionPanel();
-        syncClosedPath(path);
     }
 
     function pointerToNative(event) {
@@ -1231,7 +1292,7 @@
             return;
         }
         if (!st.openPath) {
-            setPathHint('Press S to start a path.');
+            setPathHint('S = start a new path.');
             return;
         }
 
@@ -1296,6 +1357,97 @@
         return '#' + h(rgb[0]) + h(rgb[1]) + h(rgb[2]);
     }
 
+    function hexToRgb(hex) {
+        if (!hex || typeof hex !== 'string') return [128, 128, 128];
+        var h = hex.replace('#', '').trim();
+        if (h.length === 3) {
+            h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+        }
+        if (h.length !== 6) return [128, 128, 128];
+        return [
+            parseInt(h.slice(0, 2), 16) || 0,
+            parseInt(h.slice(2, 4), 16) || 0,
+            parseInt(h.slice(4, 6), 16) || 0,
+        ];
+    }
+
+    function sectionKeyForPoint(x, y) {
+        if (!st || !st.gridSections || st.natW <= 0 || st.natH <= 0) return null;
+        var cw = st.natW / st.gridSections;
+        var ch = st.natH / st.gridSections;
+        var c = Math.max(0, Math.min(st.gridSections - 1, Math.floor(x / cw)));
+        var r = Math.max(0, Math.min(st.gridSections - 1, Math.floor(y / ch)));
+        return r + ',' + c;
+    }
+
+    // Rebuild open sampler state from saved DB rows (back/edit).
+    function hydrateFromSamples(rows) {
+        if (!st || !rows || !rows.length) return false;
+        var skipped = [];
+        var points = [];
+        rows.forEach(function (row) {
+            if (row.skipped_asset) skipped.push(row);
+            else points.push(row);
+        });
+        if (skipped.length && !points.length) {
+            st.priorNoPathKind = skipped[0].path_kind || null;
+            setPathHint('S = start a new path. Or Done to change the applied label.');
+            syncPathChrome();
+            return true;
+        }
+        var byPath = {};
+        points.forEach(function (row) {
+            var pid = row.path_index;
+            if (!byPath[pid]) byPath[pid] = [];
+            byPath[pid].push(row);
+        });
+        var pathIds = Object.keys(byPath).map(function (k) { return parseInt(k, 10); })
+            .sort(function (a, b) { return a - b; });
+        st.selections = [];
+        st.paths = [];
+        st.openPath = null;
+        st.pathSeq = 0;
+        pathIds.forEach(function (pid) {
+            var pts = byPath[pid].slice().sort(function (a, b) {
+                return a.point_index - b.point_index;
+            });
+            if (pts.length < 2) return;
+            var path = {
+                id: pid,
+                kind: pts[0].path_kind || null,
+                persisted: true,
+            };
+            st.paths.push(path);
+            if (pid > st.pathSeq) st.pathSeq = pid;
+            pts.forEach(function (row, i) {
+                var seed = hexToRgb(row.color_hex);
+                var sec = sectionKeyForPoint(row.x_coord, row.y_coord);
+                st.selections.push({
+                    mode: path.kind,
+                    pathId: pid,
+                    pathRole: i === 0 ? 'main' : 'depth',
+                    seed: seed,
+                    colorGroup: 0,
+                    count: row.pixel_count || 0,
+                    radius: SAMPLE_RADIUS,
+                    x: row.x_coord,
+                    y: row.y_coord,
+                    sections: sec ? [sec] : [],
+                    sampleIndex: st.selections.length + 1,
+                    savedId: row.id,
+                    pending: false,
+                });
+            });
+        });
+        refreshPathRoles();
+        reindexColorGroups();
+        syncPathChrome();
+        redraw();
+        renderList();
+        renderSectionPanel();
+        return st.selections.length > 0;
+    }
+
     function undo() {
         if (!st || !st.selections.length) return;
         var sel = st.selections.pop();
@@ -1303,13 +1455,29 @@
         var path = null;
         st.paths.forEach(function (item) { if (item.id === pathId) path = item; });
         refreshPathRoles();
-        if (path) applyInferredKind(path);
+        if (path && st.paths.indexOf(path) >= 0) applyInferredKind(path);
+        syncClosedPath(path);
         syncPathChrome();
         reindexColorGroups();
         redraw();
         renderList();
         renderSectionPanel();
-        syncClosedPath(path);
+    }
+
+    // Esc while drawing: drop the latest marker on the open path only.
+    function undoActivePathMarker() {
+        if (!st || !st.openPath) return false;
+        var pathId = st.openPath.id;
+        var idx = -1;
+        for (var i = st.selections.length - 1; i >= 0; i--) {
+            if (st.selections[i].pathId === pathId) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx < 0) return false;
+        removeSelectionAt(idx);
+        return true;
     }
 
     function clearSelections() {
@@ -1508,6 +1676,7 @@
 
     function hotkey(key) {
         if (!st) return false;
+        if (key === 'Escape') return undoActivePathMarker();
         if (key === 'u' || key === 'U') { undo(); return true; }
         if (key === 's' || key === 'S') { togglePath(); return true; }
         return false;
@@ -1542,6 +1711,7 @@
         hotkey: hotkey,
         getState: function () { return st; },
         flushAll: flushAll,
+        hydrateFromSamples: hydrateFromSamples,
         getSectionCounts: getSectionCounts,
         autoSkipIncomplete: autoSkipIncomplete,
     };

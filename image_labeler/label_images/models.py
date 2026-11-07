@@ -310,3 +310,43 @@ class GoldStandardLabel(models.Model):
     def __str__(self):
         return f"Gold {self.asset_id} {self.task_type}/r{self.rule_index}={self.correct_response}"
 
+
+# ---------------------------------------------------------------------------
+# Internal selected-image review grids (admin only)
+# ---------------------------------------------------------------------------
+
+class SelectedImageBatch(models.Model):
+    """One curated sample of images for internal review (e.g. a 10×10 grid)."""
+
+    batch_number = models.PositiveIntegerField(unique=True)
+    title = models.CharField(max_length=200, blank=True)
+    filters = models.JSONField(default=list)
+    sample_size = models.PositiveIntegerField(default=100)
+    pool_size = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["batch_number"]
+
+    def __str__(self):
+        return f"Selected images batch {self.batch_number}"
+
+
+class SelectedImage(models.Model):
+    batch = models.ForeignKey(
+        SelectedImageBatch, on_delete=models.CASCADE, related_name="images"
+    )
+    asset_id = models.BigIntegerField()
+    image_link = models.TextField()
+    position = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["position"]
+        unique_together = ("batch", "position")
+        indexes = [
+            models.Index(fields=["batch", "position"]),
+        ]
+
+    def __str__(self):
+        return f"Batch {self.batch.batch_number} #{self.position}: {self.asset_id}"
+

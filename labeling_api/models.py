@@ -1092,8 +1092,9 @@ class color_depth_scale_responses(models.Model):
     ``path_kind`` is ``highlight`` or ``shade`` once a second color is chosen.
     Ordering a path by ``point_index`` rebuilds the card and the markers.
 
-    A skip is one row with ``skipped_asset`` true, ``path_index`` 0, and no color.
-    Point rows keep ``skipped_asset`` false.
+    A skip (K) is one row with ``skipped_asset`` true, ``path_index`` 0, and no color.
+    When the labeler finishes with no paths, the same skip row stores the reason in
+    ``path_kind``: ``flat`` or ``invalid``. Point rows keep ``skipped_asset`` false.
     """
 
     id = models.AutoField(primary_key=True)
