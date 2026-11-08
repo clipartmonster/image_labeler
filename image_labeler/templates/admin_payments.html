@@ -15,6 +15,9 @@
     </div>
 
     <h1>Batch Payments</h1>
+    <p class="wf-muted" style="margin-top:-6px; margin-bottom:12px;">
+        Training is paid per completed session (pass or fail). Work batches are paid when the batch is completed.
+    </p>
 
     <div class="wf-filters" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
         <div>
@@ -123,13 +126,20 @@ function renderPayments(d) {
                 ? '<span style="color:#b07a00; font-weight:600;">Unpaid</span>'
                 : '<span style="color:#8a9a9a;">In Progress</span>');
         var tr = document.createElement('tr');
-        tr.innerHTML = '<td><input type="checkbox" class="pay-cb" data-id="' + r.id + '"></td>'
+        var typeLabel = r.is_training
+            ? '<span style="color:#7a5aa8; font-weight:600;">Training session</span>'
+            : '<span style="color:#5a6a6a;">Work</span>';
+        if (r.is_training && r.accuracy_pct != null) {
+            typeLabel += '<div style="font-size:10px;color:#8a7aa0;">' + r.accuracy_pct + '%</div>';
+        }
+        var batchCell = r.is_training
+            ? ('session #' + r.sub_batch)
+            : (r.batch_id + '-' + r.sub_batch);
+        tr.innerHTML = '<td><input type="checkbox" class="pay-cb" data-pay-key="' + r.pay_key + '"></td>'
             + '<td>' + r.labeler + '</td>'
             + '<td>' + featureName(r.task_type, r.rule_index) + '</td>'
-            + '<td>' + (r.is_training
-                ? '<span style="color:#7a5aa8; font-weight:600;">Training</span>'
-                : '<span style="color:#5a6a6a;">Work</span>') + '</td>'
-            + '<td>' + r.batch_id + '-' + r.sub_batch + '</td>'
+            + '<td>' + typeLabel + '</td>'
+            + '<td>' + batchCell + '</td>'
             + '<td style="text-align:right;">$' + r.payment.toFixed(2) + '</td>'
             + '<td style="text-align:right;">' + (r.bonus > 0 ? '$' + r.bonus.toFixed(2) : '\u2014') + '</td>'
             + '<td style="text-align:right; font-weight:600;">$' + r.total.toFixed(2) + '</td>'
@@ -144,18 +154,18 @@ function renderPayments(d) {
     });
 }
 
-function getSelectedIds() {
-    var ids = [];
+function getSelectedPayKeys() {
+    var keys = [];
     document.querySelectorAll('.pay-cb:checked').forEach(function(cb) {
-        ids.push(parseInt(cb.getAttribute('data-id')));
+        keys.push(cb.getAttribute('data-pay-key'));
     });
-    return ids;
+    return keys;
 }
 
 function updateButtons() {
-    var ids = getSelectedIds();
-    document.getElementById('payMarkBtn').disabled = ids.length === 0;
-    document.getElementById('payUnmarkBtn').disabled = ids.length === 0;
+    var keys = getSelectedPayKeys();
+    document.getElementById('payMarkBtn').disabled = keys.length === 0;
+    document.getElementById('payUnmarkBtn').disabled = keys.length === 0;
 }
 
 function toggleAll(master) {
@@ -166,22 +176,22 @@ function toggleAll(master) {
 }
 
 function markSelected() {
-    var ids = getSelectedIds();
-    if (!ids.length) return;
-    togglePaid(ids, true);
+    var keys = getSelectedPayKeys();
+    if (!keys.length) return;
+    togglePaid(keys, true);
 }
 
 function unmarkSelected() {
-    var ids = getSelectedIds();
-    if (!ids.length) return;
-    togglePaid(ids, false);
+    var keys = getSelectedPayKeys();
+    if (!keys.length) return;
+    togglePaid(keys, false);
 }
 
-function togglePaid(ids, paid) {
+function togglePaid(payKeys, paid) {
     fetch('/label_images/admin/payments/toggle/', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
-        body: JSON.stringify({ids: ids, paid: paid})
+        body: JSON.stringify({pay_keys: payKeys, paid: paid})
     })
     .then(function(r) { return r.json(); })
     .then(function(d) {

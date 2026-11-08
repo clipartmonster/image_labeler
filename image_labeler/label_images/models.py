@@ -71,6 +71,24 @@ class BatchAssignment(models.Model):
         help_text="Training batch — shows correct answers after labeler responds.",
     )
     paid = models.BooleanField(default=False)
+    # Training-only settings (ignored for work assignments).
+    pass_threshold = models.FloatField(
+        default=0.975,
+        help_text="Minimum accuracy (0–1) required to pass this training assignment.",
+    )
+    max_attempts = models.PositiveIntegerField(
+        default=3,
+        help_text="Initial number of practice attempts granted for this training set.",
+    )
+    attempts_granted = models.PositiveIntegerField(
+        default=3,
+        help_text="Total attempts allowed (raised by admin when granting more practice).",
+    )
+    source_batch_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Labeling batch_id assets were sampled from (training only).",
+    )
 
     class Meta:
         unique_together = ("user", "task_type", "rule_index", "batch_id", "large_sub_batch")
@@ -132,6 +150,9 @@ class TrainingResult(models.Model):
     correct = models.IntegerField()
     time_seconds = models.IntegerField(help_text="Wall-clock seconds from start to finish")
     completed_at = models.DateTimeField(auto_now_add=True)
+    # Each finished attempt is payable regardless of pass/fail.
+    payment_amount = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    paid = models.BooleanField(default=False)
 
     @property
     def accuracy(self):

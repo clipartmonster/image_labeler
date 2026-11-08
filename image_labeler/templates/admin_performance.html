@@ -98,6 +98,7 @@
                 <thead><tr>
                     <th>Feature</th>
                     <th>Accuracy</th>
+                    <th>Result</th>
                     <th>Score</th>
                     <th>Time</th>
                     <th>Per Img</th>
@@ -273,7 +274,9 @@ function loadPerf() {
         var trainAccVal = s.training_accuracy != null
             ? '<span class="' + accClass(s.training_accuracy) + '">' + s.training_accuracy + '%</span>' : '\u2014';
         var trainHtml = makeCard('Avg Accuracy', trainAccVal, s.training_total_imgs + ' total images')
-            + makeCard('Sessions', s.training_sessions);
+            + makeCard('Attempts', s.training_sessions)
+            + makeCard('Features Passed', (s.training_passed_features || 0) + ' / ' + (s.training_features || 0),
+                (s.training_locked_features || 0) + ' locked');
         document.getElementById('trainStats').innerHTML = trainHtml;
 
         renderTraining(d.training);
@@ -295,9 +298,15 @@ function renderTraining(rows) {
                 + '\',' + (r.has_detail ? 'true' : 'false') + ','
                 + r.correct + ',' + r.total + ')">Review</button>';
         }
+        var resultTag = r.passed
+            ? '<span class="pf-tag pf-tag-done">PASS</span>'
+            : '<span class="pf-tag pf-tag-late">FAIL</span>';
+        var need = r.pass_threshold_pct != null ? ' (need ' + r.pass_threshold_pct + '%)' : '';
         var tr = document.createElement('tr');
         tr.innerHTML = '<td>' + (r.feature || r.task_type + '/r' + r.rule_index) + '</td>'
-            + '<td><span class="' + accClass(r.accuracy_pct) + '">' + r.accuracy_pct + '%</span></td>'
+            + '<td><span class="' + accClass(r.accuracy_pct) + '">' + r.accuracy_pct + '%</span>'
+            + '<span style="font-size:10px;color:#6f7a7a;">' + need + '</span></td>'
+            + '<td>' + resultTag + '</td>'
             + '<td>' + r.correct + '/' + r.total + '</td>'
             + '<td>' + r.time_min + 'm</td>'
             + '<td>' + r.per_image_sec + 's</td>'

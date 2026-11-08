@@ -94,6 +94,9 @@
 }
 .lb-done { background: #d4edda; color: #1a6b2a; }
 .lb-todo { background: #fff3cd; color: #7a6000; }
+.lb-locked { background: #f8d7da; color: #842029; }
+.lb-progress { background: #e2e8f0; color: #334155; }
+.lb-train-meta { font-size: 11px; color: #6a7a7a; white-space: nowrap; }
 
 /* Buttons */
 .lb-btn {
@@ -220,9 +223,17 @@
         <div class="lb-row">
             <span class="lb-feat">{{ a.feature_name|default:"—" }}</span>
             <span class="lb-imgs">{{ a.total }} imgs</span>
-            <span class="lb-pay">${{ a.payment_amount }}</span>
+            <span class="lb-pay">${{ a.payment_amount }}/session</span>
+            <span class="lb-train-meta">Pass {{ a.pass_threshold_pct }}% · {{ a.attempts_used }}/{{ a.attempts_granted }} attempts{% if a.best_accuracy_pct is not None %} · best {{ a.best_accuracy_pct }}%{% endif %}</span>
             {% if a.training_done %}
-                <span class="lb-status lb-done">Done</span>
+                <span class="lb-status lb-done">Passed</span>
+            {% elif a.training_locked %}
+                <span class="lb-status lb-locked">Locked</span>
+                <span class="lb-train-meta">No attempts left — ask an admin</span>
+            {% elif a.attempts_used > 0 %}
+                <span class="lb-status lb-progress">Retry</span>
+                <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
+                   class="lb-btn lb-btn-start">Retry ({{ a.attempts_left }} left)</a>
             {% else %}
                 <span class="lb-status lb-todo">Todo</span>
                 <a href="/label_images/mturk_redirect/?label_source=Internal&labeler_id={{ request.user.username }}&task_type={{ a.task_type }}&rule_indexes={{ a.rule_index }}&batch_id={{ a.batch_id }}&large_sub_batch={{ a.large_sub_batch }}&is_training=1"
