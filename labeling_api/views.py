@@ -3434,15 +3434,15 @@ def get_asset_batch(request: Request) -> JsonResponse:
                 )
 
     # Determine the current labeler's username for per-labeler exclusion.
-    # Admins (superusers) are exempt so they can re-label assets.
-    # Note: _labeler_may_repeat only relaxes collect/upsert rules — the queue
-    # still hides assets this labeler already finished (so refresh stays clean).
+    # Admins (superusers) and _labeler_may_repeat accounts can re-see / re-label.
     labeler_username = None
     if hasattr(request, "user") and request.user.is_authenticated and not request.user.is_superuser:
         labeler_username = request.user.username
     # Fallback: accept labeler_id from the request data (used by internal API calls)
     if not labeler_username:
         labeler_username = request.data.get("labeler_id") or request.GET.get("labeler_id")
+
+    may_repeat = _labeler_may_repeat(labeler_username)
 
     # Pair-comparison tasks (same_style rule 2) serve image pairs instead of
     # single assets: pull from selected_pair_labels and exclude pairs this labeler
@@ -3463,7 +3463,7 @@ def get_asset_batch(request: Request) -> JsonResponse:
             )
         )
 
-        if labeler_username:
+        if labeler_username and not may_repeat:
             already_labeled_pairs = set(
                 style_prompt_responses.objects.filter(
                     task_type=task_type,
@@ -3496,8 +3496,9 @@ def get_asset_batch(request: Request) -> JsonResponse:
         ).values_list("asset_id", flat=True)
     )
 
-    # Exclude assets this labeler has already labeled (>=1 response).
-    if labeler_username:
+    # Exclude assets this labeler has already labeled (>=1 response),
+    # unless may_repeat (steve) is allowed to see them again.
+    if labeler_username and not may_repeat:
         if task_type == "line_width_type":
             already_labeled = set(
                 line_width_sample_table.objects.filter(

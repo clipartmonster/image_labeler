@@ -191,7 +191,24 @@ function direct_hotkey_action(hotkey) {
                 fd.append('time_seconds', elapsed);
                 fd.append('answers', JSON.stringify(stats.answers || []));
                 fetch('/label_images/complete_training/', { method: 'POST', body: fd })
-                    .finally(function() {
+                    .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+                    .then(function(res) {
+                        var data = res.data || {};
+                        var msg;
+                        if (data.passed) {
+                            msg = 'Passed training with ' + data.accuracy_pct +
+                                '% (need ' + data.pass_threshold_pct + '%). Work batches unlocked.';
+                        } else if (data.locked) {
+                            msg = 'Score: ' + (data.accuracy_pct != null ? data.accuracy_pct + '%' : 'n/a') +
+                                '. No practice attempts remaining — contact an admin.';
+                        } else {
+                            msg = 'Score: ' + data.accuracy_pct + '% (need ' + data.pass_threshold_pct +
+                                '%). Attempts left: ' + data.attempts_left + '.';
+                        }
+                        alert(msg);
+                        window.location.href = '/label_images/setup_session/';
+                    })
+                    .catch(function() {
                         window.location.href = '/label_images/setup_session/';
                     });
                 return;

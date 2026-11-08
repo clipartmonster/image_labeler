@@ -16,7 +16,7 @@
 
     <h1>Manage Training Sets</h1>
     <p class="wf-muted" style="margin-bottom:18px;">
-        Create, view, and remove training batches for each labeler. Training batches use reconciled assets with known correct answers.
+        Create training sets from a labeling batch's reconciled gold labels. Labelers must hit the pass threshold within the granted attempts to unlock work.
     </p>
 
     <!-- Create Training Set -->
@@ -37,13 +37,27 @@
             </div>
             <div>
                 <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Rule</label>
-                <select id="trainRule" class="wf-select" style="width:200px;">
+                <select id="trainRule" class="wf-select" style="width:200px;" onchange="onTrainRuleChange()">
                     <option value="">-- select task type first --</option>
                 </select>
             </div>
             <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Source Batch</label>
+                <select id="trainSourceBatch" class="wf-select" style="width:220px;">
+                    <option value="">-- select rule first --</option>
+                </select>
+            </div>
+            <div>
                 <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Assets</label>
-                <input id="trainAssetCount" type="number" min="10" max="500" value="150" class="wf-input" style="width:80px;">
+                <input id="trainAssetCount" type="number" min="1" max="500" value="" class="wf-input" style="width:80px;" placeholder="all">
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Pass %</label>
+                <input id="trainPassThreshold" type="number" min="1" max="100" step="0.1" value="97.5" class="wf-input" style="width:72px;">
+            </div>
+            <div>
+                <label style="display:block; font-size:.8rem; color:#3a4a4a; margin-bottom:4px; font-weight:600;">Attempts</label>
+                <input id="trainMaxAttempts" type="number" min="1" max="20" value="3" class="wf-input" style="width:64px;">
             </div>
             <button class="wf-btn wf-btn-primary" onclick="createTraining()" style="height:36px;">Create</button>
         </div>
@@ -267,33 +281,75 @@ function revokeExemption(exemptionId, btn) {
 
 function onTrainTaskTypeChange() {
     fillRules('trainRule', _rules, document.getElementById('trainTaskType').value);
+    var batchSel = document.getElementById('trainSourceBatch');
+    batchSel.innerHTML = '<option value="">-- select rule first --</option>';
+}
+
+function onTrainRuleChange() {
+    var taskType = document.getElementById('trainTaskType').value;
+    var ruleIndex = document.getElementById('trainRule').value;
+    var batchSel = document.getElementById('trainSourceBatch');
+    batchSel.innerHTML = '<option value="">Loading\u2026</option>';
+    if (!taskType || ruleIndex === '') {
+        batchSel.innerHTML = '<option value="">-- select rule first --</option>';
+        return;
+    }
+    fetch('/label_images/admin/training/batches/?task_type=' + encodeURIComponent(taskType) +
+          '&rule_index=' + encodeURIComponent(ruleIndex))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        batchSel.innerHTML = '<option value="">-- select --</option>';
+        if (data.error) {
+            batchSel.innerHTML = '<option value="">' + data.error + '</option>';
+            return;
+        }
+        (data.batches || []).forEach(function(b) {
+            var o = document.createElement('option');
+            o.value = b.batch_id;
+            o.textContent = 'Batch ' + b.batch_id + ' \u2014 ' + b.gold_eligible +
+                ' gold / ' + b.asset_count + ' assets';
+            if (!b.gold_eligible) o.disabled = true;
+            batchSel.appendChild(o);
+        });
+        if (!(data.batches || []).length) {
+            batchSel.innerHTML = '<option value="">No batches for this rule</option>';
+        }
+    });
 }
 
 function createTraining() {
     var username = document.getElementById('trainLabeler').value;
     var taskType = document.getElementById('trainTaskType').value;
     var ruleIndex = document.getElementById('trainRule').value;
+    var sourceBatchId = document.getElementById('trainSourceBatch').value;
     var assetCount = document.getElementById('trainAssetCount').value;
+    var passThreshold = document.getElementById('trainPassThreshold').value;
+    var maxAttempts = document.getElementById('trainMaxAttempts').value;
     var status = document.getElementById('createTrainStatus');
 
-    if (!username || !taskType || !ruleIndex) {
+    if (!username || !taskType || ruleIndex === '' || !sourceBatchId) {
         status.style.color = '#bd4444';
-        status.textContent = 'Please select a labeler, task type, and rule.';
+        status.textContent = 'Please select a labeler, task type, rule, and source batch.';
         return;
     }
 
     status.style.color = '#6f7a7a';
     status.textContent = 'Creating training set\u2026';
 
+    var payload = {
+        username: username,
+        task_type: taskType,
+        rule_index: ruleIndex,
+        source_batch_id: parseInt(sourceBatchId, 10),
+        pass_threshold: parseFloat(passThreshold),
+        max_attempts: parseInt(maxAttempts, 10) || 3,
+    };
+    if (assetCount !== '') payload.asset_count = parseInt(assetCount, 10);
+
     fetch('/label_images/admin/training/create/', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
-        body: JSON.stringify({
-            username: username,
-            task_type: taskType,
-            rule_index: ruleIndex,
-            asset_count: parseInt(assetCount),
-        }),
+        body: JSON.stringify(payload),
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -305,8 +361,11 @@ function createTraining() {
         status.style.color = '#5a8a5a';
         status.textContent = (data.created ? 'Created new' : 'Updated existing') +
             ' training set for ' + data.username + ': ' + data.task_type +
-            ' rule ' + data.rule_index + ' (' + data.total_assets + ' assets).';
+            ' rule ' + data.rule_index + ' from batch ' + data.source_batch_id +
+            ' (' + data.total_assets + ' assets, pass ' + data.pass_threshold_pct +
+            '%, ' + data.attempts_granted + ' attempts).';
 
+        _trainingSets = _trainingSets.filter(function(a) { return a.id !== data.assignment_id; });
         _trainingSets.push({
             id: data.assignment_id,
             user__username: data.username,
@@ -315,9 +374,25 @@ function createTraining() {
             asset_count: data.total_assets,
             completed_at: null,
             payment_amount: '20.00',
+            source_batch_id: data.source_batch_id,
+            pass_threshold_pct: data.pass_threshold_pct,
+            max_attempts: data.max_attempts,
+            attempts_granted: data.attempts_granted,
+            attempts_used: 0,
+            attempts_left: data.attempts_granted,
+            training_status: 'not_started',
+            best_accuracy_pct: null,
         });
         renderTrainingSets();
     });
+}
+
+function trainingStatusBadge(a) {
+    var label = a.training_status || (a.completed_at ? 'passed' : 'not_started');
+    if (label === 'passed') return '<span class="wf-badge wf-badge-green">Passed</span>';
+    if (label === 'locked') return '<span class="wf-badge wf-badge-red">Locked</span>';
+    if (label === 'in_progress') return '<span class="wf-badge wf-badge-yellow">In progress</span>';
+    return '<span class="wf-badge wf-badge-gray">Not started</span>';
 }
 
 function renderTrainingSets() {
@@ -333,28 +408,64 @@ function renderTrainingSets() {
     }
 
     var html = '<table class="wf-table"><thead><tr>' +
-        '<th>Labeler</th><th>Task Type</th><th>Rule</th><th>Assets</th><th>Status</th><th>Actions</th>' +
+        '<th>Labeler</th><th>Task Type</th><th>Rule</th><th>Batch</th><th>Assets</th>' +
+        '<th>Pass %</th><th>Attempts</th><th>Best</th><th>Status</th><th>Actions</th>' +
         '</tr></thead><tbody>';
 
     filtered.forEach(function(a) {
-        var status = a.completed_at
-            ? '<span class="wf-badge wf-badge-green">Done</span>'
-            : '<span class="wf-badge wf-badge-gray">Pending</span>';
         var ruleName = ruleTitle(_rules, a.task_type, a.rule_index);
+        var attempts = (a.attempts_used || 0) + ' / ' + (a.attempts_granted || a.max_attempts || 3);
+        var best = a.best_accuracy_pct != null ? a.best_accuracy_pct + '%' : '\u2014';
+        var grantBtn = (a.training_status === 'locked' || a.training_status === 'in_progress')
+            ? ' <button class="wf-btn wf-btn-sm" onclick="grantAttempts(' + a.id + ', this)">+Attempts</button>'
+            : '';
 
         html += '<tr>' +
             '<td>' + a.user__username + '</td>' +
             '<td>' + a.task_type + '</td>' +
             '<td>Rule ' + a.rule_index + (ruleName ? ' — ' + ruleName : '') + '</td>' +
+            '<td>' + (a.source_batch_id != null ? a.source_batch_id : '\u2014') + '</td>' +
             '<td>' + (a.asset_count || 0) + '</td>' +
-            '<td>' + status + '</td>' +
+            '<td>' + (a.pass_threshold_pct != null ? a.pass_threshold_pct : 97.5) + '%</td>' +
+            '<td>' + attempts + '</td>' +
+            '<td>' + best + '</td>' +
+            '<td>' + trainingStatusBadge(a) + '</td>' +
             '<td>' +
                 '<button class="wf-btn wf-btn-sm wf-btn-primary" onclick="viewAssets(' + a.id + ', \'' + a.user__username + '\', \'' + a.task_type + '\', ' + a.rule_index + ')">View</button> ' +
-                '<button class="wf-btn wf-btn-sm wf-btn-danger" onclick="removeTraining(' + a.id + ', this)">Remove</button>' +
+                grantBtn +
+                ' <button class="wf-btn wf-btn-sm wf-btn-danger" onclick="removeTraining(' + a.id + ', this)">Remove</button>' +
             '</td></tr>';
     });
     html += '</tbody></table>';
     document.getElementById('trainingTable').innerHTML = html;
+}
+
+function grantAttempts(assignmentId, btn) {
+    var extra = prompt('Extra attempts to grant (default = original max attempts):', '');
+    if (extra === null) return;
+    btn.disabled = true;
+    var payload = {assignment_id: assignmentId};
+    if (extra !== '') payload.extra_attempts = parseInt(extra, 10);
+
+    fetch('/label_images/admin/training/grant_attempts/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify(payload),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        if (data.error) { alert(data.error); return; }
+        _trainingSets.forEach(function(a) {
+            if (a.id === assignmentId) {
+                a.attempts_granted = data.attempts_granted;
+                a.attempts_used = data.attempts_used;
+                a.attempts_left = data.attempts_left;
+                a.training_status = data.training_status;
+            }
+        });
+        renderTrainingSets();
+    });
 }
 
 function removeTraining(assignmentId, btn) {

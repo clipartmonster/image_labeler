@@ -249,15 +249,6 @@ def select_line_widths(request):
         )
         assets_to_label = [a for a in assets_to_label if a["asset_id"] not in already_sampled]
 
-    already_sampled = set(
-        line_width_sample_table.objects.filter(labeler_id=labeler_id).values_list(
-            "asset_id", flat=True
-        )
-    )
-    assets_to_label = [
-        a for a in assets_to_label if a["asset_id"] not in already_sampled
-    ]
-
     sampling_array = [[1 + col + row * 3 for col in range(3)] for row in range(3)]
 
     data = {
@@ -579,12 +570,14 @@ def setup_session(request):
             completed_at__isnull=True,
         ).order_by("deadline")
 
-        # Build set of features with completed training
-        completed_training_features = set(
-            training_qs.filter(completed_at__isnull=False).values_list(
-                "task_type", "rule_index"
-            )
-        )
+        from .training_pass import get_training_pass_status
+
+        # Features this labeler has passed training for (score gate, not merely finished).
+        completed_training_features = {
+            (a.task_type, a.rule_index)
+            for a in training_qs
+            if get_training_pass_status(a).passed
+        }
         # Features an admin has cleared this labeler to work untrained.
         exempt_features = set(
             TrainingExemption.objects.filter(user=request.user).values_list(
@@ -595,7 +588,8 @@ def setup_session(request):
         training_assignments = []
         for a in training_qs:
             total = TrainingBatchAsset.objects.filter(assignment=a).count()
-            is_done = a.completed_at is not None
+            status = get_training_pass_status(a)
+            is_done = status.passed
             training_assignments.append(
                 {
                     "id": a.id,
@@ -610,6 +604,17 @@ def setup_session(request):
                     "progress_pct": 100 if is_done else 0,
                     "is_training": True,
                     "training_done": is_done,
+                    "training_locked": status.locked,
+                    "training_status": status.status_label,
+                    "attempts_used": status.attempts_used,
+                    "attempts_granted": status.attempts_granted,
+                    "attempts_left": status.attempts_left,
+                    "pass_threshold_pct": round(status.pass_threshold * 100, 1),
+                    "best_accuracy_pct": (
+                        round(status.best_accuracy * 100, 1)
+                        if status.best_accuracy is not None
+                        else None
+                    ),
                 }
             )
 
@@ -1079,6 +1084,7 @@ def mturk_redirect(request):
                 assignment__is_training=True,
             ).values("asset_id", "image_link", "correct_label")
         )
+        random.shuffle(ta_list)
 
         assets_to_label = [
             {"asset_id": t["asset_id"], "image_link": t["image_link"]} for t in ta_list
@@ -3117,10 +3123,13 @@ from .models import (
 @labeler_required
 def labeler_earnings(request):
     from labeling_api.models import labelling_rules as LR
+    from .models import TrainingResult
+    from types import SimpleNamespace
 
-    assignments = BatchAssignment.objects.filter(user=request.user).order_by(
-        "-deadline"
-    )
+    # Work batches only for assignment pay; training is paid per finished attempt.
+    assignments = BatchAssignment.objects.filter(
+        user=request.user, is_training=False
+    ).order_by("-deadline")
 
     rule_titles = {}
     for r in LR.objects.exclude(task_type="color_type").values(
@@ -3134,6 +3143,23 @@ def labeler_earnings(request):
 
     completed = [annotate(a) for a in assignments if a.completed_at]
     pending = [annotate(a) for a in assignments if not a.completed_at]
+
+    for tr in TrainingResult.objects.filter(user=request.user).order_by(
+        "-completed_at"
+    ):
+        completed.append(
+            SimpleNamespace(
+                feature_name=rule_titles.get((tr.task_type, tr.rule_index), "")
+                or "Training",
+                task_type=tr.task_type,
+                rule_index=tr.rule_index,
+                batch_id="train",
+                large_sub_batch=tr.id,
+                payment_amount=tr.payment_amount,
+                bonus_amount=0,
+                completed_at=tr.completed_at,
+            )
+        )
 
     completed_total = sum(a.payment_amount for a in completed)
     pending_total = sum(a.payment_amount for a in pending)
@@ -3542,13 +3568,14 @@ def admin_payments(request):
 
 @admin_required_ajax
 def admin_payments_data(request):
-    """AJAX: return batch assignments with payment/paid info, optionally filtered."""
-    from django.contrib.auth.models import User
+    """AJAX: work assignments + each completed training attempt (payable either way)."""
+    from .models import TrainingResult
 
     labeler = request.GET.get("labeler", "")
     status_filter = request.GET.get("status", "all")  # all, paid, unpaid
 
-    qs = BatchAssignment.objects.select_related("user")
+    # Work batches only — training pay is tracked per TrainingResult attempt.
+    qs = BatchAssignment.objects.filter(is_training=False).select_related("user")
     if labeler:
         qs = qs.filter(user__username=labeler)
 
@@ -3568,7 +3595,7 @@ def admin_payments_data(request):
             total_owed += amount
         rows.append(
             {
-                "id": a.id,
+                "pay_key": f"a:{a.id}",
                 "labeler": a.user.username,
                 "task_type": a.task_type,
                 "rule_index": a.rule_index,
@@ -3582,9 +3609,55 @@ def admin_payments_data(request):
                     a.completed_at.strftime("%b %d, %Y") if a.completed_at else None
                 ),
                 "paid": a.paid,
-                "is_training": a.is_training,
+                "is_training": False,
+                "row_kind": "work",
             }
         )
+
+    tr_qs = TrainingResult.objects.select_related("user")
+    if labeler:
+        tr_qs = tr_qs.filter(user__username=labeler)
+    if status_filter == "paid":
+        tr_qs = tr_qs.filter(paid=True)
+    elif status_filter == "unpaid":
+        tr_qs = tr_qs.filter(paid=False)
+
+    for tr in tr_qs.order_by("-completed_at"):
+        amount = float(tr.payment_amount or 0)
+        if tr.paid:
+            total_paid += amount
+        else:
+            total_owed += amount
+        rows.append(
+            {
+                "pay_key": f"t:{tr.id}",
+                "labeler": tr.user.username,
+                "task_type": tr.task_type,
+                "rule_index": tr.rule_index,
+                "batch_id": "train",
+                "sub_batch": tr.id,
+                "payment": amount,
+                "bonus": 0.0,
+                "total": amount,
+                "assigned": (
+                    tr.completed_at.strftime("%b %d, %Y") if tr.completed_at else ""
+                ),
+                "completed": (
+                    tr.completed_at.strftime("%b %d, %Y") if tr.completed_at else None
+                ),
+                "paid": tr.paid,
+                "is_training": True,
+                "row_kind": "training_session",
+                "accuracy_pct": (
+                    round(tr.correct / tr.total * 100, 1) if tr.total else 0
+                ),
+            }
+        )
+
+    rows.sort(
+        key=lambda r: r["completed"] or r["assigned"] or "",
+        reverse=True,
+    )
 
     return JsonResponse(
         {
@@ -3597,16 +3670,47 @@ def admin_payments_data(request):
 
 @admin_required_ajax
 def admin_payments_toggle(request):
-    """AJAX POST: toggle paid status on one or more assignments."""
+    """AJAX POST: toggle paid on work assignments and/or training sessions."""
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
+    from .models import TrainingResult
+
     data = json.loads(request.body)
-    ids = data.get("ids", [])
     paid = data.get("paid", True)
-    if not ids:
+    pay_keys = data.get("pay_keys") or []
+    # Back-compat: plain assignment ids from older UI.
+    legacy_ids = data.get("ids", [])
+
+    assignment_ids = []
+    training_ids = []
+    for key in pay_keys:
+        if isinstance(key, str) and key.startswith("a:"):
+            try:
+                assignment_ids.append(int(key.split(":", 1)[1]))
+            except (TypeError, ValueError):
+                continue
+        elif isinstance(key, str) and key.startswith("t:"):
+            try:
+                training_ids.append(int(key.split(":", 1)[1]))
+            except (TypeError, ValueError):
+                continue
+    for raw in legacy_ids:
+        try:
+            assignment_ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+
+    if not assignment_ids and not training_ids:
         return JsonResponse({"error": "no ids"}, status=400)
-    BatchAssignment.objects.filter(pk__in=ids).update(paid=paid)
-    return JsonResponse({"status": "ok", "updated": len(ids)})
+
+    updated = 0
+    if assignment_ids:
+        updated += BatchAssignment.objects.filter(pk__in=assignment_ids).update(
+            paid=paid
+        )
+    if training_ids:
+        updated += TrainingResult.objects.filter(pk__in=training_ids).update(paid=paid)
+    return JsonResponse({"status": "ok", "updated": updated})
 
 
 # ---------------------------------------------------------------------------
@@ -3727,14 +3831,37 @@ def admin_performance_data(request):
         rule_titles[(r["task_type"], r["rule_index"])] = r["title"]
 
     # --- Training results ---
-    training_assignments = {
-        (a.task_type, a.rule_index): a.id
+    from .training_pass import get_training_pass_status
+
+    training_assignment_objs = {
+        (a.task_type, a.rule_index): a
         for a in BatchAssignment.objects.filter(user=user, is_training=True)
     }
+    training_pass_by_feature = {}
+    for key, assignment in training_assignment_objs.items():
+        status = get_training_pass_status(assignment)
+        training_pass_by_feature[key] = {
+            "assignment_id": assignment.id,
+            "passed": status.passed,
+            "locked": status.locked,
+            "status": status.status_label,
+            "attempts_used": status.attempts_used,
+            "attempts_granted": status.attempts_granted,
+            "pass_threshold_pct": round(status.pass_threshold * 100, 1),
+            "best_accuracy_pct": (
+                round(status.best_accuracy * 100, 1)
+                if status.best_accuracy is not None
+                else None
+            ),
+        }
+
     training_rows = []
     for tr in TrainingResult.objects.filter(user=user).order_by("-completed_at"):
         mins = round(tr.time_seconds / 60, 1)
-        assignment_id = training_assignments.get((tr.task_type, tr.rule_index))
+        assignment = training_assignment_objs.get((tr.task_type, tr.rule_index))
+        assignment_id = assignment.id if assignment else None
+        threshold = float(assignment.pass_threshold) if assignment else 0.975
+        accuracy = (tr.correct / tr.total) if tr.total > 0 else 0.0
         has_detail = tr.label_responses.exists() if assignment_id else False
         training_rows.append(
             {
@@ -3743,9 +3870,9 @@ def admin_performance_data(request):
                 "feature": rule_titles.get((tr.task_type, tr.rule_index), ""),
                 "correct": tr.correct,
                 "total": tr.total,
-                "accuracy_pct": (
-                    round(tr.correct / tr.total * 100, 1) if tr.total > 0 else 0
-                ),
+                "accuracy_pct": round(accuracy * 100, 1) if tr.total > 0 else 0,
+                "passed": accuracy >= threshold,
+                "pass_threshold_pct": round(threshold * 100, 1),
                 "time_min": mins,
                 "per_image_sec": (
                     round(tr.time_seconds / tr.total, 1) if tr.total > 0 else 0
@@ -3889,6 +4016,13 @@ def admin_performance_data(request):
         round(w_on_time / w_completed_count * 100, 1) if w_completed_count > 0 else None
     )
 
+    passed_features = sum(
+        1 for info in training_pass_by_feature.values() if info["passed"]
+    )
+    locked_features = sum(
+        1 for info in training_pass_by_feature.values() if info["locked"]
+    )
+
     return JsonResponse(
         {
             "username": user.username,
@@ -3896,6 +4030,9 @@ def admin_performance_data(request):
                 "training_accuracy": tr_avg_accuracy,
                 "training_sessions": tr_count,
                 "training_total_imgs": tr_total_imgs,
+                "training_passed_features": passed_features,
+                "training_locked_features": locked_features,
+                "training_features": len(training_pass_by_feature),
                 "work_labels": total_work_labels,
                 "work_hours": round(total_work_hours, 1),
                 "work_throughput": w_throughput,
@@ -3904,6 +4041,7 @@ def admin_performance_data(request):
                 "work_assignments": work_assignments.count(),
             },
             "training": training_rows,
+            "training_features": list(training_pass_by_feature.values()),
             "work": work_rows,
         }
     )
@@ -5420,11 +5558,12 @@ def rule_guide_api(request):
 @csrf_exempt
 @login_required
 def complete_training(request):
-    """AJAX: mark a training BatchAssignment as completed and record results."""
+    """AJAX: record a training attempt; unlock only when pass threshold is met."""
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
     from .models import BatchAssignment, TrainingResult, TrainingLabelResponse
+    from .training_pass import get_training_pass_status
 
     task_type = request.POST.get("task_type")
     rule_index = int(request.POST.get("rule_index"))
@@ -5447,12 +5586,31 @@ def complete_training(request):
         is_training=True,
     ).first()
 
-    # Mark as completed (first time only)
     if assignment:
-        BatchAssignment.objects.filter(
-            pk=assignment.pk,
-            completed_at__isnull=True,
-        ).update(completed_at=tz.now())
+        pre = get_training_pass_status(assignment)
+        if pre.locked:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "passed": False,
+                    "locked": True,
+                    "error": "No practice attempts remaining. Contact an admin.",
+                    "attempts_used": pre.attempts_used,
+                    "attempts_granted": pre.attempts_granted,
+                    "attempts_left": 0,
+                    "pass_threshold_pct": round(pre.pass_threshold * 100, 1),
+                },
+                status=403,
+            )
+
+    from decimal import Decimal
+
+    if assignment is not None:
+        session_pay = assignment.payment_amount or Decimal(
+            str(settings.LABELER_PAY_PER_BATCH)
+        )
+    else:
+        session_pay = Decimal(str(settings.LABELER_PAY_PER_BATCH))
 
     training_result = TrainingResult.objects.create(
         user=request.user,
@@ -5461,6 +5619,8 @@ def complete_training(request):
         total=total,
         correct=correct,
         time_seconds=max(time_seconds, 1),
+        payment_amount=session_pay,
+        paid=False,
     )
 
     if assignment and answers:
@@ -5478,7 +5638,29 @@ def complete_training(request):
             ]
         )
 
-    return JsonResponse({"ok": True})
+    accuracy = (correct / total) if total > 0 else 0.0
+    threshold = float(assignment.pass_threshold) if assignment else 0.975
+    passed = accuracy >= threshold
+
+    if assignment and passed:
+        BatchAssignment.objects.filter(
+            pk=assignment.pk,
+            completed_at__isnull=True,
+        ).update(completed_at=tz.now())
+
+    status = get_training_pass_status(assignment) if assignment else None
+    return JsonResponse(
+        {
+            "ok": True,
+            "passed": passed,
+            "locked": bool(status.locked) if status else False,
+            "accuracy_pct": round(accuracy * 100, 1),
+            "pass_threshold_pct": round(threshold * 100, 1),
+            "attempts_used": status.attempts_used if status else 1,
+            "attempts_granted": status.attempts_granted if status else 3,
+            "attempts_left": status.attempts_left if status else 0,
+        }
+    )
 
 
 @admin_required
@@ -5523,27 +5705,44 @@ def admin_manage_training(request):
         .order_by("user__username", "task_type", "rule_index")
     )
 
-    training_assignments = list(
-        BatchAssignment.objects.filter(is_training=True)
-        .select_related("user")
-        .values(
-            "id",
-            "user__username",
-            "task_type",
-            "rule_index",
-            "completed_at",
-            "payment_amount",
-        )
+    from .training_pass import get_training_pass_status
+
+    training_qs = list(
+        BatchAssignment.objects.filter(is_training=True).select_related("user")
     )
-
-    training_asset_counts = {}
-    for ta in TrainingBatchAsset.objects.values("assignment_id").annotate(
-        cnt=Count("id")
-    ):
-        training_asset_counts[ta["assignment_id"]] = ta["cnt"]
-
-    for a in training_assignments:
-        a["asset_count"] = training_asset_counts.get(a["id"], 0)
+    training_asset_counts = {
+        ta["assignment_id"]: ta["cnt"]
+        for ta in TrainingBatchAsset.objects.values("assignment_id").annotate(
+            cnt=Count("id")
+        )
+    }
+    training_assignments = []
+    for a in training_qs:
+        status = get_training_pass_status(a)
+        training_assignments.append(
+            {
+                "id": a.id,
+                "user__username": a.user.username,
+                "task_type": a.task_type,
+                "rule_index": a.rule_index,
+                "completed_at": a.completed_at,
+                "payment_amount": a.payment_amount,
+                "asset_count": training_asset_counts.get(a.id, 0),
+                "source_batch_id": a.source_batch_id,
+                "pass_threshold": a.pass_threshold,
+                "pass_threshold_pct": round(float(a.pass_threshold or 0.975) * 100, 1),
+                "max_attempts": a.max_attempts,
+                "attempts_granted": a.attempts_granted,
+                "attempts_used": status.attempts_used,
+                "attempts_left": status.attempts_left,
+                "training_status": status.status_label,
+                "best_accuracy_pct": (
+                    round(status.best_accuracy * 100, 1)
+                    if status.best_accuracy is not None
+                    else None
+                ),
+            }
+        )
 
     return render(
         request,
@@ -5559,8 +5758,53 @@ def admin_manage_training(request):
 
 
 @admin_required_ajax
+def admin_training_batches(request):
+    """AJAX: list labeling batch_ids (+ gold-eligible counts) for a feature."""
+    from labeling_api.models import assets_w_rule_labels, label_data_selected_assets_new
+
+    task_type = request.GET.get("task_type")
+    try:
+        rule_index = int(request.GET.get("rule_index"))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "rule_index required"}, status=400)
+    if not task_type:
+        return JsonResponse({"error": "task_type required"}, status=400)
+
+    batch_rows = list(
+        label_data_selected_assets_new.objects.filter(
+            task_type=task_type, rule_index=rule_index
+        )
+        .values("batch_id")
+        .annotate(asset_count=Count("asset_id"))
+        .order_by("batch_id")
+    )
+    reconciled_ids = set(
+        assets_w_rule_labels.objects.filter(
+            task_type=task_type, rule_index=rule_index
+        ).values_list("asset_id", flat=True)
+    )
+    batches = []
+    for row in batch_rows:
+        bid = row["batch_id"]
+        batch_ids = set(
+            label_data_selected_assets_new.objects.filter(
+                task_type=task_type, rule_index=rule_index, batch_id=bid
+            ).values_list("asset_id", flat=True)
+        )
+        gold = len(batch_ids & reconciled_ids)
+        batches.append(
+            {
+                "batch_id": bid,
+                "asset_count": row["asset_count"],
+                "gold_eligible": gold,
+            }
+        )
+    return JsonResponse({"batches": batches})
+
+
+@admin_required_ajax
 def admin_training_create(request):
-    """AJAX: create a training batch assignment for a user."""
+    """AJAX: create a training batch from a labeling batch ∩ reconciled gold."""
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -5571,8 +5815,30 @@ def admin_training_create(request):
     data = json.loads(request.body)
     username = data.get("username")
     task_type = data.get("task_type")
-    rule_index = int(data.get("rule_index", 0))
-    asset_count = int(data.get("asset_count", 150))
+    try:
+        rule_index = int(data.get("rule_index", 0))
+        source_batch_id = int(data.get("source_batch_id"))
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"error": "rule_index and source_batch_id are required integers"},
+            status=400,
+        )
+
+    asset_count = data.get("asset_count")
+    try:
+        pass_threshold = float(data.get("pass_threshold", 0.975))
+    except (TypeError, ValueError):
+        pass_threshold = 0.975
+    # Allow either 0.975 or 97.5 from the UI.
+    if pass_threshold > 1:
+        pass_threshold = pass_threshold / 100.0
+    pass_threshold = max(0.0, min(1.0, pass_threshold))
+
+    try:
+        max_attempts = int(data.get("max_attempts", 3))
+    except (TypeError, ValueError):
+        max_attempts = 3
+    max_attempts = max(1, max_attempts)
 
     try:
         user = User.objects.get(username=username)
@@ -5584,6 +5850,54 @@ def admin_training_create(request):
 
     deadline = timezone.now() + timedelta(days=30)
 
+    batch_assets = list(
+        label_data_selected_assets_new.objects.filter(
+            task_type=task_type,
+            rule_index=rule_index,
+            batch_id=source_batch_id,
+        )
+        .exclude(image_link="")
+        .exclude(image_link__isnull=True)
+        .values_list("asset_id", "image_link")
+    )
+    if not batch_assets:
+        return JsonResponse(
+            {"error": f"No assets found in batch {source_batch_id}"}, status=400
+        )
+
+    label_map = dict(
+        assets_w_rule_labels.objects.filter(
+            task_type=task_type,
+            rule_index=rule_index,
+            asset_id__in=[a[0] for a in batch_assets],
+        ).values_list("asset_id", "label")
+    )
+    eligible = [
+        (aid, link, label_map[aid])
+        for aid, link in batch_assets
+        if aid in label_map
+    ]
+    if not eligible:
+        return JsonResponse(
+            {
+                "error": (
+                    f"No reconciled gold labels for {task_type} rule {rule_index} "
+                    f"in batch {source_batch_id}. Run reconcile first."
+                )
+            },
+            status=400,
+        )
+
+    if asset_count is None or asset_count == "":
+        take_n = len(eligible)
+    else:
+        try:
+            take_n = int(asset_count)
+        except (TypeError, ValueError):
+            take_n = len(eligible)
+    take_n = max(1, min(take_n, len(eligible)))
+    sampled = random.sample(eligible, take_n)
+
     assignment, created = BatchAssignment.objects.get_or_create(
         user=user,
         task_type=task_type,
@@ -5594,40 +5908,26 @@ def admin_training_create(request):
             "payment_amount": settings.LABELER_PAY_PER_BATCH,
             "deadline": deadline,
             "is_training": True,
+            "pass_threshold": pass_threshold,
+            "max_attempts": max_attempts,
+            "attempts_granted": max_attempts,
+            "source_batch_id": source_batch_id,
         },
     )
-
-    reconciled = list(
-        assets_w_rule_labels.objects.filter(
-            task_type=task_type, rule_index=rule_index
-        ).values_list("asset_id", "label")
-    )
-
-    if not reconciled:
-        return JsonResponse(
-            {"error": "No reconciled assets found for this rule"}, status=400
+    if not created:
+        # Refresh settings when adding assets to an existing training assignment.
+        BatchAssignment.objects.filter(pk=assignment.pk).update(
+            pass_threshold=pass_threshold,
+            max_attempts=max_attempts,
+            attempts_granted=max(
+                int(assignment.attempts_granted or max_attempts), max_attempts
+            ),
+            source_batch_id=source_batch_id,
+            completed_at=None,
         )
+        assignment.refresh_from_db()
 
-    sampled = random.sample(reconciled, min(asset_count, len(reconciled)))
-    sampled_ids = [a[0] for a in sampled]
-    label_map = {a[0]: a[1] for a in sampled}
-
-    image_links = dict(
-        label_data_selected_assets_new.objects.filter(
-            asset_id__in=sampled_ids
-        ).values_list("asset_id", "image_link")
-    )
-
-    assets_with_links = [
-        (aid, image_links[aid], label_map[aid])
-        for aid in sampled_ids
-        if aid in image_links
-    ]
-
-    if not assets_with_links:
-        return JsonResponse({"error": "No images found for sampled assets"}, status=400)
-
-    new_assets = TrainingBatchAsset.objects.bulk_create(
+    TrainingBatchAsset.objects.bulk_create(
         [
             TrainingBatchAsset(
                 assignment=assignment,
@@ -5635,7 +5935,7 @@ def admin_training_create(request):
                 image_link=link,
                 correct_label=label,
             )
-            for aid, link, label in assets_with_links
+            for aid, link, label in sampled
         ],
         ignore_conflicts=True,
     )
@@ -5649,9 +5949,57 @@ def admin_training_create(request):
             "username": username,
             "task_type": task_type,
             "rule_index": rule_index,
-            "assets_added": len(assets_with_links),
+            "source_batch_id": source_batch_id,
+            "assets_added": len(sampled),
             "total_assets": total_count,
+            "gold_eligible": len(eligible),
+            "pass_threshold": pass_threshold,
+            "pass_threshold_pct": round(pass_threshold * 100, 1),
+            "max_attempts": max_attempts,
+            "attempts_granted": assignment.attempts_granted,
             "created": created,
+        }
+    )
+
+
+@admin_required_ajax
+def admin_training_grant_attempts(request):
+    """AJAX: grant additional practice attempts on a locked/failed training set."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    from .models import BatchAssignment
+    from .training_pass import get_training_pass_status
+
+    data = json.loads(request.body)
+    try:
+        assignment_id = int(data.get("assignment_id"))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "assignment_id required"}, status=400)
+    try:
+        extra = int(data.get("extra_attempts", 0))
+    except (TypeError, ValueError):
+        extra = 0
+
+    try:
+        assignment = BatchAssignment.objects.get(pk=assignment_id, is_training=True)
+    except BatchAssignment.DoesNotExist:
+        return JsonResponse({"error": "Training assignment not found"}, status=404)
+
+    if extra <= 0:
+        extra = int(assignment.max_attempts or 3)
+    assignment.attempts_granted = int(assignment.attempts_granted or 0) + extra
+    assignment.save(update_fields=["attempts_granted"])
+    status = get_training_pass_status(assignment)
+    return JsonResponse(
+        {
+            "ok": True,
+            "assignment_id": assignment.id,
+            "attempts_granted": status.attempts_granted,
+            "attempts_used": status.attempts_used,
+            "attempts_left": status.attempts_left,
+            "training_status": status.status_label,
+            "extra_added": extra,
         }
     )
 
